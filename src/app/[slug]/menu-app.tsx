@@ -1191,11 +1191,20 @@ function LoopVideo({
   useEffect(() => {
     const v = own.current;
     if (!v) return;
-    // Só toca o que está na tela: menos trabalho para o celular e nada travando.
-    const io = new IntersectionObserver(
+    // Carrega antes de aparecer (uma tela de folga), para o vídeo já estar pronto quando o
+    // card chega. Só solta quando ele fica bem longe: sem isso, cada vaivém da rolagem
+    // recomeçava o download e o vídeo demorava de novo para começar.
+    const load = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) setActive(true);
+        else if (!eager) setActive(false);
+      },
+      { rootMargin: "100% 0px" },
+    );
+    // Toca só o que está de fato na tela; o resto fica pausado.
+    const play = new IntersectionObserver(
       ([e]) => {
         if (e.isIntersecting) {
-          setActive(true);
           if (!v.dataset.hold) {
             v.dataset.want = "1";
             v.play().catch(() => {});
@@ -1203,14 +1212,16 @@ function LoopVideo({
         } else {
           v.dataset.want = "";
           v.pause();
-          // Fora da tela (o banner fica sempre carregado): solta o arquivo e a decodificação.
-          if (!eager) setActive(false);
         }
       },
-      { rootMargin: "120px 0px" },
+      { threshold: 0.25 },
     );
-    io.observe(v);
-    return () => io.disconnect();
+    load.observe(v);
+    play.observe(v);
+    return () => {
+      load.disconnect();
+      play.disconnect();
+    };
   }, [eager]);
   const hls = !!live && live.includes(".m3u8");
   return (
@@ -1221,8 +1232,8 @@ function LoopVideo({
       muted
       playsInline
       loop
-      autoPlay
       preload={eager ? "auto" : "metadata"}
+      autoPlay={eager}
     />
   );
 }
