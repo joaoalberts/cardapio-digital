@@ -76,3 +76,12 @@ export function statusLabel(hours: OpeningHours, timezone: string, lang: string,
 }
 
 export type StatusLabel = ReturnType<typeof statusLabel>;
+
+// Categoria com horário (ex.: almoço das 11h às 15h): visível agora no fuso do restaurante?
+export function inWindow(from: string | null | undefined, to: string | null | undefined, timezone: string, now = new Date()) {
+  if (!from || !to) return true;
+  const { min } = localNow(timezone, now);
+  const o = toMin(from.slice(0, 5));
+  const c = toMin(to.slice(0, 5));
+  return c > o ? min >= o && min < c : min >= o || min < c;
+}

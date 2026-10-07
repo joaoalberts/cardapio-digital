@@ -9,12 +9,12 @@ export default function SignUpPage() {
     <>
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold">Cadastre seu restaurante</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">14 dias grátis para testar.</p>
+        <p className="text-sm text-black/60">14 dias grátis para testar.</p>
       </div>
       <SignUpForm />
-      <p className="text-sm text-black/60 dark:text-white/60">
+      <p className="text-sm text-black/60">
         Já tem conta?{" "}
-        <Link href="/entrar" className="font-medium underline">
+        <Link href="/entrar" className="font-semibold text-[#c08a3e]">
           Entrar
         </Link>
       </p>

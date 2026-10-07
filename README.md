@@ -35,6 +35,9 @@ Com um projeto na nuvem:
    projeto no Supabase). `ANTHROPIC_API_KEY` é opcional e liga a sugestão de traduções.
    `MUX_TOKEN_ID` e `MUX_TOKEN_SECRET` (token do Mux com permissão de Mux Video) ligam o
    vídeo dos pratos em qualidade máxima; sem eles, o vídeo vai para o Storage (até 50 MB).
+   `SUPPORT_WHATSAPP` (opcional, só dígitos com DDI, ex.: 5511999999999) mostra o botão de
+   WhatsApp na página Suporte do painel. As mensagens do formulário ficam na tabela
+   `support_requests`.
 2. No Supabase, em Authentication > URL Configuration, use o endereço de produção como
    Site URL e adicione `https://*-<seu-time>.vercel.app/**` às Redirect URLs, para os
    links de pré-visualização de cada PR também conseguirem fazer login.

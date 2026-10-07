@@ -100,6 +100,12 @@ html:has(.cm .viewer:not([hidden])) body {
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--line);
   }
+  & .hero-info {
+    position: absolute;
+    z-index: 6;
+    top: calc(var(--safe-top) + 16px);
+    right: 16px;
+  }
   & .brand {
     position: absolute;
     z-index: 2;
@@ -230,13 +236,16 @@ html:has(.cm .viewer:not([hidden])) body {
     text-align: left;
     background: var(--surface);
   }
-  & .card img {
+  & .card :is(img, video) {
     width: 100%;
     height: 100%;
     object-fit: cover;
     transition: transform 0.5s;
   }
-  & .card:active img {
+  & .card video {
+    display: block;
+  }
+  & .card:active :is(img, video) {
     transform: scale(1.03);
   }
   & .card::after {
@@ -258,8 +267,19 @@ html:has(.cm .viewer:not([hidden])) body {
     line-height: 1.1;
   }
   & .card-txt span {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    max-width: 30ch;
     font-size: 14px;
     color: var(--muted);
+  }
+  & .card.feat .card-txt b::before {
+    content: "★ ";
+    color: var(--accent);
+    font-size: 0.7em;
+    vertical-align: 0.15em;
   }
   & .empty {
     padding: 40px 16px;
@@ -413,6 +433,41 @@ html:has(.cm .viewer:not([hidden])) body {
     border-radius: 99px;
     border: 1px solid rgba(255, 255, 255, 0.35);
     color: rgba(255, 255, 255, 0.9);
+  }
+  /* Vários preços (P, M, G…) no story: uma linha por opção. */
+  & .opts {
+    display: grid;
+    gap: 2px;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    max-width: 320px;
+  }
+  & .opts li {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 15px;
+  }
+  & .opts li::after {
+    content: "";
+    order: 1;
+    flex: 1;
+    border-bottom: 1px dotted rgba(255, 255, 255, 0.35);
+  }
+  & .opts b {
+    order: 2;
+    font-weight: 600;
+  }
+  & :is(.price, .tagp) small {
+    font-size: 0.62em;
+    font-weight: 400;
+    opacity: 0.75;
+  }
+  & .lobs {
+    margin: -8px 0 14px;
+    font-size: 13px;
+    color: var(--muted);
   }
   & .has-promo s {
     font-size: 0.72em;
@@ -825,6 +880,113 @@ html:has(.cm .viewer:not([hidden])) body {
   }
   & .relang :is(.card-txt, .tabs, .info, .lscroll, .list h2) {
     animation: cm-relang 0.35s ease both;
+  }
+
+  /* ---------- Informações do restaurante (folha de vidro de baixo para cima) ---------- */
+  & .infowrap {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+    animation: cm-fadein 0.2s ease-out;
+  }
+  & .infosheet {
+    width: min(560px, 100%);
+    max-height: 86dvh;
+    overflow-y: auto;
+    padding: 20px 20px calc(24px + var(--safe-bottom));
+    border-radius: 22px 22px 0 0;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    border-top: 1px solid var(--line);
+    animation: cm-rise 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  & .infosheet header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  & .infosheet h2 {
+    margin: 0;
+    font-size: calc(26px * var(--display-scale));
+    font-weight: inherit;
+  }
+  & .infosheet .close {
+    flex: none;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+  }
+  & .idesc {
+    margin: 10px 0 0;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  & .istatus {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 12px 0 0;
+    font-size: 14px;
+  }
+  & .istatus i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #d06a5a;
+  }
+  & .istatus.is-open i {
+    background: #7bc47f;
+  }
+  & .istatus em {
+    font-style: normal;
+    color: var(--muted);
+  }
+  & .ilist {
+    list-style: none;
+    margin: 16px 0 0;
+    padding: 0;
+    display: grid;
+  }
+  & .ilist :is(a, button) {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    padding: 13px 2px;
+    border-bottom: 1px solid var(--line);
+    color: var(--fg);
+    text-decoration: none;
+    text-align: left;
+    font-size: 15px;
+    line-height: 1.35;
+  }
+  & .ilist .icon {
+    color: var(--accent);
+  }
+  & .ilist b {
+    font-weight: 600;
+  }
+  & .ipay {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  & .ipay span {
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 99px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.06);
   }
 }
 

@@ -7,14 +7,19 @@ export const metadata: Metadata = { title: "Entrar" };
 export default function SignInPage() {
   return (
     <>
-      <h1 className="text-2xl font-semibold">Entrar no painel</h1>
+      <h1 className="text-[26px] font-semibold">Login</h1>
       <SignInForm />
-      <p className="text-sm text-black/60 dark:text-white/60">
-        Ainda não tem conta?{" "}
-        <Link href="/cadastro" className="font-medium underline">
-          Cadastre seu restaurante
+      <div className="flex flex-col gap-1 text-sm">
+        <Link href="/esqueci-senha" className="font-semibold text-[#c08a3e]">
+          Esqueci minha senha
         </Link>
-      </p>
+        <p>
+          Novo por aqui?{" "}
+          <Link href="/cadastro" className="font-semibold text-[#c08a3e]">
+            Cadastre agora
+          </Link>
+        </p>
+      </div>
     </>
   );
 }

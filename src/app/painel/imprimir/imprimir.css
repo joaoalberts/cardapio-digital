@@ -1,0 +1,149 @@
+/* Folha para imprimir: displays de mesa (4 por A4) ou o cardápio em lista. */
+.pr-sheet {
+  --accent: #b8862f;
+  min-height: 100dvh;
+  background: #fff;
+  color: #222;
+  font-family: Georgia, "Times New Roman", serif;
+  padding: 24px;
+}
+.pr-btn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 2;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 4px;
+  padding: 10px 18px;
+  font: 600 14px system-ui, sans-serif;
+  cursor: pointer;
+}
+.pr-sheet.mesa {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0;
+  max-width: 210mm;
+  margin: 0 auto;
+  padding: 0;
+}
+.pr-card {
+  height: 148mm;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14mm 10mm;
+  border: 1px dashed #ccc;
+  text-align: center;
+}
+.pr-card .pr-logo {
+  width: 30mm;
+  height: 30mm;
+  object-fit: contain;
+}
+.pr-name {
+  font-size: 26px;
+}
+.pr-kicker {
+  margin: 0;
+  font: 600 11px system-ui, sans-serif;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.pr-qr {
+  width: 52mm;
+  height: 52mm;
+}
+.pr-qr svg {
+  width: 100%;
+  height: 100%;
+}
+.pr-call {
+  margin: 0;
+  font-size: 17px;
+}
+.pr-link {
+  margin: 0;
+  font: 12px system-ui, sans-serif;
+  color: #777;
+}
+.pr-sheet.menu {
+  max-width: 180mm;
+  margin: 0 auto;
+}
+.pr-head {
+  text-align: center;
+  margin-bottom: 18px;
+}
+.pr-head .pr-logo {
+  width: 26mm;
+  height: 26mm;
+  object-fit: contain;
+}
+.pr-head h1 {
+  margin: 6px 0 0;
+  font-size: 28px;
+  font-weight: 400;
+}
+.pr-cat {
+  break-inside: avoid-page;
+  margin-top: 18px;
+}
+.pr-cat h2 {
+  margin: 0 0 4px;
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 4px;
+}
+.pr-obs {
+  margin: 0 0 6px;
+  font-style: italic;
+  color: #666;
+  font-size: 13px;
+}
+.pr-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 0;
+  break-inside: avoid;
+}
+.pr-item b {
+  font-size: 15px;
+}
+.pr-item p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: #555;
+}
+.pr-item small {
+  font: 11px system-ui, sans-serif;
+  color: #888;
+}
+.pr-price {
+  white-space: nowrap;
+  font-size: 14px;
+}
+@media print {
+  .pr-btn {
+    display: none;
+  }
+  .pr-sheet {
+    padding: 0;
+  }
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  .pr-sheet.menu {
+    padding: 14mm 0;
+  }
+}
