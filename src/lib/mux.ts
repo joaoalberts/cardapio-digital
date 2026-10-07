@@ -20,8 +20,9 @@ async function mux<T>(path: string, init?: { method?: string; body?: unknown }):
   return res.status === 204 ? (undefined as T) : ((await res.json()) as { data: T }).data;
 }
 
-// Qualidade máxima (até 4K). Conta que não permite (plano grátis, por exemplo) cai
-// para a melhor combinação aceita, sem o dono precisar fazer nada.
+// Full HD com a melhor codificação que a conta aceitar: nítido em qualquer celular,
+// mais leve e pronto mais rápido que 4K. Conta que não permite "plus" (plano grátis,
+// por exemplo) cai para "basic", sem o dono precisar fazer nada.
 export async function createUpload(origin: string, passthrough: string) {
   const settings = (video_quality: string, max_resolution_tier: string) => ({
     cors_origin: origin,
@@ -29,8 +30,7 @@ export async function createUpload(origin: string, passthrough: string) {
   });
   type Upload = { id: string; url: string };
   const tries: [string, string][] = [
-    ["plus", "2160p"],
-    ["basic", "2160p"],
+    ["plus", "1080p"],
     ["basic", "1080p"],
   ];
   let last: unknown;
