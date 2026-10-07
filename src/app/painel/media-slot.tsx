@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { extOf, IMAGE_TYPES, shrinkImage } from "@/lib/images/shrink";
 import { capturePoster, VIDEO_TYPES } from "@/lib/images/poster";
 import { mediaUrl } from "@/lib/menu/media";
+import { useHls } from "@/lib/menu/use-hls";
 import { discardVideo, startVideoUpload, type MediaInput } from "./cardapio/actions";
 
 // Foto ou vídeo de um prato, categoria ou banner, já com o que o painel precisa mostrar.
@@ -168,6 +169,15 @@ export function useMediaSlot(restaurantId: string, folder: "items" | "categories
 
 export type MediaSlotState = ReturnType<typeof useMediaSlot>;
 
+// Prévia no painel: arquivo local, Storage ou Mux (HLS, em qualidade leve).
+function SlotVideo({ url, poster }: { url: string | null; poster: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const src = url && url.includes(".m3u8") && !url.includes("?") ? `${url}?max_resolution=720p` : url;
+  const hls = !!src && src.includes(".m3u8");
+  useHls(ref, src);
+  return <video ref={ref} src={hls ? undefined : (src ?? undefined)} poster={poster} muted playsInline loop autoPlay data-want="1" />;
+}
+
 // Imagem quadrada no centro, com "Alterar imagem" e "Excluir imagem" embaixo (como no DGuests).
 export function MediaSlot({ slot, label, shape = "square" }: { slot: MediaSlotState; label: string; shape?: "square" | "wide" }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -177,14 +187,7 @@ export function MediaSlot({ slot, label, shape = "square" }: { slot: MediaSlotSt
     <div className={`ms ms-${shape}`}>
       <button type="button" className="ms-box" onClick={open} disabled={uploading} aria-label={media ? `Alterar ${label}` : `Enviar ${label}`}>
         {media?.kind === "video" ? (
-          <video
-            src={media.url.startsWith("blob:") || (media.status === "ready" && !media.url.endsWith(".m3u8")) ? media.url : undefined}
-            poster={media.thumb}
-            muted
-            playsInline
-            loop
-            autoPlay
-          />
+          <SlotVideo url={media.status === "ready" || media.url.startsWith("blob:") ? media.url : null} poster={media.thumb} />
         ) : media ? (
           <img src={media.url} alt="" />
         ) : (

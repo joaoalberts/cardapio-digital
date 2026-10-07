@@ -10,8 +10,13 @@ export function mediaUrl(path: string | null | undefined): string | null {
   return `${base}/storage/v1/object/public/${BUCKET}/${path}`;
 }
 
-export function videoSrc(m: MenuMedia): string | null {
-  if (m.mux_playback_id) return `https://stream.mux.com/${m.mux_playback_id}.m3u8`;
+// Banner e cards da capa são pequenos e em loop: até 720p basta e carrega bem mais rápido.
+// No story (tela cheia) vai até Full HD; o player escolhe a qualidade conforme a internet.
+export function videoSrc(m: MenuMedia, size: "story" | "card" = "story"): string | null {
+  if (m.mux_playback_id) {
+    const cap = size === "card" ? "?max_resolution=720p" : "";
+    return `https://stream.mux.com/${m.mux_playback_id}.m3u8${cap}`;
+  }
   return mediaUrl(m.storage_path);
 }
 

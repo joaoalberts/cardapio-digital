@@ -10,6 +10,7 @@ import { countryLabel, tagLabel } from "@/lib/menu/tags";
 import { paymentLabel } from "@/lib/menu/payments";
 import { LANG_FLAG, LANG_NAME, pickLanguage, t as tr, type StringKey } from "@/lib/menu/i18n";
 import { formatPrice, mediaUrl, posterSrc, thumbSrc, videoSrc } from "@/lib/menu/media";
+import { useHls } from "@/lib/menu/use-hls";
 import type { MenuCategory, MenuItem, MenuMedia, PublicMenu } from "@/lib/menu/types";
 import { Flag } from "./flag";
 
@@ -697,7 +698,7 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
   const flagCode = LANG_FLAG[lang] ?? "xx";
   // Banner enviado em Editar Perfil (foto ou vídeo); sem ele, a capa antiga ou o 1º prato.
   const banner = restaurant.cover;
-  const coverVideo = banner ? (banner.kind === "video" ? videoSrc(banner) : null) : mediaUrl(restaurant.cover_video_path);
+  const coverVideo = banner ? (banner.kind === "video" ? videoSrc(banner, "card") : null) : mediaUrl(restaurant.cover_video_path);
   const coverImage = banner
     ? banner.kind === "photo"
       ? mediaUrl(banner.storage_path)
@@ -1025,7 +1026,7 @@ function CategoryCard({
   return (
     <button className={`card${cat.id === FEATURED_ID ? " feat" : ""}`} ref={refCb} data-i={index} onClick={onOpen}>
       {cover?.kind === "video" ? (
-        <LoopVideo src={videoSrc(cover)} poster={th} />
+        <LoopVideo src={videoSrc(cover, "card")} poster={th} />
       ) : (
         th && <img src={th} alt="" loading={index < 2 ? "eager" : "lazy"} />
       )}
@@ -1165,6 +1166,9 @@ function LoopVideo({
   ref?: React.Ref<HTMLVideoElement>;
 }) {
   const own = useRef<HTMLVideoElement>(null);
+  // Só começa a baixar quando o card chega perto da tela (o banner, na hora): a capa
+  // abre leve mesmo com muitos vídeos. Depois de carregado, fica (só pausa fora da tela).
+  const [active, setActive] = useState(!!eager);
   const setRefs = useCallback(
     (el: HTMLVideoElement | null) => {
       own.current = el;
@@ -1173,23 +1177,29 @@ function LoopVideo({
     },
     [ref],
   );
-  useHls(own, src);
+  const live = active ? src : null;
+  useHls(own, live);
   useEffect(() => {
     const v = own.current;
     if (!v) return;
     v.muted = true;
-    const io = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting) v.play().catch(() => {});
-      else v.pause();
-    });
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) {
+          setActive(true);
+          v.play().catch(() => {});
+        } else v.pause();
+      },
+      { rootMargin: "300px 0px" },
+    );
     io.observe(v);
     return () => io.disconnect();
   }, []);
-  const hls = !!src && src.endsWith(".m3u8");
+  const hls = !!live && live.includes(".m3u8");
   return (
     <video
       ref={setRefs}
-      src={hls ? undefined : (src ?? undefined)}
+      src={hls ? undefined : (live ?? undefined)}
       poster={poster ?? undefined}
       muted
       playsInline
@@ -1199,36 +1209,6 @@ function LoopVideo({
       data-want="1"
     />
   );
-}
-
-// Vídeo do Mux (HLS): o Safari toca direto; nos outros navegadores entra o hls.js,
-// que troca de qualidade conforme a internet para não travar.
-function useHls(vidRef: React.RefObject<HTMLVideoElement | null>, src: string | null) {
-  const hls = !!src && src.endsWith(".m3u8");
-  useEffect(() => {
-    const v = vidRef.current;
-    if (!v || !hls || !src) return;
-    if (v.canPlayType("application/vnd.apple.mpegurl")) {
-      v.src = src;
-      if (v.dataset.want) v.play().catch(() => {});
-      return;
-    }
-    let player: import("hls.js").default | undefined;
-    let gone = false;
-    void import("hls.js").then(({ default: Hls }) => {
-      if (gone || !Hls.isSupported()) return;
-      player = new Hls({ capLevelToPlayerSize: false, startLevel: -1, maxBufferLength: 20 });
-      player.loadSource(src);
-      player.attachMedia(v);
-      player.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (v.dataset.want) v.play().catch(() => {});
-      });
-    });
-    return () => {
-      gone = true;
-      player?.destroy();
-    };
-  }, [vidRef, hls, src]);
 }
 
 // Com promoção: preço antigo riscado e o novo em destaque. Vários preços: "a partir de".
@@ -1279,7 +1259,7 @@ function StoryMedia({ item, onEnded }: { item: MenuItem; onEnded: () => void }) 
   const imgRef = useRef<HTMLImageElement>(null);
   const [ready, setReady] = useState(false);
   const src = m ? (m.kind === "video" ? videoSrc(m) : mediaUrl(m.storage_path)) : null;
-  const hls = !!src && src.endsWith(".m3u8");
+  const hls = !!src && src.includes(".m3u8");
   useLayoutEffect(() => {
     if (vidRef.current) vidRef.current.muted = true;
     const img = imgRef.current;
