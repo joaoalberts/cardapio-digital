@@ -77,9 +77,13 @@ export async function replaceMedia(
   return {};
 }
 
+// Vídeos do Mux que ainda pedem conferência: em preparo, ou prontos sem saber do MP4 leve.
+export const MUX_PENDING = "status.eq.processing,and(status.eq.ready,mux_mp4.is.null)";
+
 export async function muxRow(uploadId: string) {
   const st = await videoState(uploadId).catch((): VideoState => ({ status: "processing" }));
-  if (st.status === "ready") return { status: "ready", mux_asset_id: st.assetId, mux_playback_id: st.playbackId };
+  if (st.status === "ready")
+    return { status: "ready", mux_asset_id: st.assetId, mux_playback_id: st.playbackId, mux_mp4: st.mp4 };
   if (st.status === "failed") return { status: "failed" };
   return { status: "processing", mux_asset_id: st.assetId ?? null };
 }

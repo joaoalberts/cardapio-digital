@@ -8,7 +8,7 @@ import { TAG_IDS } from "@/lib/menu/tags";
 import { suggestTranslation, translationEnabled, type Texts } from "@/lib/translate";
 import { autoTranslate } from "@/lib/menu/auto-translate";
 import { createUpload, deleteAsset, muxEnabled, videoState, type VideoState } from "@/lib/mux";
-import { mediaFilesOf, muxRow, removeMedia, replaceMedia, validMedia, type MediaInput } from "@/lib/media-store";
+import { MUX_PENDING, mediaFilesOf, muxRow, removeMedia, replaceMedia, validMedia, type MediaInput } from "@/lib/media-store";
 
 export type { MediaInput };
 import { headers } from "next/headers";
@@ -252,16 +252,16 @@ export async function syncVideos(restaurantId: string): Promise<{ pending: numbe
   const supabase = await createClient();
   const { data } = await supabase
     .from("media")
-    .select("id, mux_upload_id")
+    .select("id, status, mux_upload_id, mux_mp4")
     .eq("restaurant_id", restaurantId)
-    .eq("status", "processing")
+    .or(MUX_PENDING)
     .not("mux_upload_id", "is", null);
   let pending = 0;
   let changed = false;
   for (const m of data ?? []) {
     const row = await muxRow(m.mux_upload_id!);
-    if (row.status === "processing") pending++;
-    else changed = true;
+    if (row.status === "processing" || (row.status === "ready" && row.mux_mp4 === null)) pending++;
+    if (row.status !== m.status || ("mux_mp4" in row && row.mux_mp4 !== m.mux_mp4)) changed = true;
     await supabase.from("media").update(row).eq("id", m.id);
   }
   if (changed) await refreshMenu(supabase, restaurantId);

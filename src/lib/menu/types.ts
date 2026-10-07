@@ -4,6 +4,7 @@ export type MenuMedia = {
   kind: "photo" | "video";
   storage_path: string | null;
   mux_playback_id: string | null;
+  mux_mp4?: string | null;
   poster_path: string | null;
 };
 

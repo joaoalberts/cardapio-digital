@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { extOf, IMAGE_TYPES, shrinkImage } from "@/lib/images/shrink";
 import { capturePoster, VIDEO_TYPES } from "@/lib/images/poster";
 import { mediaUrl } from "@/lib/menu/media";
-import { useHls } from "@/lib/menu/use-hls";
+import { useAutoplay, useHls } from "@/lib/menu/use-hls";
 import { discardVideo, startVideoUpload, type MediaInput } from "./cardapio/actions";
 
 // Foto ou vídeo de um prato, categoria ou banner, já com o que o painel precisa mostrar.
@@ -174,6 +174,7 @@ function SlotVideo({ url, poster }: { url: string | null; poster: string }) {
   const ref = useRef<HTMLVideoElement>(null);
   const src = url && url.includes(".m3u8") && !url.includes("?") ? `${url}?max_resolution=720p` : url;
   const hls = !!src && src.includes(".m3u8");
+  useAutoplay(ref);
   useHls(ref, src);
   return <video ref={ref} src={hls ? undefined : (src ?? undefined)} poster={poster} muted playsInline loop autoPlay data-want="1" />;
 }

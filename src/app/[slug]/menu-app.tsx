@@ -10,7 +10,7 @@ import { countryLabel, tagLabel } from "@/lib/menu/tags";
 import { paymentLabel } from "@/lib/menu/payments";
 import { LANG_FLAG, LANG_NAME, pickLanguage, t as tr, type StringKey } from "@/lib/menu/i18n";
 import { formatPrice, mediaUrl, posterSrc, thumbSrc, videoSrc } from "@/lib/menu/media";
-import { useHls } from "@/lib/menu/use-hls";
+import { useAutoplay, useHls } from "@/lib/menu/use-hls";
 import type { MenuCategory, MenuItem, MenuMedia, PublicMenu } from "@/lib/menu/types";
 import { Flag } from "./flag";
 
@@ -209,7 +209,11 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
     });
     const hero = heroVidRef.current;
     if (hero) {
-      if (v.open || document.visibilityState !== "visible") hero.pause();
+      // Com o story aberto o banner fica parado ("hold"), e o toque não o religa.
+      const hold = v.open || document.visibilityState !== "visible";
+      hero.dataset.hold = hold ? "1" : "";
+      hero.dataset.want = hold ? "" : "1";
+      if (hold) hero.pause();
       else hero.play().catch(() => {});
     }
   }, [playing]);
@@ -1181,19 +1185,26 @@ function LoopVideo({
     [ref],
   );
   const live = active ? src : null;
+  useAutoplay(own);
   useHls(own, live);
   useEffect(() => {
     const v = own.current;
     if (!v) return;
-    v.muted = true;
+    // Só toca o que está na tela: menos trabalho para o celular e nada travando.
     const io = new IntersectionObserver(
       ([e]) => {
         if (e.isIntersecting) {
           setActive(true);
-          v.play().catch(() => {});
-        } else v.pause();
+          if (!v.dataset.hold) {
+            v.dataset.want = "1";
+            v.play().catch(() => {});
+          }
+        } else {
+          v.dataset.want = "";
+          v.pause();
+        }
       },
-      { rootMargin: "300px 0px" },
+      { rootMargin: "120px 0px" },
     );
     io.observe(v);
     return () => io.disconnect();
@@ -1209,7 +1220,6 @@ function LoopVideo({
       loop
       autoPlay
       preload={eager ? "auto" : "metadata"}
-      data-want="1"
     />
   );
 }
@@ -1263,6 +1273,7 @@ function StoryMedia({ item, onEnded }: { item: MenuItem; onEnded: () => void }) 
   const [ready, setReady] = useState(false);
   const src = m ? (m.kind === "video" ? videoSrc(m) : mediaUrl(m.storage_path)) : null;
   const hls = !!src && src.includes(".m3u8");
+  useAutoplay(vidRef);
   useLayoutEffect(() => {
     if (vidRef.current) vidRef.current.muted = true;
     const img = imgRef.current;
