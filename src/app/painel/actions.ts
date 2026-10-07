@@ -11,7 +11,7 @@ export async function createRestaurant(_prev: FormState, formData: FormData): Pr
   const slug = slugify(String(formData.get("slug") ?? "") || name);
   if (!name) return { error: "Informe o nome do restaurante." };
   if (!isValidSlug(slug)) {
-    return { error: "O endereço precisa ter de 3 a 40 letras, números ou hífens." };
+    return { error: "Esse endereço não pode ser usado. Use de 3 a 40 letras, números ou hífens." };
   }
 
   const supabase = await createClient();

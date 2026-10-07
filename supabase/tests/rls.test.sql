@@ -16,6 +16,7 @@ select id as pizzaria from public.create_restaurant('Pizzaria da Ana', 'Pizzaria
 select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 select id as sushi from public.create_restaurant('Sushi da Bia', 'sushi-bia') \gset
 select set_config('test.pizzaria', :'pizzaria', false);
+select set_config('test.sushi', :'sushi', false);
 
 -- Ana monta o cardápio dela.
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
@@ -93,6 +94,16 @@ begin
   end;
 end $$;
 
+-- Endereço reservado do sistema é recusado.
+do $$
+begin
+  begin
+    perform public.create_restaurant('Painel', 'painel');
+    raise exception 'slug reservado foi aceito';
+  exception when check_violation then null;
+  end;
+end $$;
+
 -- Visitante (anon): não lê tabelas, só o cardápio público, sem itens inativos.
 reset role;
 select set_config('request.jwt.claim.sub', '', false);
@@ -135,5 +146,36 @@ begin
   menu := public.get_public_menu('pizzaria-ana', 'de');
   assert menu->'restaurant'->>'language' = 'pt-BR', 'idioma não liberado deveria voltar a pt-BR';
 end $$;
+
+-- Arquivos: cada um só envia para a pasta do próprio restaurante.
+reset role;
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+insert into storage.objects (bucket_id, name) values ('media', :'pizzaria' || '/logo.webp');
+do $$
+begin
+  begin
+    insert into storage.objects (bucket_id, name)
+      select 'media', id || '/logo.webp' from public.restaurants where slug = 'sushi-bia';
+    -- Ana não enxerga o Sushi, então tenta pelo id direto.
+    insert into storage.objects (bucket_id, name)
+      select 'media', r.id || '/x.webp' from (select current_setting('test.sushi')::uuid as id) r;
+    raise exception 'Ana não deveria enviar arquivo para a pasta do Sushi';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into storage.objects (bucket_id, name) values ('media', 'sem-pasta.webp');
+    raise exception 'arquivo fora de pasta de restaurante não deveria entrar';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+-- Horário inválido é recusado.
+do $$
+begin
+  update public.restaurants set opening_hours = '[[]]'::jsonb where id = current_setting('test.pizzaria')::uuid;
+  raise exception 'horário com menos de 7 dias não deveria entrar';
+exception when check_violation then null;
+end $$;
+reset role;
 
 \echo 'rls.test.sql: tudo certo'

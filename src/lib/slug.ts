@@ -12,6 +12,14 @@ export function slugify(text: string) {
 
 export const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
+// Endereços usados pelo próprio sistema (mesma lista do banco).
+export const RESERVED_SLUGS = ["painel", "entrar", "cadastro", "auth", "api", "demo", "admin", "m", "www"];
+
 export function isValidSlug(slug: string) {
-  return slug.length >= 3 && slug.length <= 40 && SLUG_PATTERN.test(slug);
+  return (
+    slug.length >= 3 &&
+    slug.length <= 40 &&
+    SLUG_PATTERN.test(slug) &&
+    !RESERVED_SLUGS.includes(slug)
+  );
 }

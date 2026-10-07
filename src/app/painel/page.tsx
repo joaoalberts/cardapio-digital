@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
@@ -69,7 +70,12 @@ async function PainelContent() {
           className="flex flex-col gap-1 rounded-xl border border-black/10 p-5 dark:border-white/15"
         >
           <h1 className="text-2xl font-semibold">{r.name}</h1>
-          <p className="text-sm opacity-70">Link do cardápio: …/{r.slug}</p>
+          <p className="text-sm opacity-70">
+            Link do cardápio:{" "}
+            <a className="underline" href={`/${r.slug}`} target="_blank" rel="noreferrer">
+              /{r.slug}
+            </a>
+          </p>
           <p className="text-sm opacity-70">
             Assinatura: {statusLabel[r.subscription_status] ?? r.subscription_status}
             {r.subscription_status === "trial" &&
@@ -77,6 +83,12 @@ async function PainelContent() {
           </p>
         </article>
       ))}
+      <Link href="/painel/perfil" className="text-sm underline">
+        Logo e horário de funcionamento
+      </Link>
+      <Link href="/painel/aparencia" className="text-sm underline">
+        Escolher a fonte do cardápio
+      </Link>
       <p className="text-sm opacity-60">Categorias, itens e mídia chegam nas próximas etapas.</p>
     </section>
   );
