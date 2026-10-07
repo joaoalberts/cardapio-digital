@@ -374,6 +374,27 @@
     font-size: 15px;
     min-height: 44px;
   }
+  & .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  & .tags li {
+    font-size: 12px;
+    padding: 3px 9px;
+    border-radius: 99px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.9);
+  }
+  & .has-promo s {
+    font-size: 0.72em;
+    font-weight: 400;
+    opacity: 0.6;
+    margin-right: 4px;
+  }
   & .acts .price {
     margin-left: auto;
     font-size: 20px;

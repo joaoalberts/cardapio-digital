@@ -4,6 +4,7 @@ import { updateTag } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { menuTag } from "@/lib/menu/data";
 import type { OpeningHours } from "@/lib/menu/types";
+import { backfillTranslations } from "@/lib/menu/auto-translate";
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DENIED = "Não foi possível salvar. Só o dono do restaurante pode mudar o perfil.";
@@ -52,4 +53,24 @@ export async function saveHours(restaurantId: string, hours: OpeningHours): Prom
   if (error || !data) return { error: DENIED };
   updateTag(menuTag(data.slug));
   return {};
+}
+
+const MENU_LANGS = ["en", "es", "fr", "it", "de"];
+
+// Idiomas do cardápio (português sempre). Ligar um idioma já sugere a tradução de tudo.
+export async function saveLanguages(restaurantId: string, langs: string[]): Promise<{ error?: string; translated?: number }> {
+  const chosen = MENU_LANGS.filter((l) => langs.includes(l));
+  const supabase = await createClient();
+  const { data: before } = await supabase.from("restaurants").select("languages").eq("id", restaurantId).maybeSingle();
+  const { data, error } = await supabase
+    .from("restaurants")
+    .update({ languages: ["pt-BR", ...chosen] })
+    .eq("id", restaurantId)
+    .select("slug")
+    .maybeSingle();
+  if (error || !data) return { error: DENIED };
+  const added = chosen.filter((l) => !((before?.languages as string[] | undefined) ?? []).includes(l));
+  const translated = added.length ? await backfillTranslations(supabase, restaurantId) : 0;
+  updateTag(menuTag(data.slug));
+  return { translated };
 }

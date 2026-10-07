@@ -42,6 +42,9 @@ Com um projeto na nuvem:
   (`create_restaurant`, `get_public_menu`).
 - `src/proxy.ts`: renova a sessão e protege `/painel`.
 - `src/app/(auth)/`: cadastro e login.
+- `src/app/painel/cardapio/`: categorias e pratos (foto, preço, promoção, selos, ordem,
+  esconder) e traduções. Com `ANTHROPIC_API_KEY` no `.env.local`, o painel sugere as
+  traduções sozinho e o dono revisa; sem ela, traduz à mão.
 - `src/app/painel/`: painel do restaurante; `aparencia/` escolhe a fonte do cardápio com
   prévia ao vivo.
 - `src/app/painel/perfil/`: logo (enviada ao Storage, bucket `media`, pasta por restaurante)

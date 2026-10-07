@@ -5,6 +5,7 @@ import { mediaUrl } from "@/lib/menu/media";
 import type { OpeningHours } from "@/lib/menu/types";
 import { currentRestaurant } from "../current";
 import { PanelNav } from "../panel-nav";
+import { translationEnabled } from "@/lib/translate";
 import { ProfileForm } from "./profile-form";
 import "../panel.css";
 
@@ -21,11 +22,12 @@ export default function PerfilPage() {
 }
 
 async function Perfil() {
-  const { restaurant, isOwner } = await currentRestaurant("logo_path, opening_hours, timezone");
+  const { restaurant, isOwner } = await currentRestaurant("logo_path, opening_hours, timezone, languages");
   const r = restaurant as typeof restaurant & {
     logo_path: string | null;
     opening_hours: OpeningHours | null;
     timezone: string;
+    languages: string[];
   };
   const logo = mediaUrl(r.logo_path);
   return (
@@ -33,7 +35,7 @@ async function Perfil() {
       <PanelNav name={r.name} slug={r.slug} logo={logo} active="/painel/perfil" />
       <main>
         <div className="ap-crumb">Perfil do restaurante</div>
-        <h1>Logo e horário</h1>
+        <h1>Logo, horário e idiomas</h1>
         <p className="ap-lead">
           A logo aparece num círculo no topo do cardápio e não muda com a fonte. O horário vira o
           selo “Aberto | até 23h” logo abaixo dela.
@@ -44,6 +46,8 @@ async function Perfil() {
           logo={logo}
           hours={r.opening_hours}
           timezone={r.timezone}
+          languages={r.languages}
+          canTranslate={translationEnabled()}
           canEdit={isOwner}
         />
       </main>

@@ -12,6 +12,8 @@ export type MenuItem = {
   name: string;
   description: string;
   price_cents: number;
+  promo_price_cents?: number | null;
+  tags?: string[];
   media: MenuMedia[];
 };
 
