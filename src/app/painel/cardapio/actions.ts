@@ -223,7 +223,9 @@ export async function startVideoUpload(
   try {
     const up = await createUpload(origin, restaurantId);
     return { mux: true, uploadId: up.id, url: up.url };
-  } catch {
+  } catch (e) {
+    // Aparece nos logs da Vercel: mostra se é chave errada (401/403) ou limite da conta.
+    console.error("mux upload", String(e).slice(0, 300));
     return { error: "Não foi possível preparar o envio do vídeo. Tente de novo." };
   }
 }

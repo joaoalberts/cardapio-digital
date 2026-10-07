@@ -20,18 +20,30 @@ async function mux<T>(path: string, init?: { method?: string; body?: unknown }):
   return res.status === 204 ? (undefined as T) : ((await res.json()) as { data: T }).data;
 }
 
-// Qualidade máxima (até 4K). Conta que não tem a qualidade "plus" cai para a básica.
+// Qualidade máxima (até 4K). Conta que não permite (plano grátis, por exemplo) cai
+// para a melhor combinação aceita, sem o dono precisar fazer nada.
 export async function createUpload(origin: string, passthrough: string) {
-  const settings = (video_quality: string) => ({
+  const settings = (video_quality: string, max_resolution_tier: string) => ({
     cors_origin: origin,
-    new_asset_settings: { playback_policies: ["public"], video_quality, max_resolution_tier: "2160p", passthrough },
+    new_asset_settings: { playback_policies: ["public"], video_quality, max_resolution_tier, passthrough },
   });
   type Upload = { id: string; url: string };
-  try {
-    return await mux<Upload>("/uploads", { method: "POST", body: settings("plus") });
-  } catch {
-    return await mux<Upload>("/uploads", { method: "POST", body: settings("basic") });
+  const tries: [string, string][] = [
+    ["plus", "2160p"],
+    ["basic", "2160p"],
+    ["basic", "1080p"],
+  ];
+  let last: unknown;
+  for (const [q, r] of tries) {
+    try {
+      return await mux<Upload>("/uploads", { method: "POST", body: settings(q, r) });
+    } catch (e) {
+      last = e;
+      // Chave errada ou sem permissão: não adianta tentar outra qualidade.
+      if (/mux 40[13]/.test(String(e))) break;
+    }
   }
+  throw last;
 }
 
 export type VideoState =
