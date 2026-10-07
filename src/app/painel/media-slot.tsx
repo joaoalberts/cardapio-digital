@@ -34,6 +34,15 @@ export function useMediaSlot(restaurantId: string, folder: "items" | "categories
   const uploaded = useRef<string[]>([]);
   const muxUploads = useRef<string[]>([]);
 
+  // O vídeo ficou pronto no Mux (a página recarregou os dados): mostra a versão nova,
+  // a não ser que o dono já tenha trocado a mídia aqui.
+  const initialKey = initial ? `${initial.status}|${initial.url}` : "";
+  const [seenKey, setSeenKey] = useState(initialKey);
+  if (seenKey !== initialKey) {
+    setSeenKey(initialKey);
+    if (!changed) setMedia(initial);
+  }
+
   const put = (m: SlotMedia) => {
     setMedia(m);
     setChanged(true);
@@ -145,6 +154,7 @@ export function useMediaSlot(restaurantId: string, folder: "items" | "categories
       const kept = inp ? (inp.kind === "photo" ? [inp.path, inp.thumb] : [inp.poster, inp.path, inp.uploadId]) : [];
       uploaded.current = uploaded.current.filter((p) => !kept.includes(p));
       muxUploads.current = muxUploads.current.filter((u) => !kept.includes(u));
+      setChanged(false);
       this.discard();
     },
     discard() {
