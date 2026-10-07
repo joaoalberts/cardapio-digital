@@ -304,6 +304,31 @@ html:has(.cm .viewer:not([hidden])) body {
     user-select: none;
     -webkit-user-select: none;
   }
+  /* Computador e tablet deitado: o story fica numa coluna 9:16 no meio da tela (como
+     no celular), com o resto escurecido; esticado na largura ficaria cortado e borrado. */
+  @media (min-width: 700px) and (min-aspect-ratio: 3 / 4) {
+    & .viewer {
+      width: min(100vw, calc(100dvh * 9 / 16));
+      height: 100dvh;
+      margin: 0 auto;
+      --under-bar: 0px;
+    }
+    & .viewer-bg:not([hidden]) {
+      position: fixed;
+      inset: 0;
+      z-index: 19;
+      background: rgba(8, 6, 5, 0.92);
+      backdrop-filter: blur(6px);
+    }
+  }
+  & .viewer-bg {
+    display: none;
+  }
+  @media (min-width: 700px) and (min-aspect-ratio: 3 / 4) {
+    & .viewer-bg:not([hidden]) {
+      display: block;
+    }
+  }
   & .viewer.animating {
     transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.32s, border-radius 0.32s;
   }

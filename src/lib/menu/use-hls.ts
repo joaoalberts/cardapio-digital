@@ -2,6 +2,13 @@
 
 import { useEffect } from "react";
 
+// Safari (Mac e iPhone/iPad) toca HLS direto e melhor que qualquer biblioteca.
+// O Chrome novo também diz que toca, mas falha em alguns casos; nele vai o hls.js.
+const apple = () =>
+  typeof navigator !== "undefined" &&
+  (/iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (/Safari\//.test(navigator.userAgent) && !/Chrome|Chromium|CriOS|FxiOS|Edg|Android/.test(navigator.userAgent)));
+
 // Vídeo do Mux (HLS): o Safari toca direto; nos outros navegadores entra o hls.js.
 // Os dois trocam de qualidade conforme a internet e o tamanho do vídeo na tela, para
 // começar rápido e não travar.
@@ -10,19 +17,22 @@ export function useHls(vidRef: React.RefObject<HTMLVideoElement | null>, src: st
   useEffect(() => {
     const v = vidRef.current;
     if (!v || !hls || !src) return;
-    if (v.canPlayType("application/vnd.apple.mpegurl")) {
+    const native = () => {
       v.src = src;
       if (v.dataset.want) v.play().catch(() => {});
-      return;
+    };
+    if (apple() && v.canPlayType("application/vnd.apple.mpegurl")) {
+      native();
+      return () => {
+        v.removeAttribute("src");
+        v.load();
+      };
     }
     let player: import("hls.js").default | undefined;
     let gone = false;
     void import("hls.js").then(({ default: Hls }) => {
       if (gone) return;
-      if (!Hls.isSupported()) {
-        v.src = src;
-        return;
-      }
+      if (!Hls.isSupported()) return native();
       player = new Hls({
         capLevelToPlayerSize: true,
         startLevel: -1,
