@@ -1,8 +1,17 @@
 -- Restaurante de demonstração (só para desenvolvimento local; supabase db reset aplica).
 -- Fotos e vídeos de exemplo ficam em public/demo.
-insert into public.restaurants (id, name, slug, languages, brand_color, cover_video_path, cover_image_path)
+insert into public.restaurants (id, name, slug, languages, brand_color, cover_video_path, cover_image_path,
+                                logo_path, opening_hours)
 values ('00000000-0000-4000-8000-0000000000f0', 'Forno Aurora', 'forno-aurora', '{pt-BR,en,es,fr,it,de}', '#e8b04b',
-        '/demo/v-forno.mp4', '/demo/v-forno-poster.jpg');
+        '/demo/v-forno.mp4', '/demo/v-forno-poster.jpg', '/demo/logo-forno-aurora.svg',
+        -- domingo a sábado; sexta e sábado passam da meia-noite
+        '[[{"open":"12:00","close":"16:00"},{"open":"18:00","close":"23:00"}],
+          [],
+          [{"open":"18:00","close":"23:00"}],
+          [{"open":"18:00","close":"23:00"}],
+          [{"open":"18:00","close":"23:00"}],
+          [{"open":"18:00","close":"00:30"}],
+          [{"open":"18:00","close":"00:30"}]]');
 
 insert into public.categories (id, restaurant_id, name, position) values ('00000000-0000-4000-8000-000000000100', '00000000-0000-4000-8000-0000000000f0', 'Pizzas', 0);
 insert into public.translations (restaurant_id, category_id, language, name) values ('00000000-0000-4000-8000-0000000000f0', '00000000-0000-4000-8000-000000000100', 'it', 'Pizze');

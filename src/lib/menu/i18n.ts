@@ -45,6 +45,12 @@ const STRINGS = {
     "Il menù è in preparazione.",
     "Die Speisekarte wird vorbereitet.",
   ]),
+  open: L6(["Aberto", "Open", "Abierto", "Ouvert", "Aperto", "Geöffnet"]),
+  closed: L6(["Fechado", "Closed", "Cerrado", "Fermé", "Chiuso", "Geschlossen"]),
+  until: L6(["até {t}", "until {t}", "hasta las {t}", "jusqu’à {t}", "fino alle {t}", "bis {t}"]),
+  opensAt: L6(["abre às {t}", "opens at {t}", "abre a las {t}", "ouvre à {t}", "apre alle {t}", "öffnet um {t}"]),
+  opensOn: L6(["abre {d} às {t}", "opens {d} at {t}", "abre el {d} a las {t}", "ouvre {d} à {t}", "apre {d} alle {t}", "öffnet {d} um {t}"]),
+  tomorrow: L6(["amanhã", "tomorrow", "mañana", "demain", "domani", "morgen"]),
   hint1: L6([
     "Toque à direita para o próximo prato",
     "Tap right for the next dish",

@@ -5,6 +5,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import type { KeyboardEvent } from "react";
 import { FONT_THEMES, fontThemeLabel, type FontThemeId } from "@/lib/menu/font-themes";
 import { formatPrice } from "@/lib/menu/media";
+import { statusLabel, type StatusLabel } from "@/lib/menu/hours";
+import type { OpeningHours } from "@/lib/menu/types";
 import { publishFontTheme } from "./actions";
 
 type PreviewItem = {
@@ -17,6 +19,9 @@ type PreviewItem = {
 
 export type PreviewData = {
   name: string;
+  logo: string | null;
+  hours: OpeningHours | null;
+  timezone: string;
   cover: string | null;
   categories: { name: string; count: number; thumb: string | null; items: PreviewItem[] }[];
 };
@@ -49,6 +54,15 @@ export function FontPicker({
   const screenRef = useRef<HTMLDivElement>(null);
   const phoneRef = useRef<HTMLDivElement>(null);
   const dirty = selected !== published;
+  const [status, setStatus] = useState<StatusLabel | null>(null);
+
+  // Mesmo selo da capa do cardápio, calculado no navegador para não travar a página.
+  useEffect(() => {
+    if (!preview.hours) return;
+    const hours = preview.hours;
+    const id = setTimeout(() => setStatus(statusLabel(hours, preview.timezone, "pt-BR")), 0);
+    return () => clearTimeout(id);
+  }, [preview.hours, preview.timezone]);
 
   // Pequena animação na prévia a cada troca de fonte.
   useEffect(() => {
@@ -174,8 +188,17 @@ export function FontPicker({
                   <div className="c-hero">
                     {preview.cover && <img className="bgimg" src={preview.cover} alt="" />}
                   </div>
-                  <div className="c-logo">
-                    <b className="fd">{preview.name}</b>
+                  <div className="c-brand">
+                    <div className="c-logo">
+                      {preview.logo ? <img src={preview.logo} alt="" /> : <b>{preview.name}</b>}
+                    </div>
+                    {status && (
+                      <span className={`c-status${status.open ? " is-open" : ""}`}>
+                        <i aria-hidden />
+                        {status.state}
+                {status.detail && <em>{status.detail}</em>}
+                      </span>
+                    )}
                   </div>
                   <div className="c-body">
                     <div className="c-tabs">

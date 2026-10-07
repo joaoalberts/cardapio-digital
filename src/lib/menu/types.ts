@@ -28,7 +28,12 @@ export type MenuRestaurant = {
   cover_video_path: string | null;
   cover_image_path: string | null;
   font_theme: string;
+  timezone: string;
+  opening_hours: OpeningHours | null;
   language: string;
 };
+
+// 7 dias (0 = domingo), cada um com faixas "HH:MM"; fechar antes de abrir passa da meia-noite.
+export type OpeningHours = { open: string; close: string }[][];
 
 export type PublicMenu = { restaurant: MenuRestaurant; categories: MenuCategory[] };

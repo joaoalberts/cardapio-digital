@@ -1,17 +1,15 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
-import { redirect } from "next/navigation";
-import { connection } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { getPublicMenu } from "@/lib/menu/data";
 import { fontVariables } from "@/lib/menu/fonts";
 import { DEFAULT_FONT_THEME, isFontTheme } from "@/lib/menu/font-themes";
 import { mediaUrl, thumbSrc, posterSrc } from "@/lib/menu/media";
-import type { MenuCategory } from "@/lib/menu/types";
+import type { MenuCategory, OpeningHours } from "@/lib/menu/types";
+import { currentRestaurant } from "../current";
+import { PanelNav } from "../panel-nav";
 import { FontPicker, type PreviewData } from "./font-picker";
 import "@/styles/font-themes.css";
-import "./aparencia.css";
+import "../panel.css";
 
 export const metadata: Metadata = { title: "Aparência" };
 
@@ -70,86 +68,46 @@ function toPreview(categories: MenuCategory[]): PreviewData["categories"] | null
 }
 
 async function Aparencia() {
-  await connection();
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/entrar");
-
-  const { data: restaurant, error } = await supabase
-    .from("restaurants")
-    .select("id, name, slug, font_theme, cover_image_path, members!inner(role)")
-    .eq("members.user_id", user.id)
-    .order("created_at")
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  if (!restaurant) redirect("/painel");
-
-  const menu = await getPublicMenu(restaurant.slug);
-  const isOwner = restaurant.members.some((m) => m.role === "owner");
+  const { restaurant, isOwner } = await currentRestaurant(
+    "font_theme, cover_image_path, logo_path, opening_hours, timezone",
+  );
+  const r = restaurant as typeof restaurant & {
+    font_theme: string;
+    cover_image_path: string | null;
+    logo_path: string | null;
+    opening_hours: OpeningHours | null;
+    timezone: string;
+  };
+  const menu = await getPublicMenu(r.slug);
+  const logo = mediaUrl(r.logo_path);
 
   const preview: PreviewData = {
-    name: restaurant.name,
-    cover: restaurant.cover_image_path ? mediaUrl(restaurant.cover_image_path) : "/demo/v-forno-poster.jpg",
+    name: r.name,
+    logo,
+    hours: r.opening_hours,
+    timezone: r.timezone,
+    cover: r.cover_image_path ? mediaUrl(r.cover_image_path) : "/demo/v-forno-poster.jpg",
     categories: (menu && toPreview(menu.categories)) ?? SAMPLE,
   };
 
   return (
     <div className="ap-app">
-      <aside>
-        <div className="ap-brand">
-          <b>●</b> CARDÁPIO
-        </div>
-        <div className="ap-rest">
-          <i>{initials(restaurant.name)}</i>
-          <span>{restaurant.name}</span>
-        </div>
-        <nav>
-          <Link href="/painel">
-            <svg className="icon" viewBox="0 0 24 24" aria-hidden>
-              <path d="M7 3v8M5 3v5a2 2 0 004 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9" />
-            </svg>
-            Início
-          </Link>
-          <Link href="/painel/aparencia" className="on" aria-current="page">
-            <svg className="icon" viewBox="0 0 24 24" aria-hidden>
-              <path d="M4 20h4L19 9a2.8 2.8 0 00-4-4L4 16v4zM13.5 6.5l4 4" />
-            </svg>
-            Aparência
-          </Link>
-          <a href={`/${restaurant.slug}`} target="_blank" rel="noreferrer">
-            <svg className="icon" viewBox="0 0 24 24" aria-hidden>
-              <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5" />
-            </svg>
-            Abrir cardápio
-          </a>
-        </nav>
-      </aside>
+      <PanelNav name={r.name} slug={r.slug} logo={logo} active="/painel/aparencia" />
       <main>
         <div className="ap-crumb">Aparência</div>
         <h1>Fonte do cardápio</h1>
         <p className="ap-lead">
-          Escolha a fonte dos nomes dos pratos, das categorias e do logo. A prévia mostra como seus
-          clientes vão ver o cardápio no celular.
+          Escolha a fonte dos nomes dos pratos e das categorias. A logo é a imagem que você envia
+          em Perfil do restaurante e não muda com a fonte. A prévia mostra como seus clientes vão
+          ver o cardápio no celular.
         </p>
         <FontPicker
-          restaurantId={restaurant.id}
-          published={isFontTheme(restaurant.font_theme) ? restaurant.font_theme : DEFAULT_FONT_THEME}
+          restaurantId={r.id}
+          published={isFontTheme(r.font_theme) ? r.font_theme : DEFAULT_FONT_THEME}
           canPublish={isOwner}
           preview={preview}
         />
       </main>
     </div>
   );
-}
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]!.toUpperCase())
-    .join("");
 }

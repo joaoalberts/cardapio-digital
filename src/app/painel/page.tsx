@@ -83,6 +83,9 @@ async function PainelContent() {
           </p>
         </article>
       ))}
+      <Link href="/painel/perfil" className="text-sm underline">
+        Logo e horário de funcionamento
+      </Link>
       <Link href="/painel/aparencia" className="text-sm underline">
         Escolher a fonte do cardápio
       </Link>

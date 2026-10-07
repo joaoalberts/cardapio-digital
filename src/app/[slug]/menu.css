@@ -53,8 +53,8 @@
     overflow: hidden;
     background: #000;
   }
-  & .hero video,
-  & .hero img {
+  & .hero > video,
+  & .hero > img {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -116,10 +116,42 @@
     height: 100%;
     object-fit: cover;
   }
+  /* Sem logo enviada, o nome aparece numa fonte fixa: a logo não segue o tema. */
   & .logo b {
-    font-size: calc(19px * var(--display-scale));
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 19px;
+    font-weight: 700;
     line-height: 1.05;
     padding: 0 12px;
+  }
+  & .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    border-radius: 99px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #fff;
+    font-size: 13px;
+    white-space: nowrap;
+    text-align: center;
+    animation: cm-fadein 0.3s ease both;
+  }
+  & .status i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #e5675b;
+  }
+  & .status em {
+    font-style: normal;
+    padding-left: 9px;
+    border-left: 1px solid rgba(255, 255, 255, 0.28);
+  }
+  & .status.is-open i {
+    background: #5fd38a;
   }
   & .tabs {
     display: flex;
