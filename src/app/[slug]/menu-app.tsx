@@ -83,6 +83,8 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
   const viewerRef = useRef<HTMLDivElement>(null);
   const panelEls = useRef<(HTMLDivElement | null)[]>([]);
   const vTabsRef = useRef<HTMLDivElement>(null);
+  const lTabsRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const heroVidRef = useRef<HTMLVideoElement>(null);
   const cardEls = useRef<(HTMLButtonElement | null)[]>([]);
   const pos = useRef(0);
@@ -546,7 +548,34 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
     } catch {}
   };
 
-  const openListAt = (c: number) => update({ listCat: c });
+  // Lista: todas as categorias numa rolagem só; as abas acompanham a rolagem.
+  const sectionOf = (c: number) => listRef.current?.querySelector<HTMLElement>(`.lsec[data-ci="${c}"]`);
+  const openListAt = (c: number) => {
+    const box = listRef.current;
+    const sec = sectionOf(c);
+    if (box && sec) box.scrollTo({ top: sec.offsetTop - box.offsetTop, behavior: reduce.current ? "auto" : "smooth" });
+    update({ listCat: c });
+  };
+  const onListScroll = () => {
+    const box = listRef.current;
+    if (!box) return;
+    let at = 0;
+    box.querySelectorAll<HTMLElement>(".lsec").forEach((sec, i) => {
+      if (sec.offsetTop - box.offsetTop <= box.scrollTop + 80) at = i;
+    });
+    if (box.scrollTop + box.clientHeight >= box.scrollHeight - 2) at = catsOf().length - 1;
+    if (at !== viewRef.current.listCat) update({ listCat: at });
+  };
+  useLayoutEffect(() => {
+    if (!view.listOpen) return;
+    const box = listRef.current;
+    const sec = sectionOf(viewRef.current.listCat);
+    if (box && sec) box.scrollTop = sec.offsetTop - box.offsetTop;
+  }, [view.listOpen]);
+  useEffect(() => {
+    const tab = lTabsRef.current?.children[view.listCat] as HTMLElement | undefined;
+    tab?.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
+  }, [view.listCat, view.listOpen]);
 
   const pickFromList = (c: number, i: number) => {
     const idx = [...viewRef.current.idx];
@@ -771,54 +800,62 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
           </button>
         </div>
 
-        <button
-          className="pause"
-          onClick={() => update({ userPaused: !viewRef.current.userPaused })}
-          aria-label={t(view.userPaused ? "resume" : "pause")}
-        >
-          <svg className="icon" viewBox="0 0 24 24">
-            {view.userPaused ? <path d="M7 5l12 7-12 7z" /> : <path d="M8 5v14M16 5v14" />}
-          </svg>
-        </button>
 
         {hint && <div className="hint">{t("hint")}</div>}
 
         {view.listOpen && (
-          <div className="list">
+          <div className="list" role="dialog" aria-labelledby="cm-list-title">
             <header>
-              <h2 className="fd">{t("listTitle")}</h2>
-              <button className="close" onClick={() => update({ listOpen: false })} aria-label={t("close")}>
+              <div>
+                <span className="kicker">{restaurant.name}</span>
+                <h2 id="cm-list-title" className="fd">
+                  {t("listTitle")}
+                </h2>
+              </div>
+              <button className="close glass" onClick={() => update({ listOpen: false })} aria-label={t("close")}>
                 <svg className="icon" viewBox="0 0 24 24">
                   <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
               </button>
             </header>
-            <div className="tabs vtabs" role="tablist">
+            <div className="tabs ltabs" role="tablist" ref={lTabsRef}>
               {cats.map((c, i) => (
                 <button key={c.id} role="tab" aria-selected={i === view.listCat} onClick={() => openListAt(i)}>
                   {c.name}
                 </button>
               ))}
             </div>
-            <div className="lbox">
-              {cats[view.listCat] && (
-                <>
-                  <h4 className="fd">{cats[view.listCat].name}</h4>
-                  {cats[view.listCat].items.map((it, i) => {
-                    const th = thumbSrc(it);
-                    return (
-                      <button key={it.id} className="li" onClick={() => pickFromList(view.listCat, i)}>
-                        {th ? <img src={th} alt="" loading="lazy" /> : <span className="noimg" />}
-                        <div>
+            <div className="lscroll" ref={listRef} onScroll={onListScroll}>
+              {cats.map((c, ci) => (
+                <section key={c.id} className="lsec" data-ci={ci}>
+                  <h3 className="fd">
+                    {c.name}
+                    <small>
+                      {c.items.length} {t("items")}
+                    </small>
+                  </h3>
+                  <div className="dgrid">
+                    {c.items.map((it, i) => {
+                      const th = thumbSrc(it);
+                      return (
+                        <button key={it.id} className="dish" onClick={() => pickFromList(ci, i)}>
+                          <span className="dimg">
+                            {th ? <img src={th} alt="" loading={ci === view.listCat ? "eager" : "lazy"} /> : null}
+                            {isVideo(it) && (
+                              <svg className="icon play" viewBox="0 0 24 24" aria-hidden>
+                                <path d="M8 5.5v13l11-6.5z" />
+                              </svg>
+                            )}
+                          </span>
                           <b>{it.name}</b>
-                          {it.description && <span>{it.description}</span>}
+                          {it.description && <span className="ddesc">{it.description}</span>}
                           <Price item={it} lang={lang} as="em" />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </>
-              )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
             </div>
           </div>
         )}
