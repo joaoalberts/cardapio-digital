@@ -65,3 +65,27 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
   }
   redirect("/painel");
 }
+
+// "Esqueci minha senha": manda o link por e-mail; ele volta em /nova-senha já logado.
+export async function requestPasswordReset(_prev: FormState, formData: FormData): Promise<FormState> {
+  const email = text(formData, "email");
+  if (!email) return { error: "Informe seu e-mail." };
+  const origin = (await headers()).get("origin") ?? "";
+  const supabase = await createClient();
+  await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${origin}/auth/callback?next=/nova-senha` });
+  // Mesma resposta exista ou não a conta, para não revelar quem é cliente.
+  return { message: "Se houver uma conta com esse e-mail, enviamos um link para criar uma nova senha." };
+}
+
+export async function updatePassword(_prev: FormState, formData: FormData): Promise<FormState> {
+  const password = String(formData.get("password") ?? "");
+  if (password.length < 8) return { error: "A senha precisa ter pelo menos 8 caracteres." };
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) {
+    if (error.code === "weak_password") return { error: "Escolha uma senha mais forte." };
+    if (error.code === "same_password") return { error: "Use uma senha diferente da anterior." };
+    return { error: "O link expirou. Peça um novo em Esqueci minha senha." };
+  }
+  redirect("/painel");
+}

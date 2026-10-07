@@ -8,6 +8,9 @@ import { TAG_IDS } from "@/lib/menu/tags";
 import { suggestTranslation, translationEnabled, type Texts } from "@/lib/translate";
 import { autoTranslate } from "@/lib/menu/auto-translate";
 import { createUpload, deleteAsset, muxEnabled, videoState, type VideoState } from "@/lib/mux";
+import { mediaFilesOf, muxRow, removeMedia, replaceMedia, validMedia, type MediaInput } from "@/lib/media-store";
+
+export type { MediaInput };
 import { headers } from "next/headers";
 
 type Result = { error?: string };
@@ -44,25 +47,50 @@ export async function createCategory(restaurantId: string, name: string): Promis
   return { id: data.id };
 }
 
-export async function updateCategory(
-  restaurantId: string,
-  id: string,
-  input: { name: string; active: boolean },
-): Promise<Result> {
+export type CategoryInput = {
+  name: string;
+  active: boolean;
+  description?: string;
+  // "HH:MM"; os dois vazios = a categoria aparece o dia todo.
+  availableFrom?: string | null;
+  availableTo?: string | null;
+  // undefined = não mexe; null = remove; objeto = foto ou vídeo novo já enviado
+  media?: MediaInput | null;
+};
+
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export async function updateCategory(restaurantId: string, id: string, input: CategoryInput): Promise<Result> {
   const n = clean(input.name, 60);
   if (!n) return { error: "Dê um nome para a categoria." };
+  const from = input.availableFrom || null;
+  const to = input.availableTo || null;
+  if ((from == null) !== (to == null) || (from && (!TIME.test(from) || !TIME.test(to!) || from === to))) {
+    return { error: "Confira o horário da categoria: início e fim diferentes, no formato HH:MM." };
+  }
+  if (input.media && !validMedia(restaurantId, input.media)) return { error: "Arquivo inválido." };
   const supabase = await createClient();
-  const { data: before } = await supabase.from("categories").select("name").eq("id", id).maybeSingle();
-  const { error } = await supabase.from("categories").update({ name: n, active: input.active }).eq("id", id);
+  const { data: before } = await supabase.from("categories").select("name, description").eq("id", id).maybeSingle();
+  const row: Record<string, unknown> = { name: n, active: input.active };
+  const description = input.description === undefined ? undefined : clean(input.description, 300);
+  if (description !== undefined) Object.assign(row, { description, available_from: from, available_to: to });
+  const { error } = await supabase.from("categories").update(row).eq("id", id);
   if (error) return { error: FAIL };
-  if (before?.name !== n) await autoTranslate(supabase, restaurantId, { categoryId: id }, { name: n, description: "" });
+  if (input.media !== undefined) {
+    const res = await replaceMedia(supabase, restaurantId, { categoryId: id }, input.media);
+    if (res.error) return res;
+  }
+  const desc = description ?? before?.description ?? "";
+  if (before?.name !== n || before?.description !== desc) {
+    await autoTranslate(supabase, restaurantId, { categoryId: id }, { name: n, description: desc });
+  }
   await refreshMenu(supabase, restaurantId);
   return {};
 }
 
 export async function deleteCategory(restaurantId: string, id: string): Promise<Result> {
   const supabase = await createClient();
-  const files = await mediaFilesOf(supabase, { categoryId: id });
+  const files = await mediaFilesOf(supabase, { anyInCategory: id });
   const { error } = await supabase.from("categories").delete().eq("id", id);
   if (error) return { error: "Não foi possível excluir a categoria." };
   await removeMedia(supabase, files);
@@ -89,31 +117,15 @@ export type ItemInput = {
   promoCents: number | null;
   tags: string[];
   active: boolean;
+  featured?: boolean;
+  hidePrice?: boolean;
+  serves?: number | null;
+  country?: string | null;
+  // Múltiplos preços (P, M, G…): substituem o preço único quando há 2 ou mais.
+  priceOptions?: { label: string; priceCents: number }[] | null;
   // undefined = não mexe na mídia; null = remove; objeto = foto ou vídeo novo já enviado
   media?: MediaInput | null;
 };
-
-// Foto: arquivo e miniatura no Storage. Vídeo: capa no Storage e o arquivo no Mux
-// (uploadId) ou, sem Mux, no próprio Storage (path).
-export type MediaInput =
-  | { kind: "photo"; path: string; thumb: string }
-  | { kind: "video"; poster: string; uploadId?: string; path?: string };
-
-async function mediaFilesOf(supabase: SupabaseClient, of: { itemId: string } | { categoryId: string }) {
-  let q = supabase.from("media").select("storage_path, poster_path, mux_asset_id, items!inner(category_id)");
-  q = "itemId" in of ? q.eq("item_id", of.itemId) : q.eq("items.category_id", of.categoryId);
-  const { data } = await q;
-  const files = (data ?? [])
-    .flatMap((m) => [m.storage_path, m.poster_path])
-    .filter((p): p is string => !!p && !p.startsWith("/") && !/^https?:/.test(p));
-  const assets = (data ?? []).map((m) => m.mux_asset_id).filter((a): a is string => !!a);
-  return Object.assign(files, { assets });
-}
-
-async function removeMedia(supabase: SupabaseClient, old: Awaited<ReturnType<typeof mediaFilesOf>>) {
-  if (old.length) await supabase.storage.from("media").remove(old);
-  await Promise.all(old.assets.map(deleteAsset));
-}
 
 export async function saveItem(restaurantId: string, input: ItemInput): Promise<Result & { id?: string }> {
   const name = clean(input.name, 80);
@@ -121,26 +133,39 @@ export async function saveItem(restaurantId: string, input: ItemInput): Promise<
   const price = Math.round(Number(input.priceCents));
   const promo = input.promoCents == null ? null : Math.round(Number(input.promoCents));
   if (!name) return { error: "Dê um nome para o prato." };
-  if (!Number.isFinite(price) || price < 0) return { error: "Confira o preço." };
-  if (promo != null && !(promo >= 0 && promo < price)) {
+  if (!input.priceOptions && (!Number.isFinite(price) || price < 0)) return { error: "Confira o preço." };
+  if (!input.priceOptions && promo != null && !(promo >= 0 && promo < price)) {
     return { error: "O preço promocional precisa ser menor que o preço normal." };
   }
   const tags = input.tags.filter((t) => (TAG_IDS as string[]).includes(t));
   const m = input.media;
-  const paths = !m ? [] : m.kind === "photo" ? [m.path, m.thumb] : [m.poster, ...(m.path ? [m.path] : [])];
-  if (!paths.every((p) => p.startsWith(`${restaurantId}/`)) || (m?.kind === "video" && !m.uploadId && !m.path)) {
-    return { error: "Arquivo inválido." };
+  if (m && !validMedia(restaurantId, m)) return { error: "Arquivo inválido." };
+  const options = (input.priceOptions ?? [])
+    .map((o) => ({ label: clean(o.label, 30), price_cents: Math.round(Number(o.priceCents)) }))
+    .filter((o) => o.label || Number.isFinite(o.price_cents));
+  if (input.priceOptions && (options.length < 2 || options.length > 8)) {
+    return { error: "Em múltiplos preços, informe de 2 a 8 opções." };
   }
+  if (options.some((o) => !o.label || !Number.isFinite(o.price_cents) || o.price_cents < 0)) {
+    return { error: "Cada opção de preço precisa de nome e valor." };
+  }
+  const serves = input.serves == null ? null : Math.round(Number(input.serves));
+  if (serves != null && !(serves >= 1 && serves <= 20)) return { error: "Quantidade de pessoas inválida." };
 
   const supabase = await createClient();
   const row = {
     category_id: input.categoryId,
     name,
     description,
-    price_cents: price,
-    promo_price_cents: promo,
+    price_cents: input.priceOptions ? Math.min(...options.map((o) => o.price_cents)) : price,
+    promo_price_cents: input.priceOptions ? null : promo,
     tags,
     active: input.active,
+    featured: !!input.featured,
+    hide_price: !!input.hidePrice,
+    serves,
+    country: clean(input.country, 40) || null,
+    price_options: input.priceOptions ? options : null,
   };
 
   let id = input.id;
@@ -165,19 +190,8 @@ export async function saveItem(restaurantId: string, input: ItemInput): Promise<
   }
 
   if (m !== undefined) {
-    const old = await mediaFilesOf(supabase, { itemId: id });
-    await supabase.from("media").delete().eq("item_id", id);
-    if (m) {
-      const row =
-        m.kind === "photo"
-          ? { kind: "photo", storage_path: m.path, poster_path: m.thumb, status: "ready" }
-          : m.uploadId
-            ? { kind: "video", mux_upload_id: m.uploadId, poster_path: m.poster, ...(await muxRow(m.uploadId)) }
-            : { kind: "video", storage_path: m.path, poster_path: m.poster, status: "ready" };
-      const { error } = await supabase.from("media").insert({ restaurant_id: restaurantId, item_id: id, ...row });
-      if (error) return { error: "O prato foi salvo, mas a foto ou o vídeo não. Tente enviar de novo.", id };
-    }
-    await removeMedia(supabase, old);
+    const res = await replaceMedia(supabase, restaurantId, { itemId: id }, m);
+    if (res.error) return { ...res, id };
   }
 
   if (textsChanged) await autoTranslate(supabase, restaurantId, { itemId: id }, { name, description });
@@ -196,13 +210,6 @@ export async function deleteItem(restaurantId: string, id: string): Promise<Resu
 }
 
 // ---------- Vídeos ----------
-
-async function muxRow(uploadId: string) {
-  const st = await videoState(uploadId).catch((): VideoState => ({ status: "processing" }));
-  if (st.status === "ready") return { status: "ready", mux_asset_id: st.assetId, mux_playback_id: st.playbackId };
-  if (st.status === "failed") return { status: "failed" };
-  return { status: "processing", mux_asset_id: st.assetId ?? null };
-}
 
 // Endereço para o painel mandar o vídeo direto ao Mux, sem passar pelo nosso servidor.
 export async function startVideoUpload(
@@ -264,7 +271,7 @@ export async function duplicateItem(restaurantId: string, id: string): Promise<R
   const supabase = await createClient();
   const { data: it } = await supabase
     .from("items")
-    .select("category_id, name, description, price_cents, promo_price_cents, tags, position")
+    .select("category_id, name, description, price_cents, promo_price_cents, tags, position, featured, hide_price, serves, country, price_options")
     .eq("id", id)
     .maybeSingle();
   if (!it) return { error: FAIL };

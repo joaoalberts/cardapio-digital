@@ -1,77 +1,55 @@
 "use client";
-/* eslint-disable @next/next/no-img-element -- miniaturas da prévia vêm prontas do Storage */
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import type { KeyboardEvent } from "react";
 import { FONT_THEMES, fontThemeLabel, type FontThemeId } from "@/lib/menu/font-themes";
-import { formatPrice } from "@/lib/menu/media";
-import { statusLabel, type StatusLabel } from "@/lib/menu/hours";
-import type { OpeningHours } from "@/lib/menu/types";
 import { publishFontTheme } from "./actions";
 
-type PreviewItem = {
-  name: string;
-  description: string;
-  price_cents: number;
-  image: string | null;
-  thumb: string | null;
-};
-
-export type PreviewData = {
-  name: string;
-  logo: string | null;
-  hours: OpeningHours | null;
-  timezone: string;
-  cover: string | null;
-  categories: { name: string; count: number; thumb: string | null; items: PreviewItem[] }[];
-};
-
-type Tab = "story" | "capa" | "lista";
+type Tab = "capa" | "story" | "lista";
 const TABS: { id: Tab; label: string }[] = [
-  { id: "story", label: "Story" },
   { id: "capa", label: "Capa" },
+  { id: "story", label: "Story" },
   { id: "lista", label: "Lista" },
 ];
 
 export function FontPicker({
   restaurantId,
+  slug,
+  sampleDish,
   published: initialPublished,
   canPublish,
-  preview,
 }: {
   restaurantId: string;
+  slug: string;
+  sampleDish: string;
   published: FontThemeId;
   canPublish: boolean;
-  preview: PreviewData;
 }) {
   const [published, setPublished] = useState(initialPublished);
   const [selected, setSelected] = useState<FontThemeId>(initialPublished);
-  const [tab, setTab] = useState<Tab>("story");
+  const [tab, setTab] = useState<Tab>("capa");
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const optRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const screenRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
   const phoneRef = useRef<HTMLDivElement>(null);
   const dirty = selected !== published;
-  const [status, setStatus] = useState<StatusLabel | null>(null);
 
-  // Mesmo selo da capa do cardápio, calculado no navegador para não travar a página.
+  // A prévia é o cardápio de verdade num iframe; aqui só mandamos a fonte e a tela.
+  const send = useCallback(() => {
+    frameRef.current?.contentWindow?.postMessage({ type: "cm-preview", font: selected, view: tab }, location.origin);
+  }, [selected, tab]);
   useEffect(() => {
-    if (!preview.hours) return;
-    const hours = preview.hours;
-    const id = setTimeout(() => setStatus(statusLabel(hours, preview.timezone, "pt-BR")), 0);
-    return () => clearTimeout(id);
-  }, [preview.hours, preview.timezone]);
-
-  // Pequena animação na prévia a cada troca de fonte.
+    send();
+  }, [send]);
   useEffect(() => {
-    const el = screenRef.current;
-    if (!el) return;
-    el.classList.remove("swap");
-    void el.offsetWidth;
-    el.classList.add("swap");
-  }, [selected]);
+    const on = (e: MessageEvent) => {
+      if (e.origin === location.origin && e.data?.type === "cm-ready") send();
+    };
+    addEventListener("message", on);
+    return () => removeEventListener("message", on);
+  }, [send]);
 
   useEffect(() => {
     if (!toast) return;
@@ -123,10 +101,6 @@ export function FontPicker({
       setToast(`Pronto. O cardápio dos clientes já está com a fonte ${fontThemeLabel(selected)}.`);
     });
 
-  const story = preview.categories[0];
-  const storyItem = story?.items[0];
-  const listCat = preview.categories.find((c) => c.items.length > 1) ?? story;
-
   return (
     <>
       <div className="ap-work">
@@ -143,109 +117,10 @@ export function FontPicker({
               </button>
             ))}
           </div>
-          <div className="ap-phone" ref={phoneRef} data-font={selected}>
-            <div className="ap-screen" ref={screenRef}>
-              <div className="ap-notch" />
-
-              {tab === "story" && (
-                <section className="ap-view v-story">
-                  {storyItem?.image && <img className="bgimg" src={storyItem.image} alt="" />}
-                  <div className="grad" />
-                  <div className="s-top">
-                    <div className="s-row">
-                      <i className="s-back" />
-                      <span className="s-pill">Ver lista</span>
-                    </div>
-                    <div className="s-tabs">
-                      {preview.categories.map((c, k) => (
-                        <span key={k} className={k === 0 ? "on" : undefined}>
-                          {c.name}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="s-bars">
-                      {Array.from({ length: Math.max(1, story?.count ?? 1) }, (_, k) => (
-                        <i key={k} className={k === 0 ? "on" : undefined} />
-                      ))}
-                    </div>
-                  </div>
-                  <div className="s-info">
-                    <span className="s-cat">{story?.name}</span>
-                    <h3 className="s-name fd">{storyItem?.name}</h3>
-                    {storyItem?.description && <p className="s-desc">{storyItem.description}</p>}
-                    <div className="s-acts">
-                      <span>Compartilhar</span>
-                      {storyItem && (
-                        <span className="s-price">{formatPrice(storyItem.price_cents, "pt-BR")}</span>
-                      )}
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {tab === "capa" && (
-                <section className="ap-view v-capa">
-                  <div className="c-hero">
-                    {preview.cover && <img className="bgimg" src={preview.cover} alt="" />}
-                  </div>
-                  <div className="c-brand">
-                    <div className="c-logo">
-                      {preview.logo ? <img src={preview.logo} alt="" /> : <b>{preview.name}</b>}
-                    </div>
-                    {status && (
-                      <span className={`c-status${status.open ? " is-open" : ""}`}>
-                        <i aria-hidden />
-                        {status.state}
-                {status.detail && <em>{status.detail}</em>}
-                      </span>
-                    )}
-                  </div>
-                  <div className="c-body">
-                    <div className="c-tabs">
-                      {preview.categories.map((c, k) => (
-                        <span key={k} className={k === 0 ? "on" : undefined}>
-                          {c.name}
-                        </span>
-                      ))}
-                    </div>
-                    {preview.categories.slice(0, 2).map((c, k) => (
-                      <div className="c-card" key={k}>
-                        {c.thumb && <img src={c.thumb} alt="" />}
-                        <div>
-                          <b className="fd">{c.name}</b>
-                          <span>
-                            {c.count} {c.count === 1 ? "item" : "itens"}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {tab === "lista" && (
-                <section className="ap-view v-lista">
-                  <div className="l-wrap">
-                    <div className="l-head">
-                      <h3 className="fd">Cardápio em lista</h3>
-                      <i />
-                    </div>
-                    <div className="l-box">
-                      <h4 className="fd">{listCat?.name}</h4>
-                      {listCat?.items.map((it, k) => (
-                        <div className="l-item" key={k}>
-                          {it.thumb ? <img src={it.thumb} alt="" /> : <span className="noimg" />}
-                          <div>
-                            <b>{it.name}</b>
-                            {it.description && <span>{it.description}</span>}
-                            <em>{formatPrice(it.price_cents, "pt-BR")}</em>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-              )}
+          <div className="ap-phone" ref={phoneRef}>
+            <div className="ap-screen">
+              {/* O próprio cardápio, ao vivo: a prévia é sempre igual ao que o cliente vê. */}
+              <iframe ref={frameRef} className="ap-frame" src={`/${slug}`} title="Prévia do cardápio" />
             </div>
           </div>
           <span className="ap-plabel">Prévia: {fontThemeLabel(selected)}</span>
@@ -275,7 +150,7 @@ export function FontPicker({
                 Aa
               </span>
               <span className="dish fd" aria-hidden>
-                {storyItem?.name ?? "Margherita da Casa"}
+                {sampleDish}
               </span>
               <span className="meta">
                 <b>{f.label}</b>
