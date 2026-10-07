@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Raleway } from "next/font/google";
+import { MUX_PENDING } from "@/lib/media-store";
 import { createClient } from "@/lib/supabase/server";
 import { ShellMenu, TopButton, VideoSync } from "./shell-menu";
 
@@ -33,7 +34,7 @@ export async function PanelShell({
     .from("media")
     .select("id", { count: "exact", head: true })
     .eq("restaurant_id", restaurant.id)
-    .eq("status", "processing")
+    .or(MUX_PENDING)
     .not("mux_upload_id", "is", null);
   return (
     <div className={`ap-app ${raleway.variable}`}>
