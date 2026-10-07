@@ -51,21 +51,13 @@ const STRINGS = {
   opensAt: L6(["abre às {t}", "opens at {t}", "abre a las {t}", "ouvre à {t}", "apre alle {t}", "öffnet um {t}"]),
   opensOn: L6(["abre {d} às {t}", "opens {d} at {t}", "abre el {d} a las {t}", "ouvre {d} à {t}", "apre {d} alle {t}", "öffnet {d} um {t}"]),
   tomorrow: L6(["amanhã", "tomorrow", "mañana", "demain", "domani", "morgen"]),
-  hint1: L6([
-    "Toque à direita para o próximo prato",
-    "Tap right for the next dish",
-    "Toca a la derecha para el siguiente plato",
-    "Touchez à droite pour le plat suivant",
-    "Tocca a destra per il piatto successivo",
-    "Rechts tippen für das nächste Gericht",
-  ]),
-  hint2: L6([
-    "Arraste para o lado para trocar de categoria",
-    "Swipe sideways to change category",
-    "Desliza hacia el lado para cambiar de categoría",
-    "Glissez sur le côté pour changer de catégorie",
-    "Scorri di lato per cambiare categoria",
-    "Zur Seite wischen, um die Kategorie zu wechseln",
+  hint: L6([
+    "Toque para avançar · deslize para trocar",
+    "Tap to advance · swipe to switch",
+    "Toca para avanzar · desliza para cambiar",
+    "Touchez pour avancer · glissez pour changer",
+    "Tocca per avanzare · scorri per cambiare",
+    "Tippen zum Weiter · wischen zum Wechseln",
   ]),
 };
 
