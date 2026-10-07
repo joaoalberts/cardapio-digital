@@ -313,11 +313,11 @@
   }
   & .bars {
     position: absolute;
-    left: 16px;
-    right: 58px;
-    top: calc(var(--safe-top) + 132px);
+    left: 12px;
+    right: 44px;
+    top: calc(var(--safe-top) + 10px);
     display: flex;
-    gap: 5px;
+    gap: 4px;
     z-index: 3;
   }
   & .bars i {
@@ -393,60 +393,76 @@
     border-radius: 6px;
     background: var(--scrim);
   }
+  /* Topo dos stories: progresso colado em cima e, logo abaixo, voltar, categorias e lista
+     numa linha só, em vidro translúcido para não brigar com a foto. */
   & .chrome {
     position: absolute;
     z-index: 10;
     left: 0;
     right: 0;
     top: 0;
-    padding: calc(var(--safe-top) + 16px) 16px 0;
-    display: grid;
-    gap: 14px;
+    padding: calc(var(--safe-top) + 24px) 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     pointer-events: none;
   }
   & .chrome > * {
     pointer-events: auto;
   }
-  & .row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  & .row .right {
-    display: flex;
-    gap: 10px;
+  & .glass {
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
   }
   & .back {
-    width: 44px;
-    height: 44px;
+    flex: none;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     display: grid;
     place-items: center;
-    background: #fff;
-    color: #111;
-  }
-  & .pill {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    height: 44px;
-    padding: 0 18px;
-    border-radius: 99px;
-    background: #fff;
-    color: #111;
-    font-weight: 500;
+    color: #fff;
   }
   & .vtabs {
-    background: rgba(0, 0, 0, 0.38);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    flex: 1;
+    min-width: 0;
+    padding: 3px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.22);
+    border-color: rgba(255, 255, 255, 0.16);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  & .vtabs button {
+    padding: 7px 12px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+  & .vtabs button[aria-selected="true"] {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.18);
+  }
+  & .listbtn {
+    flex: none;
+    width: 36px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
+  }
+  & .listbtn .icon {
+    width: 24px;
+    height: 24px;
   }
   & .pause {
     position: absolute;
     z-index: 11;
-    right: 10px;
-    top: calc(var(--safe-top) + 119px);
-    width: 44px;
+    right: 4px;
+    top: calc(var(--safe-top) - 3px);
+    width: 36px;
     height: 30px;
     display: grid;
     place-items: center;
@@ -598,18 +614,6 @@
     width: 26px;
     height: 26px;
   }
-  & .langbtn {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    background: #fff;
-  }
-  & .langbtn .flag {
-    width: 28px;
-    height: 28px;
-  }
   & .lang {
     position: fixed;
     inset: 0;
@@ -710,7 +714,7 @@
     display: grid;
     place-items: center;
   }
-  & .relang :is(.card-txt, .tabs, .info, .lbox, .pill, .list h2) {
+  & .relang :is(.card-txt, .tabs, .info, .lbox, .list h2) {
     animation: cm-relang 0.35s ease both;
   }
 }
