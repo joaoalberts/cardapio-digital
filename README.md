@@ -35,6 +35,8 @@ Com um projeto na nuvem:
    projeto no Supabase). `ANTHROPIC_API_KEY` é opcional e liga a sugestão de traduções.
    `MUX_TOKEN_ID` e `MUX_TOKEN_SECRET` (token do Mux com permissão de Mux Video) ligam o
    vídeo dos pratos em qualidade máxima; sem eles, o vídeo vai para o Storage (até 50 MB).
+   Marque cada variável em Production e Preview e faça um novo deploy depois de mudar
+   qualquer uma, porque elas só valem a partir do próximo deploy.
    `SUPPORT_WHATSAPP` (opcional, só dígitos com DDI, ex.: 5511999999999) mostra o botão de
    WhatsApp na página Suporte do painel. As mensagens do formulário ficam na tabela
    `support_requests`.
