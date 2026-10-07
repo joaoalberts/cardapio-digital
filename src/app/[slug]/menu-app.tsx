@@ -578,18 +578,6 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
   const near = (i: number) => view.open && (Math.abs(i - view.cur) <= 1 || Math.abs(i - view.target) <= 1);
   const style = { "--accent": restaurant.brand_color ?? undefined } as CSSProperties;
 
-  const langButton = (cls: string) => (
-    <button
-      className={cls}
-      onClick={() => update({ langOpen: true })}
-      aria-label={`${t("lang")}: ${LANG_NAME[lang] ?? lang}`}
-    >
-      <span className="flag">
-        <Flag code={flagCode} />
-      </span>
-    </button>
-  );
-
   return (
     <div className={`cm${relang ? " relang" : ""}`} data-font={isFontTheme(restaurant.font_theme) ? restaurant.font_theme : DEFAULT_FONT_THEME} style={style}>
       <main className="home" aria-hidden={view.open}>
@@ -612,7 +600,17 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
             <button className="round" onClick={() => openViewer(0, true)} aria-label={t("viewList")} disabled={!cats.length}>
               <ListIcon />
             </button>
-            {languages.length > 1 && langButton("round")}
+            {languages.length > 1 && (
+              <button
+                className="round"
+                onClick={() => update({ langOpen: true })}
+                aria-label={`${t("lang")}: ${LANG_NAME[lang] ?? lang}`}
+              >
+                <span className="flag">
+                  <Flag code={flagCode} />
+                </span>
+              </button>
+            )}
           </div>
           <div className="brand">
             {/* A logo é a imagem enviada pelo restaurante; não muda com a fonte do cardápio. */}
@@ -722,20 +720,11 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
         </div>
 
         <div className="chrome">
-          <div className="row">
-            <button className="back" onClick={closeViewer} aria-label={t("back")}>
-              <svg className="icon" viewBox="0 0 24 24">
-                <path d="M19 12H5M11 6l-6 6 6 6" />
-              </svg>
-            </button>
-            <div className="right">
-              {languages.length > 1 && langButton("langbtn")}
-              <button className="pill" onClick={() => update({ listOpen: true, listCat: viewRef.current.cur })}>
-                <ListIcon />
-                <span>{t("viewList")}</span>
-              </button>
-            </div>
-          </div>
+          <button className="back glass" onClick={closeViewer} aria-label={t("back")}>
+            <svg className="icon" viewBox="0 0 24 24">
+              <path d="M19 12H5M11 6l-6 6 6 6" />
+            </svg>
+          </button>
           <div className="tabs vtabs" role="tablist" ref={vTabsRef}>
             {cats.map((c, i) => (
               <button key={c.id} role="tab" aria-selected={i === view.cur} onClick={() => goCat(i)}>
@@ -743,6 +732,13 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
               </button>
             ))}
           </div>
+          <button
+            className="listbtn"
+            onClick={() => update({ listOpen: true, listCat: viewRef.current.cur })}
+            aria-label={t("viewList")}
+          >
+            <ListIcon />
+          </button>
         </div>
 
         <button
