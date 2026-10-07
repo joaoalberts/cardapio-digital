@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { IMAGE_TYPES, shrinkImage } from "@/lib/images/shrink";
+import { extOf, IMAGE_TYPES, shrinkImage } from "@/lib/images/shrink";
 import { LANG_FLAG, LANG_NAME } from "@/lib/menu/i18n";
 import { mediaUrl } from "@/lib/menu/media";
 import { TAG_IDS, tagLabel } from "@/lib/menu/tags";
@@ -229,13 +229,17 @@ export function ItemDrawer({
     if (!IMAGE_TYPES.test(file.type)) return setErr("Use uma foto PNG, JPG ou WebP.");
     setUploading(true);
     try {
-      const [full, small] = await Promise.all([shrinkImage(file, 1440), shrinkImage(file, 480, 0.8)]);
+      // Foto em qualidade máxima para a tela cheia do celular; miniatura leve para a capa e a lista.
+      const [full, small] = await Promise.all([
+        shrinkImage(file, 2560, 0.92, "image/jpeg"),
+        shrinkImage(file, 480, 0.8, "image/jpeg"),
+      ]);
       const id = crypto.randomUUID();
-      const path = `${ctx.restaurantId}/items/${id}.webp`;
-      const thumbPath = `${ctx.restaurantId}/items/${id}-t.webp`;
+      const path = `${ctx.restaurantId}/items/${id}.${extOf(full)}`;
+      const thumbPath = `${ctx.restaurantId}/items/${id}-t.${extOf(small)}`;
       const storage = createClient().storage.from("media");
-      const opts = { contentType: "image/webp", cacheControl: "31536000" };
-      const [a, b] = await Promise.all([storage.upload(path, full, opts), storage.upload(thumbPath, small, opts)]);
+      const opts = (b: Blob) => ({ contentType: b.type, cacheControl: "31536000" });
+      const [a, b] = await Promise.all([storage.upload(path, full, opts(full)), storage.upload(thumbPath, small, opts(small))]);
       if (a.error || b.error) throw a.error ?? b.error;
       uploaded.current.push(path, thumbPath);
       setPhoto({ url: mediaUrl(path)!, thumb: mediaUrl(thumbPath)!, path, thumbPath });
