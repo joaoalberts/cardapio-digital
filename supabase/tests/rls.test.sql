@@ -20,8 +20,15 @@ select set_config('test.pizzaria', :'pizzaria', false);
 -- Ana monta o cardápio dela.
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 insert into public.categories (restaurant_id, name) values (:'pizzaria', 'Pizzas') returning id as pizzas \gset
-insert into public.items (restaurant_id, category_id, name, price_cents)
-  values (:'pizzaria', :'pizzas', 'Margherita', 4990);
+insert into public.items (restaurant_id, category_id, name, description, price_cents)
+  values (:'pizzaria', :'pizzas', 'Margherita', 'Molho de tomate e manjericão', 4990)
+  returning id as margherita \gset
+-- Ana libera inglês e espanhol e traduz só a pizza para inglês.
+update public.restaurants set languages = '{pt-BR,en,es}' where id = :'pizzaria';
+insert into public.translations (restaurant_id, item_id, language, name, description)
+  values (:'pizzaria', :'margherita', 'en', 'Margherita', 'Tomato sauce and basil');
+insert into public.translations (restaurant_id, category_id, language, name)
+  values (:'pizzaria', :'pizzas', 'en', 'Pizzas (EN)');
 insert into public.items (restaurant_id, category_id, name, price_cents, active)
   values (:'pizzaria', :'pizzas', 'Fora do cardápio', 1000, false);
 insert into public.dining_tables (restaurant_id, label) values (:'pizzaria', 'Mesa 7') returning code \gset
@@ -34,9 +41,9 @@ begin
   assert n = 1, 'Ana deveria ver 1 restaurante, viu ' || n;
   select count(*) into n from public.restaurants where slug = 'pizzaria-ana';
   assert n = 1, 'slug deveria ser salvo em minúsculas';
-  -- A versão do cardápio subiu com as mudanças (1 + categoria + 2 itens).
+  -- A versão do cardápio subiu com as mudanças (1 + categoria + 2 itens + 2 traduções).
   select menu_version into n from public.restaurants;
-  assert n = 4, 'menu_version deveria ser 4, é ' || n;
+  assert n = 6, 'menu_version deveria ser 6, é ' || n;
 end $$;
 
 -- Ana não pode mexer na assinatura.
@@ -109,6 +116,24 @@ begin
   assert n = 1, 'cardápio público deveria ter 1 item ativo, tem ' || n;
   assert menu ? 'restaurant' and not (menu->'restaurant' ? 'subscription_status'),
     'cardápio público expõe a assinatura';
+  assert menu->'categories'->0->'items'->0->>'description' = 'Molho de tomate e manjericão',
+    'sem idioma deveria vir em português';
+
+  -- Inglês: usa a tradução.
+  menu := public.get_public_menu('pizzaria-ana', 'en');
+  assert menu->'restaurant'->>'language' = 'en', 'idioma deveria ser en';
+  assert menu->'categories'->0->>'name' = 'Pizzas (EN)', 'categoria deveria vir em inglês';
+  assert menu->'categories'->0->'items'->0->>'description' = 'Tomato sauce and basil',
+    'item deveria vir em inglês';
+
+  -- Espanhol liberado mas sem tradução: cai no português.
+  menu := public.get_public_menu('pizzaria-ana', 'es');
+  assert menu->'categories'->0->'items'->0->>'description' = 'Molho de tomate e manjericão',
+    'sem tradução deveria cair no português';
+
+  -- Idioma não liberado pelo restaurante: volta ao português.
+  menu := public.get_public_menu('pizzaria-ana', 'de');
+  assert menu->'restaurant'->>'language' = 'pt-BR', 'idioma não liberado deveria voltar a pt-BR';
 end $$;
 
 \echo 'rls.test.sql: tudo certo'

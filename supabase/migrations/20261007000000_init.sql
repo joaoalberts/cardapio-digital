@@ -15,7 +15,11 @@ create table public.restaurants (
     check (char_length(slug) between 3 and 40 and slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
   logo_path text,
   brand_color text check (brand_color ~ '^#[0-9a-fA-F]{6}$'),
-  languages text[] not null default '{pt-BR}',
+  -- Idiomas que o cliente pode escolher pela bandeira. O texto base dos itens é em
+  -- pt-BR; os outros vêm de translations. Aceita qualquer código (en, es, fr, it, de…).
+  languages text[] not null default '{pt-BR}'
+    check (cardinality(languages) between 1 and 10
+      and array_to_string(languages, ',') ~ '^[a-z]{2}(-[A-Z]{2})?(,[a-z]{2}(-[A-Z]{2})?)*$'),
   -- Aumenta a cada mudança no cardápio; o celular do cliente compara para saber se recarrega.
   menu_version bigint not null default 1,
   -- Assinatura: a cobrança (Pix) entra na última etapa; até lá todos ficam em teste.
@@ -96,7 +100,7 @@ create table public.translations (
   restaurant_id uuid not null references public.restaurants (id) on delete cascade,
   category_id uuid,
   item_id uuid,
-  language text not null,
+  language text not null check (language ~ '^[a-z]{2}(-[A-Z]{2})?$'),
   name text not null check (char_length(name) between 1 and 80),
   description text not null default '' check (char_length(description) <= 500),
   foreign key (category_id, restaurant_id)
@@ -192,20 +196,24 @@ create trigger media_bump after insert or update or delete on public.media
 create trigger translations_bump after insert or update or delete on public.translations
   for each row execute function public.bump_menu_version();
 
--- Cardápio público: só o que está ativo e pronto, numa chamada só.
-create function public.get_public_menu(p_slug text) returns jsonb
+-- Cardápio público: só o que está ativo e pronto, numa chamada só, no idioma pedido.
+-- Sem tradução para um texto, cai no texto base (pt-BR).
+create function public.get_public_menu(p_slug text, p_lang text default 'pt-BR') returns jsonb
 language sql stable security definer set search_path = '' as $$
   select jsonb_build_object(
     'restaurant', jsonb_build_object(
       'id', r.id, 'name', r.name, 'slug', r.slug, 'logo_path', r.logo_path,
-      'brand_color', r.brand_color, 'languages', r.languages, 'menu_version', r.menu_version
+      'brand_color', r.brand_color, 'languages', r.languages, 'menu_version', r.menu_version,
+      'language', case when p_lang = any (r.languages) then p_lang else 'pt-BR' end
     ),
     'categories', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'id', c.id, 'name', c.name,
+        'id', c.id, 'name', coalesce(ct.name, c.name),
         'items', coalesce((
           select jsonb_agg(jsonb_build_object(
-            'id', i.id, 'name', i.name, 'description', i.description,
+            'id', i.id,
+            'name', coalesce(it.name, i.name),
+            'description', coalesce(nullif(it.description, ''), i.description),
             'price_cents', i.price_cents,
             'media', coalesce((
               select jsonb_agg(jsonb_build_object(
@@ -217,10 +225,14 @@ language sql stable security definer set search_path = '' as $$
             ), '[]'::jsonb)
           ) order by i.position, i.created_at)
           from public.items i
+          left join public.translations it
+            on it.item_id = i.id and it.language = p_lang and p_lang = any (r.languages)
           where i.category_id = c.id and i.active
         ), '[]'::jsonb)
       ) order by c.position, c.created_at)
       from public.categories c
+      left join public.translations ct
+        on ct.category_id = c.id and ct.language = p_lang and p_lang = any (r.languages)
       where c.restaurant_id = r.id and c.active
     ), '[]'::jsonb)
   )
@@ -279,5 +291,5 @@ create policy "membros gerenciam mesas" on public.dining_tables
 
 revoke execute on function public.create_restaurant(text, text) from public, anon;
 grant execute on function public.create_restaurant(text, text) to authenticated;
-grant execute on function public.get_public_menu(text) to anon, authenticated;
+grant execute on function public.get_public_menu(text, text) to anon, authenticated;
 revoke execute on function public.bump_menu_version() from public, anon, authenticated;
