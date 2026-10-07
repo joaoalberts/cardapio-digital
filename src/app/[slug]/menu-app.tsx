@@ -603,7 +603,8 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
         setTimeout(() => (el.style.transition = ""), 260);
       }
     } else if (!g.mode && !g.held && !cancel && dtot < 350) {
-      if (e.clientX < w * 0.3) prev();
+      const x = e.clientX - (viewerRef.current?.getBoundingClientRect().left ?? 0);
+      if (x < w * 0.3) prev();
       else next();
     }
   };
@@ -816,6 +817,8 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
         )}
       </main>
 
+      {/* No computador, fora da coluna do story: clicar fecha. */}
+      <div className="viewer-bg" hidden={!view.open} onClick={closeViewer} aria-hidden />
       <div className={`viewer${view.held ? " held" : ""}${view.listOpen ? " listing" : ""}`} ref={viewerRef} hidden={!view.open} aria-hidden={!view.open}>
         <div
           className="stage"
