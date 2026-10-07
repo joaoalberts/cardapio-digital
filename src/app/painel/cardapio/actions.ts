@@ -7,6 +7,8 @@ import { menuTag } from "@/lib/menu/data";
 import { TAG_IDS } from "@/lib/menu/tags";
 import { suggestTranslation, translationEnabled, type Texts } from "@/lib/translate";
 import { autoTranslate } from "@/lib/menu/auto-translate";
+import { createUpload, deleteAsset, muxEnabled, videoState, type VideoState } from "@/lib/mux";
+import { headers } from "next/headers";
 
 type Result = { error?: string };
 type Target = { categoryId: string } | { itemId: string };
@@ -63,7 +65,7 @@ export async function deleteCategory(restaurantId: string, id: string): Promise<
   const files = await mediaFilesOf(supabase, { categoryId: id });
   const { error } = await supabase.from("categories").delete().eq("id", id);
   if (error) return { error: "Não foi possível excluir a categoria." };
-  if (files.length) await supabase.storage.from("media").remove(files);
+  await removeMedia(supabase, files);
   await refreshMenu(supabase, restaurantId);
   return {};
 }
@@ -87,17 +89,30 @@ export type ItemInput = {
   promoCents: number | null;
   tags: string[];
   active: boolean;
-  // undefined = não mexe na foto; null = remove; objeto = foto nova já enviada ao Storage
-  photo?: { path: string; thumb: string } | null;
+  // undefined = não mexe na mídia; null = remove; objeto = foto ou vídeo novo já enviado
+  media?: MediaInput | null;
 };
 
+// Foto: arquivo e miniatura no Storage. Vídeo: capa no Storage e o arquivo no Mux
+// (uploadId) ou, sem Mux, no próprio Storage (path).
+export type MediaInput =
+  | { kind: "photo"; path: string; thumb: string }
+  | { kind: "video"; poster: string; uploadId?: string; path?: string };
+
 async function mediaFilesOf(supabase: SupabaseClient, of: { itemId: string } | { categoryId: string }) {
-  let q = supabase.from("media").select("storage_path, poster_path, items!inner(category_id)");
+  let q = supabase.from("media").select("storage_path, poster_path, mux_asset_id, items!inner(category_id)");
   q = "itemId" in of ? q.eq("item_id", of.itemId) : q.eq("items.category_id", of.categoryId);
   const { data } = await q;
-  return (data ?? [])
+  const files = (data ?? [])
     .flatMap((m) => [m.storage_path, m.poster_path])
     .filter((p): p is string => !!p && !p.startsWith("/") && !/^https?:/.test(p));
+  const assets = (data ?? []).map((m) => m.mux_asset_id).filter((a): a is string => !!a);
+  return Object.assign(files, { assets });
+}
+
+async function removeMedia(supabase: SupabaseClient, old: Awaited<ReturnType<typeof mediaFilesOf>>) {
+  if (old.length) await supabase.storage.from("media").remove(old);
+  await Promise.all(old.assets.map(deleteAsset));
 }
 
 export async function saveItem(restaurantId: string, input: ItemInput): Promise<Result & { id?: string }> {
@@ -111,8 +126,10 @@ export async function saveItem(restaurantId: string, input: ItemInput): Promise<
     return { error: "O preço promocional precisa ser menor que o preço normal." };
   }
   const tags = input.tags.filter((t) => (TAG_IDS as string[]).includes(t));
-  if (input.photo && ![input.photo.path, input.photo.thumb].every((p) => p.startsWith(`${restaurantId}/`))) {
-    return { error: "Foto inválida." };
+  const m = input.media;
+  const paths = !m ? [] : m.kind === "photo" ? [m.path, m.thumb] : [m.poster, ...(m.path ? [m.path] : [])];
+  if (!paths.every((p) => p.startsWith(`${restaurantId}/`)) || (m?.kind === "video" && !m.uploadId && !m.path)) {
+    return { error: "Arquivo inválido." };
   }
 
   const supabase = await createClient();
@@ -147,21 +164,20 @@ export async function saveItem(restaurantId: string, input: ItemInput): Promise<
     id = data.id as string;
   }
 
-  if (input.photo !== undefined) {
+  if (m !== undefined) {
     const old = await mediaFilesOf(supabase, { itemId: id });
-    await supabase.from("media").delete().eq("item_id", id).eq("kind", "photo");
-    if (input.photo) {
-      const { error } = await supabase.from("media").insert({
-        restaurant_id: restaurantId,
-        item_id: id,
-        kind: "photo",
-        storage_path: input.photo.path,
-        poster_path: input.photo.thumb,
-        status: "ready",
-      });
-      if (error) return { error: "O prato foi salvo, mas a foto não. Tente enviar de novo.", id };
+    await supabase.from("media").delete().eq("item_id", id);
+    if (m) {
+      const row =
+        m.kind === "photo"
+          ? { kind: "photo", storage_path: m.path, poster_path: m.thumb, status: "ready" }
+          : m.uploadId
+            ? { kind: "video", mux_upload_id: m.uploadId, poster_path: m.poster, ...(await muxRow(m.uploadId)) }
+            : { kind: "video", storage_path: m.path, poster_path: m.poster, status: "ready" };
+      const { error } = await supabase.from("media").insert({ restaurant_id: restaurantId, item_id: id, ...row });
+      if (error) return { error: "O prato foi salvo, mas a foto ou o vídeo não. Tente enviar de novo.", id };
     }
-    if (old.length) await supabase.storage.from("media").remove(old);
+    await removeMedia(supabase, old);
   }
 
   if (textsChanged) await autoTranslate(supabase, restaurantId, { itemId: id }, { name, description });
@@ -174,9 +190,73 @@ export async function deleteItem(restaurantId: string, id: string): Promise<Resu
   const files = await mediaFilesOf(supabase, { itemId: id });
   const { error } = await supabase.from("items").delete().eq("id", id);
   if (error) return { error: "Não foi possível excluir o prato." };
-  if (files.length) await supabase.storage.from("media").remove(files);
+  await removeMedia(supabase, files);
   await refreshMenu(supabase, restaurantId);
   return {};
+}
+
+// ---------- Vídeos ----------
+
+async function muxRow(uploadId: string) {
+  const st = await videoState(uploadId).catch((): VideoState => ({ status: "processing" }));
+  if (st.status === "ready") return { status: "ready", mux_asset_id: st.assetId, mux_playback_id: st.playbackId };
+  if (st.status === "failed") return { status: "failed" };
+  return { status: "processing", mux_asset_id: st.assetId ?? null };
+}
+
+// Endereço para o painel mandar o vídeo direto ao Mux, sem passar pelo nosso servidor.
+export async function startVideoUpload(
+  restaurantId: string,
+): Promise<{ error?: string; mux?: boolean; uploadId?: string; url?: string }> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("restaurants").select("id").eq("id", restaurantId).maybeSingle();
+  if (!data) return { error: "Entre de novo no painel." };
+  if (!muxEnabled()) return { mux: false };
+  const origin = (await headers()).get("origin") ?? "*";
+  try {
+    const up = await createUpload(origin, restaurantId);
+    return { mux: true, uploadId: up.id, url: up.url };
+  } catch {
+    return { error: "Não foi possível preparar o envio do vídeo. Tente de novo." };
+  }
+}
+
+// Vídeo enviado e não salvo: apaga no Mux para não ocupar a conta.
+export async function discardVideo(uploadId: string) {
+  if (!muxEnabled()) return;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  for (let k = 0; k < 4; k++) {
+    const st = await videoState(uploadId).catch((): VideoState => ({ status: "failed" }));
+    if ("assetId" in st && st.assetId) return deleteAsset(st.assetId);
+    if (st.status === "failed") return;
+    await new Promise((r) => setTimeout(r, 2500));
+  }
+}
+
+// Confere no Mux os vídeos ainda em preparo; os prontos passam a aparecer no cardápio.
+export async function syncVideos(restaurantId: string): Promise<{ pending: number }> {
+  if (!muxEnabled()) return { pending: 0 };
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("media")
+    .select("id, mux_upload_id")
+    .eq("restaurant_id", restaurantId)
+    .eq("status", "processing")
+    .not("mux_upload_id", "is", null);
+  let pending = 0;
+  let changed = false;
+  for (const m of data ?? []) {
+    const row = await muxRow(m.mux_upload_id!);
+    if (row.status === "processing") pending++;
+    else changed = true;
+    await supabase.from("media").update(row).eq("id", m.id);
+  }
+  if (changed) await refreshMenu(supabase, restaurantId);
+  return { pending };
 }
 
 // Cópia sem foto (o arquivo é do prato original) e escondida, para o dono ajustar antes.

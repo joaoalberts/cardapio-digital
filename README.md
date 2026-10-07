@@ -33,6 +33,8 @@ Com um projeto na nuvem:
 1. Importe o repositório em vercel.com/new e defina `NEXT_PUBLIC_SUPABASE_URL` e
    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (as mesmas do `.env.local`, com os dados do
    projeto no Supabase). `ANTHROPIC_API_KEY` é opcional e liga a sugestão de traduções.
+   `MUX_TOKEN_ID` e `MUX_TOKEN_SECRET` (token do Mux com permissão de Mux Video) ligam o
+   vídeo dos pratos em qualidade máxima; sem eles, o vídeo vai para o Storage (até 50 MB).
 2. No Supabase, em Authentication > URL Configuration, use o endereço de produção como
    Site URL e adicione `https://*-<seu-time>.vercel.app/**` às Redirect URLs, para os
    links de pré-visualização de cada PR também conseguirem fazer login.

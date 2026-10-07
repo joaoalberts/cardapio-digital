@@ -1,10 +1,10 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- miniaturas enviadas pelo restaurante */
 
-import { useOptimistic, useState, useTransition } from "react";
+import { useEffect, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatPrice } from "@/lib/menu/media";
-import { createCategory, reorder, updateCategory } from "./actions";
+import { createCategory, reorder, syncVideos, updateCategory } from "./actions";
 import { CategoryDrawer, ItemDrawer } from "./drawers";
 
 export type EditorTranslation = { language: string; name: string; description: string; auto: boolean };
@@ -18,7 +18,7 @@ export type EditorItem = {
   promoCents: number | null;
   tags: string[];
   active: boolean;
-  photo: { url: string; thumb: string } | null;
+  media: { kind: "photo" | "video"; url: string; thumb: string; status: "processing" | "ready" | "failed" } | null;
   translations: EditorTranslation[];
 };
 
@@ -84,6 +84,17 @@ export function MenuEditor({
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Vídeos ainda em preparo no Mux: confere a cada poucos segundos até ficarem prontos.
+  const preparing = categories.some((c) => c.items.some((i) => i.media?.status === "processing"));
+  useEffect(() => {
+    if (!preparing) return;
+    const id = setInterval(async () => {
+      const { pending } = await syncVideos(restaurantId);
+      if (pending === 0) router.refresh();
+    }, 6000);
+    return () => clearInterval(id);
+  }, [preparing, restaurantId, router]);
 
   const ctx: EditorContext = { restaurantId, languages, canTranslate, categories: cats };
 
@@ -212,11 +223,15 @@ export function MenuEditor({
                   {c.items.map((it, ii) => (
                     <li key={it.id} className={`me-item${it.active ? "" : " off"}`}>
                       <button className="me-item-main" onClick={() => setDrawer({ kind: "item", item: it, categoryId: c.id })}>
-                        {it.photo ? <img src={it.photo.thumb} alt="" /> : <span className="me-noimg"><Icon d={CAMERA} /></span>}
+                        {it.media ? <img src={it.media.thumb} alt="" /> : <span className="me-noimg"><Icon d={CAMERA} /></span>}
                         <span className="me-item-txt">
                           <b>{it.name}</b>
                           <span>
                             {!it.active && <em className="me-badge">escondido</em>}
+                            {it.media?.kind === "video" && it.media.status === "processing" && (
+                              <em className="me-badge gold">preparando vídeo</em>
+                            )}
+                            {it.media?.status === "failed" && <em className="me-badge">vídeo com erro</em>}
                             {it.translations.some((t) => t.auto) && <em className="me-badge gold">tradução a revisar</em>}
                             {it.description}
                           </span>
