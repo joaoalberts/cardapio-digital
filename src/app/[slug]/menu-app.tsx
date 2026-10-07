@@ -1173,8 +1173,9 @@ function LoopVideo({
   ref?: React.Ref<HTMLVideoElement>;
 }) {
   const own = useRef<HTMLVideoElement>(null);
-  // Só começa a baixar quando o card chega perto da tela (o banner, na hora): a capa
-  // abre leve mesmo com muitos vídeos. Depois de carregado, fica (só pausa fora da tela).
+  // Só carrega o vídeo quando o card chega perto da tela (o banner, na hora), e solta de
+  // volta quando sai: no celular, cada vídeo aberto ocupa memória e decodificação, e com
+  // muitas categorias isso trava a página. Ao voltar, mostra a capa e retoma.
   const [active, setActive] = useState(!!eager);
   const setRefs = useCallback(
     (el: HTMLVideoElement | null) => {
@@ -1202,13 +1203,15 @@ function LoopVideo({
         } else {
           v.dataset.want = "";
           v.pause();
+          // Fora da tela (o banner fica sempre carregado): solta o arquivo e a decodificação.
+          if (!eager) setActive(false);
         }
       },
       { rootMargin: "120px 0px" },
     );
     io.observe(v);
     return () => io.disconnect();
-  }, []);
+  }, [eager]);
   const hls = !!live && live.includes(".m3u8");
   return (
     <video
