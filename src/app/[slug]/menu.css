@@ -1,3 +1,11 @@
+/* Sem "folga" ao puxar a página além das bordas (iOS/Android): a página
+   inteira não estica e o fundo do html tem a cor do cardápio. */
+html:has(.cm),
+html:has(.cm) body {
+  overscroll-behavior: none;
+  background: #231a16;
+}
+
 /* Cardápio do cliente: capa com cards de categoria e visualizador 9:16 em tela cheia.
    Tudo fica dentro de .cm para não vazar para o painel. */
 .cm {
@@ -294,6 +302,7 @@
   & .media {
     position: absolute;
     inset: 0;
+    background: #000;
   }
   & .media img,
   & .media video {
@@ -302,8 +311,13 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    background: #000;
-    animation: cm-fadein 0.28s ease both;
+  }
+  & .media .hi {
+    opacity: 0;
+    transition: opacity 0.16s ease-out;
+  }
+  & .media .hi.on {
+    opacity: 1;
   }
   & .shade {
     position: absolute;
@@ -472,19 +486,19 @@
     position: absolute;
     z-index: 12;
     left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    padding: 14px 18px;
-    border-radius: 16px;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    font-size: 14px;
-    line-height: 1.5;
-    text-align: center;
-    width: min(300px, 80%);
+    bottom: calc(var(--safe-bottom) + 34%);
+    transform: translateX(-50%);
+    padding: 5px 11px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.22);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 11.5px;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
     pointer-events: none;
-    transition: opacity 0.4s;
+    animation: cm-hint 2.2s ease both;
   }
   & .chrome,
   & .info,
@@ -727,6 +741,18 @@
     opacity: 1;
   }
 }
+@keyframes cm-hint {
+  0% {
+    opacity: 0;
+  }
+  15%,
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 @keyframes cm-up {
   from {
     transform: translateY(40px);
@@ -748,13 +774,14 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cm .media :is(img, video),
+  .cm .hint,
   .cm .relang *,
   .cm .lsheet,
   .cm .lang {
     animation: none !important;
   }
-  .cm .card img {
+  .cm .card img,
+  .cm .media .hi {
     transition: none;
   }
 }
