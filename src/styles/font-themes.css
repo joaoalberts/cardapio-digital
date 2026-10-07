@@ -1,0 +1,58 @@
+/* Temas de fonte do cardápio. O elemento raiz recebe data-font="<tema>";
+   .fd = títulos (nomes, logo), o resto herda --ui. */
+[data-font] {
+  --display-weight: 400;
+  --display-vars: normal;
+  --display-transform: none;
+  --display-spacing: normal;
+  --display-scale: 1;
+  --ui-vars: normal;
+  font-family: var(--ui);
+  font-variation-settings: var(--ui-vars);
+}
+[data-font] .fd {
+  font-family: var(--display);
+  font-weight: var(--display-weight);
+  font-variation-settings: var(--display-vars);
+  text-transform: var(--display-transform);
+  letter-spacing: var(--display-spacing);
+}
+[data-font="moderno"] {
+  --display: var(--f-bricolage), system-ui, sans-serif;
+  --display-weight: 700;
+  --display-vars: "wdth" 75, "opsz" 96;
+  --display-spacing: -0.01em;
+  --ui: var(--f-bricolage), system-ui, sans-serif;
+  --ui-vars: "wdth" 100, "opsz" 14;
+}
+[data-font="letreiro"] {
+  --display: var(--f-bigshoulders), "Arial Narrow", sans-serif;
+  --display-weight: 800;
+  --display-transform: uppercase;
+  --display-spacing: 0.01em;
+  --display-scale: 1.15;
+  --ui: var(--f-worksans), system-ui, sans-serif;
+}
+[data-font="boutique"] {
+  --display: var(--f-italiana), Didot, serif;
+  --display-spacing: 0.02em;
+  --display-scale: 1.15;
+  --ui: var(--f-jost), system-ui, sans-serif;
+}
+[data-font="neon"] {
+  --display: var(--f-yesteryear), "Brush Script MT", cursive;
+  --display-scale: 1.25;
+  --ui: var(--f-karla), system-ui, sans-serif;
+}
+[data-font="laboratorio"] {
+  --display: var(--f-plexmono), ui-monospace, monospace;
+  --display-weight: 600;
+  --display-spacing: -0.03em;
+  --display-scale: 0.82;
+  --ui: var(--f-plexsans), system-ui, sans-serif;
+}
+[data-font="taverna"] {
+  --display: var(--f-pirata), "Old English Text MT", serif;
+  --display-scale: 1.2;
+  --ui: var(--f-barlow), system-ui, sans-serif;
+}

@@ -12,9 +12,12 @@ https://claude.ai/code/artifact/1aeaa1c6-07e6-46d1-94bd-3fa7d1ff32c6
 
 Com Docker instalado, o jeito mais rápido é o Supabase local:
 
-1. `npx supabase start` (aplica a migração sozinho e mostra a URL e a chave publishable).
+1. `npx supabase start` (aplica as migrações e o restaurante de exemplo, e mostra a URL
+   e a chave publishable).
 2. Copie `.env.example` para `.env.local` com esses dois valores.
 3. `npm install` e `npm run dev`, depois abra http://localhost:3000.
+4. O cardápio de exemplo fica em http://localhost:3000/forno-aurora (abra no celular ou
+   no modo celular do navegador). `npx supabase db reset` volta o exemplo ao início.
 
 Com um projeto na nuvem:
 
@@ -39,4 +42,9 @@ Com um projeto na nuvem:
   (`create_restaurant`, `get_public_menu`).
 - `src/proxy.ts`: renova a sessão e protege `/painel`.
 - `src/app/(auth)/`: cadastro e login.
-- `src/app/painel/`: painel do restaurante.
+- `src/app/painel/`: painel do restaurante; `aparencia/` escolhe a fonte do cardápio com
+  prévia ao vivo.
+- `src/app/[slug]/`: cardápio público em stories (`/<endereço-do-restaurante>`), com
+  idiomas por bandeira e lista.
+- `src/lib/menu/`: leitura do cardápio, idiomas, fontes e mídia.
+- `supabase/seed.sql` e `public/demo/`: restaurante de exemplo Forno Aurora.

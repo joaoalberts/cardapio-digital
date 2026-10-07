@@ -35,7 +35,7 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
 
   if (!restaurantName) return { error: "Informe o nome do restaurante." };
   if (!isValidSlug(slug)) {
-    return { error: "O endereço precisa ter de 3 a 40 letras, números ou hífens." };
+    return { error: "Esse endereço não pode ser usado. Use de 3 a 40 letras, números ou hífens." };
   }
   if (!email) return { error: "Informe seu e-mail." };
   if (password.length < 8) return { error: "A senha precisa ter pelo menos 8 caracteres." };
