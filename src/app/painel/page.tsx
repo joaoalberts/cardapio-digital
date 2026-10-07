@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
@@ -8,13 +7,6 @@ import { CreateRestaurantForm } from "./create-restaurant-form";
 import { signOut } from "./actions";
 
 export const metadata: Metadata = { title: "Painel" };
-
-const statusLabel: Record<string, string> = {
-  trial: "Em teste",
-  active: "Ativa",
-  past_due: "Pagamento pendente",
-  canceled: "Cancelada",
-};
 
 export default function PainelPage() {
   return (
@@ -44,7 +36,7 @@ async function PainelContent() {
   // As regras do banco só devolvem restaurantes de que este usuário é membro.
   const { data: restaurants, error } = await supabase
     .from("restaurants")
-    .select("id, name, slug, subscription_status, trial_ends_at")
+    .select("id")
     .order("created_at");
   if (error) throw error;
 
@@ -62,34 +54,6 @@ async function PainelContent() {
     );
   }
 
-  return (
-    <section className="flex flex-col gap-4">
-      {restaurants.map((r) => (
-        <article
-          key={r.id}
-          className="flex flex-col gap-1 rounded-xl border border-black/10 p-5 dark:border-white/15"
-        >
-          <h1 className="text-2xl font-semibold">{r.name}</h1>
-          <p className="text-sm opacity-70">
-            Link do cardápio:{" "}
-            <a className="underline" href={`/${r.slug}`} target="_blank" rel="noreferrer">
-              /{r.slug}
-            </a>
-          </p>
-          <p className="text-sm opacity-70">
-            Assinatura: {statusLabel[r.subscription_status] ?? r.subscription_status}
-            {r.subscription_status === "trial" &&
-              ` até ${new Date(r.trial_ends_at).toLocaleDateString("pt-BR")}`}
-          </p>
-        </article>
-      ))}
-      <Link href="/painel/perfil" className="text-sm underline">
-        Logo e horário de funcionamento
-      </Link>
-      <Link href="/painel/aparencia" className="text-sm underline">
-        Escolher a fonte do cardápio
-      </Link>
-      <p className="text-sm opacity-60">Categorias, itens e mídia chegam nas próximas etapas.</p>
-    </section>
-  );
+  // Com restaurante criado, o painel abre direto no cardápio.
+  redirect("/painel/cardapio");
 }

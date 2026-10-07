@@ -6,6 +6,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { fetchPublicMenu } from "@/lib/menu/client";
 import { DEFAULT_FONT_THEME, isFontTheme } from "@/lib/menu/font-themes";
 import { statusLabel, type StatusLabel } from "@/lib/menu/hours";
+import { tagLabel } from "@/lib/menu/tags";
 import { KNOWN_LANGS, LANG_FLAG, LANG_NAME, pickLanguage, t as tr, type StringKey } from "@/lib/menu/i18n";
 import { formatPrice, mediaUrl, posterSrc, thumbSrc, videoSrc } from "@/lib/menu/media";
 import type { MenuCategory, MenuItem, PublicMenu } from "@/lib/menu/types";
@@ -534,7 +535,7 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
   // ---------- Ações ----------
   const share = async (item: MenuItem) => {
     const url = location.href.split("#")[0];
-    const text = `${item.name} · ${formatPrice(item.price_cents, lang)}`;
+    const text = `${item.name} · ${formatPrice(item.promo_price_cents ?? item.price_cents, lang)}`;
     try {
       if (navigator.share) {
         await navigator.share({ title: menu.restaurant.name, text, url });
@@ -707,12 +708,19 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
                   <span className="cat">{c.name}</span>
                   <h3 className="fd">{item.name}</h3>
                   {item.description && <p>{item.description}</p>}
+                  {!!item.tags?.length && (
+                    <ul className="tags">
+                      {item.tags.map((tg) => (
+                        <li key={tg}>{tagLabel(tg, lang)}</li>
+                      ))}
+                    </ul>
+                  )}
                   <div className="acts">
                     <button onClick={() => share(item)}>
                       <ShareIcon />
                       <span>{t("share")}</span>
                     </button>
-                    <span className="price">{formatPrice(item.price_cents, lang)}</span>
+                    <Price item={item} lang={lang} className="price" />
                   </div>
                 </div>
                 <div className="dim" />
@@ -792,7 +800,7 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
                         <div>
                           <b>{it.name}</b>
                           {it.description && <span>{it.description}</span>}
-                          <em>{formatPrice(it.price_cents, lang)}</em>
+                          <Price item={it} lang={lang} as="em" />
                         </div>
                       </button>
                     );
@@ -892,6 +900,17 @@ function CategoryCard({
         </span>
       </div>
     </button>
+  );
+}
+
+// Com promoção: preço antigo riscado e o novo em destaque.
+function Price({ item, lang, className, as: Tag = "span" }: { item: MenuItem; lang: string; className?: string; as?: "span" | "em" }) {
+  const promo = item.promo_price_cents;
+  if (promo == null) return <Tag className={className}>{formatPrice(item.price_cents, lang)}</Tag>;
+  return (
+    <Tag className={`${className ?? ""} has-promo`.trim()}>
+      <s>{formatPrice(item.price_cents, lang)}</s> {formatPrice(promo, lang)}
+    </Tag>
   );
 }
 

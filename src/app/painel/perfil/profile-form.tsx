@@ -3,10 +3,13 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { shrinkImage } from "@/lib/images/shrink";
 import { mediaUrl } from "@/lib/menu/media";
 import { statusLabel, type StatusLabel } from "@/lib/menu/hours";
 import type { OpeningHours } from "@/lib/menu/types";
-import { saveHours, setLogo } from "./actions";
+import { saveHours, saveLanguages, setLogo } from "./actions";
+import { Flag } from "@/app/[slug]/flag";
+import { LANG_FLAG, LANG_NAME } from "@/lib/menu/i18n";
 
 const DAY_NAMES = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 // Começa na segunda, como o restaurante costuma pensar a semana.
@@ -14,26 +17,14 @@ const ORDER = [1, 2, 3, 4, 5, 6, 0];
 const EMPTY: OpeningHours = [[], [], [], [], [], [], []];
 const MAX_SIDE = 512;
 
-// Reduz a imagem no navegador (WebP mantém o fundo transparente) antes de enviar.
-async function shrink(file: File): Promise<Blob> {
-  const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bmp.width * scale);
-  canvas.height = Math.round(bmp.height * scale);
-  canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-  bmp.close();
-  return new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob"))), "image/webp", 0.9),
-  );
-}
-
 export function ProfileForm({
   restaurantId,
   name,
   logo: initialLogo,
   hours: initialHours,
   timezone,
+  languages: initialLangs,
+  canTranslate,
   canEdit,
 }: {
   restaurantId: string;
@@ -41,8 +32,12 @@ export function ProfileForm({
   logo: string | null;
   hours: OpeningHours | null;
   timezone: string;
+  languages: string[];
+  canTranslate: boolean;
   canEdit: boolean;
 }) {
+  const [langs, setLangs] = useState(initialLangs.filter((l) => l !== "pt-BR"));
+  const [langBusy, setLangBusy] = useState(false);
   const [logo, setLogoUrl] = useState(initialLogo);
   const [logoBusy, setLogoBusy] = useState(false);
   const [hours, setHours] = useState<OpeningHours>(initialHours ?? EMPTY);
@@ -78,7 +73,7 @@ export function ProfileForm({
     }
     setLogoBusy(true);
     try {
-      const blob = await shrink(file);
+      const blob = await shrinkImage(file, MAX_SIDE, 0.9);
       const path = `${restaurantId}/logo-${Date.now()}.webp`;
       const { error } = await createClient()
         .storage.from("media")
@@ -155,6 +150,54 @@ export function ProfileForm({
               />
             </div>
           </div>
+        </section>
+
+        <section className="pf-card">
+          <h2>Idiomas do cardápio</h2>
+          <p className="pf-note">
+            O cliente troca o idioma pela bandeira. O texto base é em português.
+            {canTranslate
+              ? " Ao ligar um idioma, o sistema sugere a tradução de todo o cardápio para você revisar em Cardápio."
+              : " As traduções de cada prato ficam em Cardápio, na aba Traduções."}
+          </p>
+          <div className="pf-langs">
+            {["pt-BR", "en", "es", "fr", "it", "de"].map((l) => {
+              const on = l === "pt-BR" || langs.includes(l);
+              return (
+                <button
+                  key={l}
+                  className="pf-lang"
+                  aria-pressed={on}
+                  disabled={l === "pt-BR" || !canEdit || langBusy}
+                  onClick={async () => {
+                    const next = on ? langs.filter((x) => x !== l) : [...langs, l];
+                    setLangs(next);
+                    setLangBusy(true);
+                    const res = await saveLanguages(restaurantId, next);
+                    setLangBusy(false);
+                    if (res.error) {
+                      setLangs(langs);
+                      setMsg(res.error);
+                    } else {
+                      setToast(
+                        !on && res.translated
+                          ? `${LANG_NAME[l]} ligado. Traduções sugeridas, revise em Cardápio.`
+                          : on
+                            ? `${LANG_NAME[l]} desligado.`
+                            : `${LANG_NAME[l]} ligado.`,
+                      );
+                    }
+                  }}
+                >
+                  <span className="tr-flag">
+                    <Flag code={LANG_FLAG[l]} />
+                  </span>
+                  {LANG_NAME[l]}
+                </button>
+              );
+            })}
+          </div>
+          {langBusy && <p className="pf-note">Salvando e traduzindo o cardápio…</p>}
         </section>
 
         <section className="pf-card">

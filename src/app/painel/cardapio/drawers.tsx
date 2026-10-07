@@ -1,0 +1,525 @@
+"use client";
+/* eslint-disable @next/next/no-img-element -- foto do prato enviada pelo restaurante */
+
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { IMAGE_TYPES, shrinkImage } from "@/lib/images/shrink";
+import { LANG_FLAG, LANG_NAME } from "@/lib/menu/i18n";
+import { mediaUrl } from "@/lib/menu/media";
+import { TAG_IDS, tagLabel } from "@/lib/menu/tags";
+import { Flag } from "@/app/[slug]/flag";
+import {
+  deleteCategory,
+  deleteItem,
+  duplicateItem,
+  saveItem,
+  saveTranslations,
+  suggestTranslations,
+  updateCategory,
+  type TranslationRow,
+} from "./actions";
+import { CAMERA, Icon, type EditorCategory, type EditorContext, type EditorItem, type EditorTranslation } from "./menu-editor";
+
+// "62,00" ou "62" -> 6200. Vazio ou inválido -> null.
+function parseMoney(s: string): number | null {
+  const t = s.replace(/[^\d,.]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
+const money = (cents: number | null) =>
+  cents == null ? "" : (cents / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function useEscape(onClose: () => void) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  }, [onClose]);
+}
+
+function Shell({
+  title,
+  onClose,
+  children,
+  footer,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  footer: React.ReactNode;
+}) {
+  useEscape(onClose);
+  return (
+    <div className="dr-wrap" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="dr" role="dialog" aria-modal="true" aria-label={title}>
+        <header className="dr-head">
+          <h2>{title}</h2>
+          <button className="me-icon" aria-label="Fechar" onClick={onClose}>
+            <Icon d="M6 6l12 12M18 6L6 18" />
+          </button>
+        </header>
+        <div className="dr-body">{children}</div>
+        <footer className="dr-foot">{footer}</footer>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmDelete({ label, onConfirm, busy }: { label: string; onConfirm: () => void; busy: boolean }) {
+  const [ask, setAsk] = useState(false);
+  if (!ask)
+    return (
+      <button className="btn danger-ghost" onClick={() => setAsk(true)} disabled={busy}>
+        {label}
+      </button>
+    );
+  return (
+    <span className="dr-confirm">
+      <button className="btn danger" onClick={onConfirm} disabled={busy}>
+        Confirmar exclusão
+      </button>
+      <button className="btn ghost" onClick={() => setAsk(false)}>
+        Não
+      </button>
+    </span>
+  );
+}
+
+// ---------- Traduções ----------
+
+function Translations({
+  ctx,
+  base,
+  initial,
+  withDescription,
+  rows,
+  setRows,
+}: {
+  ctx: EditorContext;
+  base: { name: string; description: string };
+  initial: EditorTranslation[];
+  withDescription: boolean;
+  rows: Record<string, EditorTranslation>;
+  setRows: (fn: (r: Record<string, EditorTranslation>) => Record<string, EditorTranslation>) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  if (!ctx.languages.length) {
+    return (
+      <p className="dr-note">
+        O cardápio está só em português. Para mostrar outros idiomas, ligue-os em{" "}
+        <Link href="/painel/perfil">Perfil do restaurante</Link>.
+      </p>
+    );
+  }
+
+  const suggest = async () => {
+    setBusy(true);
+    setMsg(null);
+    const res = await suggestTranslations(base, ctx.languages);
+    setBusy(false);
+    if (res.error) return setMsg(res.error);
+    setRows((r) => {
+      const n = { ...r };
+      for (const [lang, t] of Object.entries(res.suggestions ?? {})) n[lang] = { language: lang, ...t, auto: true };
+      return n;
+    });
+  };
+
+  return (
+    <div className="tr">
+      <div className="tr-head">
+        <p className="dr-note">
+          Sem tradução, o cliente vê o texto em português.
+          {ctx.canTranslate && " As sugestões automáticas aparecem marcadas; revise e salve."}
+        </p>
+        {ctx.canTranslate && (
+          <button className="btn small" onClick={suggest} disabled={busy || !base.name.trim()}>
+            {busy ? "Traduzindo…" : "Sugerir traduções"}
+          </button>
+        )}
+      </div>
+      {msg && <p className="dr-err">{msg}</p>}
+      {ctx.languages.map((lang) => {
+        const r = rows[lang] ?? initial.find((t) => t.language === lang) ?? { language: lang, name: "", description: "", auto: false };
+        const set = (patch: Partial<EditorTranslation>) => setRows((all) => ({ ...all, [lang]: { ...r, ...patch } }));
+        return (
+          <fieldset key={lang} className="tr-lang">
+            <legend>
+              <span className="tr-flag">
+                <Flag code={LANG_FLAG[lang] ?? "xx"} />
+              </span>
+              {LANG_NAME[lang] ?? lang}
+              {r.auto && r.name && <em className="me-badge gold">sugestão automática</em>}
+            </legend>
+            <input
+              aria-label={`Nome em ${LANG_NAME[lang] ?? lang}`}
+              placeholder={base.name}
+              value={r.name}
+              maxLength={80}
+              onChange={(e) => set({ name: e.target.value, auto: false })}
+            />
+            {withDescription && (
+              <textarea
+                aria-label={`Descrição em ${LANG_NAME[lang] ?? lang}`}
+                placeholder={base.description}
+                rows={2}
+                value={r.description}
+                maxLength={500}
+                onChange={(e) => set({ description: e.target.value, auto: false })}
+              />
+            )}
+          </fieldset>
+        );
+      })}
+    </div>
+  );
+}
+
+// Ao abrir as traduções, o que aparece na tela conta como revisado quando o dono salva.
+const seed = (initial: EditorTranslation[]) => Object.fromEntries(initial.map((t) => [t.language, t]));
+
+const toRows = (rows: Record<string, EditorTranslation>): TranslationRow[] =>
+  Object.values(rows).map(({ language, name, description }) => ({ language, name, description }));
+
+// ---------- Prato ----------
+
+type Photo = { url: string; thumb: string; path?: string; thumbPath?: string } | null;
+
+export function ItemDrawer({
+  ctx,
+  item,
+  categoryId: initialCat,
+  onClose,
+}: {
+  ctx: EditorContext;
+  item: EditorItem | null;
+  categoryId: string;
+  onClose: (msg?: string) => void;
+}) {
+  const [tab, setTab] = useState<"prato" | "traducoes">("prato");
+  const [name, setName] = useState(item?.name ?? "");
+  const [description, setDescription] = useState(item?.description ?? "");
+  const [price, setPrice] = useState(money(item?.priceCents ?? null));
+  const [hasPromo, setHasPromo] = useState(item?.promoCents != null);
+  const [promo, setPromo] = useState(money(item?.promoCents ?? null));
+  const [tags, setTags] = useState<string[]>(item?.tags ?? []);
+  const [active, setActive] = useState(item?.active ?? true);
+  const [categoryId, setCategoryId] = useState(initialCat);
+  const [photo, setPhoto] = useState<Photo>(item?.photo ?? null);
+  const [photoChanged, setPhotoChanged] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [rows, setRows] = useState<Record<string, EditorTranslation>>({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const uploaded = useRef<string[]>([]);
+
+  // Fotos enviadas e não salvas não ficam esquecidas no Storage.
+  const close = (msg?: string, keep = false) => {
+    if (!keep && uploaded.current.length) void createClient().storage.from("media").remove(uploaded.current);
+    onClose(msg);
+  };
+
+  const upload = async (file: File) => {
+    setErr(null);
+    if (!IMAGE_TYPES.test(file.type)) return setErr("Use uma foto PNG, JPG ou WebP.");
+    setUploading(true);
+    try {
+      const [full, small] = await Promise.all([shrinkImage(file, 1440), shrinkImage(file, 480, 0.8)]);
+      const id = crypto.randomUUID();
+      const path = `${ctx.restaurantId}/items/${id}.webp`;
+      const thumbPath = `${ctx.restaurantId}/items/${id}-t.webp`;
+      const storage = createClient().storage.from("media");
+      const opts = { contentType: "image/webp", cacheControl: "31536000" };
+      const [a, b] = await Promise.all([storage.upload(path, full, opts), storage.upload(thumbPath, small, opts)]);
+      if (a.error || b.error) throw a.error ?? b.error;
+      uploaded.current.push(path, thumbPath);
+      setPhoto({ url: mediaUrl(path)!, thumb: mediaUrl(thumbPath)!, path, thumbPath });
+      setPhotoChanged(true);
+    } catch {
+      setErr("Não foi possível enviar a foto. Tente de novo.");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const save = async () => {
+    setErr(null);
+    const priceCents = parseMoney(price);
+    const promoCents = hasPromo ? parseMoney(promo) : null;
+    if (!name.trim()) return setErr("Dê um nome para o prato.");
+    if (priceCents == null) return setErr("Informe o preço.");
+    if (hasPromo && promoCents == null) return setErr("Informe o preço promocional ou desligue a promoção.");
+    setBusy(true);
+    const res = await saveItem(ctx.restaurantId, {
+      id: item?.id,
+      categoryId,
+      name,
+      description,
+      priceCents,
+      promoCents,
+      tags,
+      active,
+      photo: photoChanged ? (photo?.path ? { path: photo.path, thumb: photo.thumbPath! } : null) : undefined,
+    });
+    if (!res.error && res.id && Object.keys(rows).length) {
+      const t = await saveTranslations(ctx.restaurantId, { itemId: res.id }, toRows(rows));
+      if (t.error) res.error = t.error;
+    }
+    setBusy(false);
+    if (res.error) return setErr(res.error);
+    // A foto antiga é apagada pelo servidor; as enviadas agora passam a ser do prato.
+    uploaded.current = uploaded.current.filter((p) => p !== photo?.path && p !== photo?.thumbPath);
+    close(item ? "Prato salvo." : "Prato criado.");
+  };
+
+  const remove = async () => {
+    if (!item) return;
+    setBusy(true);
+    const res = await deleteItem(ctx.restaurantId, item.id);
+    setBusy(false);
+    if (res.error) return setErr(res.error);
+    close("Prato excluído.");
+  };
+
+  const duplicate = async () => {
+    if (!item) return;
+    setBusy(true);
+    const res = await duplicateItem(ctx.restaurantId, item.id);
+    setBusy(false);
+    if (res.error) return setErr(res.error);
+    close("Cópia criada, escondida do cardápio até você revisar.");
+  };
+
+  const toggleTag = (t: string) => setTags((s) => (s.includes(t) ? s.filter((x) => x !== t) : [...s, t]));
+
+  return (
+    <Shell
+      title={item ? "Editar prato" : "Novo prato"}
+      onClose={() => close()}
+      footer={
+        <>
+          {err && <p className="dr-err" role="alert">{err}</p>}
+          <div className="dr-actions">
+            {item && <ConfirmDelete label="Excluir" onConfirm={remove} busy={busy} />}
+            {item && (
+              <button className="btn ghost" onClick={duplicate} disabled={busy}>
+                Duplicar
+              </button>
+            )}
+            <span className="dr-gap" />
+            <button className="btn ghost" onClick={() => close()} disabled={busy}>
+              Cancelar
+            </button>
+            <button className="btn primary" onClick={save} disabled={busy || uploading}>
+              {busy ? "Salvando…" : "Salvar"}
+            </button>
+          </div>
+        </>
+      }
+    >
+      <div className="ap-seg dr-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === "prato"} onClick={() => setTab("prato")}>
+          Prato
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === "traducoes"}
+          onClick={() => {
+            setTab("traducoes");
+            if (item && !Object.keys(rows).length) setRows(() => seed(item.translations));
+          }}
+        >
+          Traduções{item?.translations.some((t) => t.auto) ? " •" : ""}
+        </button>
+      </div>
+
+      {tab === "prato" ? (
+        <div className="dr-form">
+          <div className="dr-photo">
+            <button className="dr-photo-box" onClick={() => fileRef.current?.click()} disabled={uploading} aria-label={photo ? "Trocar foto" : "Enviar foto"}>
+              {photo ? <img src={photo.url} alt="" /> : <Icon d={CAMERA} />}
+              {uploading && <span className="dr-photo-busy">Enviando…</span>}
+            </button>
+            <div className="dr-photo-txt">
+              <b>Foto do prato</b>
+              <span>Vertical fica melhor no story (9:16). PNG, JPG ou WebP.</span>
+              <div className="pf-btns">
+                <button className="btn small" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                  {photo ? "Trocar foto" : "Enviar foto"}
+                </button>
+                {photo && (
+                  <button
+                    className="btn small ghost"
+                    onClick={() => {
+                      setPhoto(null);
+                      setPhotoChanged(true);
+                    }}
+                    disabled={uploading}
+                  >
+                    Remover
+                  </button>
+                )}
+              </div>
+            </div>
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+          </div>
+
+          <label className="dr-field">
+            <span>Nome</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="Ex.: Margherita da Casa" />
+          </label>
+          <label className="dr-field">
+            <span>
+              Descrição <small>{description.length}/500</small>
+            </span>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} rows={3} placeholder="Ingredientes e o que torna o prato especial." />
+          </label>
+          <div className="dr-row">
+            <label className="dr-field">
+              <span>Preço</span>
+              <span className="dr-money">
+                <i>R$</i>
+                <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} onBlur={() => setPrice(money(parseMoney(price)))} placeholder="0,00" />
+              </span>
+            </label>
+            <label className="dr-field">
+              <span className="dr-check">
+                <input type="checkbox" checked={hasPromo} onChange={(e) => setHasPromo(e.target.checked)} />
+                Preço promocional
+              </span>
+              <span className="dr-money">
+                <i>R$</i>
+                <input inputMode="decimal" value={promo} disabled={!hasPromo} onChange={(e) => setPromo(e.target.value)} onBlur={() => setPromo(money(parseMoney(promo)))} placeholder="0,00" />
+              </span>
+            </label>
+          </div>
+
+          <div className="dr-field">
+            <span>Selos</span>
+            <div className="dr-tags">
+              {TAG_IDS.map((t) => (
+                <button key={t} className="dr-tag" aria-pressed={tags.includes(t)} onClick={() => toggleTag(t)}>
+                  {tagLabel(t)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="dr-row">
+            <label className="dr-field">
+              <span>Categoria</span>
+              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                {ctx.categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="dr-switch">
+              <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+              <span>Mostrar no cardápio</span>
+            </label>
+          </div>
+        </div>
+      ) : (
+        <Translations
+          ctx={ctx}
+          base={{ name, description }}
+          initial={item?.translations ?? []}
+          withDescription
+          rows={rows}
+          setRows={setRows}
+        />
+      )}
+    </Shell>
+  );
+}
+
+// ---------- Categoria ----------
+
+export function CategoryDrawer({
+  ctx,
+  category,
+  onClose,
+}: {
+  ctx: EditorContext;
+  category: EditorCategory;
+  onClose: (msg?: string) => void;
+}) {
+  const [name, setName] = useState(category.name);
+  const [active, setActive] = useState(category.active);
+  const [rows, setRows] = useState<Record<string, EditorTranslation>>(() => seed(category.translations));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = async () => {
+    setBusy(true);
+    setErr(null);
+    const res = await updateCategory(ctx.restaurantId, category.id, { name, active });
+    if (!res.error && Object.keys(rows).length) {
+      const t = await saveTranslations(ctx.restaurantId, { categoryId: category.id }, toRows(rows));
+      if (t.error) res.error = t.error;
+    }
+    setBusy(false);
+    if (res.error) return setErr(res.error);
+    onClose("Categoria salva.");
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    const res = await deleteCategory(ctx.restaurantId, category.id);
+    setBusy(false);
+    if (res.error) return setErr(res.error);
+    onClose("Categoria excluída.");
+  };
+
+  const n = category.items.length;
+  return (
+    <Shell
+      title="Editar categoria"
+      onClose={() => onClose()}
+      footer={
+        <>
+          {err && <p className="dr-err" role="alert">{err}</p>}
+          <div className="dr-actions">
+            <ConfirmDelete label={n ? `Excluir com ${n} ${n === 1 ? "prato" : "pratos"}` : "Excluir"} onConfirm={remove} busy={busy} />
+            <span className="dr-gap" />
+            <button className="btn ghost" onClick={() => onClose()} disabled={busy}>
+              Cancelar
+            </button>
+            <button className="btn primary" onClick={save} disabled={busy || !name.trim()}>
+              {busy ? "Salvando…" : "Salvar"}
+            </button>
+          </div>
+        </>
+      }
+    >
+      <div className="dr-form">
+        <label className="dr-field">
+          <span>Nome</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />
+        </label>
+        <label className="dr-switch">
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+          <span>Mostrar no cardápio</span>
+        </label>
+        <h3 className="dr-sub">Traduções</h3>
+        <Translations
+          ctx={ctx}
+          base={{ name, description: "" }}
+          initial={category.translations}
+          withDescription={false}
+          rows={rows}
+          setRows={setRows}
+        />
+      </div>
+    </Shell>
+  );
+}
