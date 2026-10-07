@@ -513,16 +513,28 @@
   }
   & .c-body {
     position: absolute;
-    left: 12px;
-    right: 12px;
+    left: 0;
+    right: 0;
     top: 54%;
     display: grid;
-    gap: 10px;
+    gap: 4px;
+  }
+  & .c-body .c-tabs {
+    border-radius: 0;
+    padding: 0;
+    gap: 0;
+    margin-bottom: 4px;
+  }
+  & .c-body .c-tabs span {
+    flex: 1 0 auto;
+    border-radius: 0;
+    padding: 8px 10px;
+    text-align: center;
   }
   & .c-card {
     position: relative;
-    height: 96px;
-    border-radius: 16px;
+    height: 110px;
+    border-radius: 0;
     overflow: hidden;
     background: #3a2a22;
   }

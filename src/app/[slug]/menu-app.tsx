@@ -882,7 +882,6 @@ function CategoryCard({
   onOpen: () => void;
 }) {
   const th = thumbSrc(cat.items[0]);
-  const hasVideo = cat.items.some(isVideo);
   return (
     <button className="card" ref={refCb} data-i={index} onClick={onOpen}>
       {th && <img src={th} alt="" loading={index < 2 ? "eager" : "lazy"} />}
@@ -892,7 +891,6 @@ function CategoryCard({
           {cat.items.length} {tr("items", lang)}
         </span>
       </div>
-      {hasVideo && <span className="play">▶ {tr("video", lang)}</span>}
     </button>
   );
 }
