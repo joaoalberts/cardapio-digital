@@ -417,7 +417,7 @@
     color: var(--muted);
     flex: none;
   }
-  & .dr-photo-box img {
+  & .dr-photo-box :is(img, video) {
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -430,6 +430,27 @@
     background: rgba(0, 0, 0, 0.55);
     color: #fff;
     font-size: 12px;
+    align-content: center;
+    gap: 2px;
+  }
+  & .dr-photo-busy b {
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+  }
+  & .dr-photo-busy i {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 4px;
+    background: #fff;
+    transition: width 0.2s;
+  }
+  & .dr-note {
+    font-size: 13px;
+    color: #a3760d;
+  }
+  & .dr-note.bad {
+    color: #c0392b;
   }
   & .dr-photo-txt {
     display: grid;

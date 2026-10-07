@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { extOf, IMAGE_TYPES, shrinkImage } from "@/lib/images/shrink";
+import { capturePoster, VIDEO_TYPES } from "@/lib/images/poster";
 import { LANG_FLAG, LANG_NAME } from "@/lib/menu/i18n";
 import { mediaUrl } from "@/lib/menu/media";
 import { TAG_IDS, tagLabel } from "@/lib/menu/tags";
@@ -12,11 +13,14 @@ import { Flag } from "@/app/[slug]/flag";
 import {
   deleteCategory,
   deleteItem,
+  discardVideo,
   duplicateItem,
   saveItem,
+  startVideoUpload,
   saveTranslations,
   suggestTranslations,
   updateCategory,
+  type MediaInput,
   type TranslationRow,
 } from "./actions";
 import { CAMERA, Icon, type EditorCategory, type EditorContext, type EditorItem, type EditorTranslation } from "./menu-editor";
@@ -187,7 +191,10 @@ const toRows = (rows: Record<string, EditorTranslation>): TranslationRow[] =>
 
 // ---------- Prato ----------
 
-type Photo = { url: string; thumb: string; path?: string; thumbPath?: string } | null;
+type Media = (NonNullable<EditorItem["media"]> & { input?: MediaInput }) | null;
+
+// Sem Mux, o vídeo vai inteiro para o Storage, que aceita até 50 MB por arquivo.
+const STORAGE_VIDEO_MAX = 50 * 1024 * 1024;
 
 export function ItemDrawer({
   ctx,
@@ -209,24 +216,89 @@ export function ItemDrawer({
   const [tags, setTags] = useState<string[]>(item?.tags ?? []);
   const [active, setActive] = useState(item?.active ?? true);
   const [categoryId, setCategoryId] = useState(initialCat);
-  const [photo, setPhoto] = useState<Photo>(item?.photo ?? null);
-  const [photoChanged, setPhotoChanged] = useState(false);
+  const [media, setMedia] = useState<Media>(item?.media ?? null);
+  const [mediaChanged, setMediaChanged] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   const [rows, setRows] = useState<Record<string, EditorTranslation>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const uploaded = useRef<string[]>([]);
+  const muxUploads = useRef<string[]>([]);
 
-  // Fotos enviadas e não salvas não ficam esquecidas no Storage.
+  // Arquivos enviados e não salvos não ficam esquecidos no Storage nem no Mux.
   const close = (msg?: string, keep = false) => {
     if (!keep && uploaded.current.length) void createClient().storage.from("media").remove(uploaded.current);
+    if (!keep) muxUploads.current.forEach((id) => void discardVideo(id));
     onClose(msg);
   };
 
-  const upload = async (file: File) => {
+  const upload = (file: File) => {
     setErr(null);
-    if (!IMAGE_TYPES.test(file.type)) return setErr("Use uma foto PNG, JPG ou WebP.");
+    if (VIDEO_TYPES.test(file.type) || /\.(mov|mp4|m4v|webm)$/i.test(file.name)) return uploadVideo(file);
+    if (!IMAGE_TYPES.test(file.type)) return setErr("Use uma foto (PNG, JPG ou WebP) ou um vídeo (MP4 ou MOV).");
+    return uploadPhoto(file);
+  };
+
+  // Vídeo no arquivo original: o Mux converte em várias qualidades (até 4K) e cada
+  // cliente recebe a que a internet dele aguenta. O envio vai em partes, com progresso.
+  const uploadVideo = async (file: File) => {
+    setUploading(true);
+    setProgress(0);
+    try {
+      const start = await startVideoUpload(ctx.restaurantId);
+      if (start.error) throw new Error(start.error);
+      if (!start.mux && file.size > STORAGE_VIDEO_MAX) {
+        throw new Error("Vídeo maior que 50 MB. Ligue o Mux para enviar vídeos sem limite de qualidade.");
+      }
+      const storage = createClient().storage.from("media");
+      const id = crypto.randomUUID();
+      const poster = await capturePoster(file).catch(() => null);
+      if (!poster) throw new Error("Não foi possível ler este vídeo. Tente um MP4 ou MOV.");
+      const posterPath = `${ctx.restaurantId}/items/${id}-p.${extOf(poster)}`;
+      const p = await storage.upload(posterPath, poster, { contentType: poster.type, cacheControl: "31536000" });
+      if (p.error) throw p.error;
+      uploaded.current.push(posterPath);
+
+      let input: MediaInput;
+      if (start.mux) {
+        const { UpChunk } = await import("@mux/upchunk");
+        await new Promise<void>((resolve, reject) => {
+          const up = UpChunk.createUpload({ endpoint: start.url!, file, chunkSize: 16384 });
+          up.on("progress", (e) => setProgress(Math.round(e.detail)));
+          up.on("success", () => resolve());
+          up.on("error", () => reject(new Error("upload")));
+        });
+        muxUploads.current.push(start.uploadId!);
+        input = { kind: "video", poster: posterPath, uploadId: start.uploadId };
+      } else {
+        const ext = (file.name.split(".").pop() ?? "mp4").toLowerCase();
+        const path = `${ctx.restaurantId}/items/${id}.${ext}`;
+        const v = await storage.upload(path, file, { contentType: file.type || "video/mp4", cacheControl: "31536000" });
+        if (v.error) throw v.error;
+        uploaded.current.push(path);
+        input = { kind: "video", poster: posterPath, path };
+      }
+      setMedia({
+        kind: "video",
+        url: URL.createObjectURL(file),
+        thumb: mediaUrl(posterPath)!,
+        status: start.mux ? "processing" : "ready",
+        input,
+      });
+      setMediaChanged(true);
+    } catch (e) {
+      const msg = e instanceof Error && e.message.length > 12 ? e.message : null;
+      setErr(msg ?? "Não foi possível enviar o vídeo. Tente de novo.");
+    } finally {
+      setUploading(false);
+      setProgress(null);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const uploadPhoto = async (file: File) => {
     setUploading(true);
     try {
       // Foto em qualidade máxima para a tela cheia do celular; miniatura leve para a capa e a lista.
@@ -242,8 +314,14 @@ export function ItemDrawer({
       const [a, b] = await Promise.all([storage.upload(path, full, opts(full)), storage.upload(thumbPath, small, opts(small))]);
       if (a.error || b.error) throw a.error ?? b.error;
       uploaded.current.push(path, thumbPath);
-      setPhoto({ url: mediaUrl(path)!, thumb: mediaUrl(thumbPath)!, path, thumbPath });
-      setPhotoChanged(true);
+      setMedia({
+        kind: "photo",
+        url: mediaUrl(path)!,
+        thumb: mediaUrl(thumbPath)!,
+        status: "ready",
+        input: { kind: "photo", path, thumb: thumbPath },
+      });
+      setMediaChanged(true);
     } catch {
       setErr("Não foi possível enviar a foto. Tente de novo.");
     } finally {
@@ -269,7 +347,7 @@ export function ItemDrawer({
       promoCents,
       tags,
       active,
-      photo: photoChanged ? (photo?.path ? { path: photo.path, thumb: photo.thumbPath! } : null) : undefined,
+      media: mediaChanged ? (media?.input ?? null) : undefined,
     });
     if (!res.error && res.id && Object.keys(rows).length) {
       const t = await saveTranslations(ctx.restaurantId, { itemId: res.id }, toRows(rows));
@@ -277,8 +355,11 @@ export function ItemDrawer({
     }
     setBusy(false);
     if (res.error) return setErr(res.error);
-    // A foto antiga é apagada pelo servidor; as enviadas agora passam a ser do prato.
-    uploaded.current = uploaded.current.filter((p) => p !== photo?.path && p !== photo?.thumbPath);
+    // A mídia antiga é apagada pelo servidor; a enviada agora passa a ser do prato.
+    const inp = mediaChanged ? media?.input : undefined;
+    const kept = inp ? (inp.kind === "photo" ? [inp.path, inp.thumb] : [inp.poster, inp.path, inp.uploadId]) : [];
+    uploaded.current = uploaded.current.filter((p) => !kept.includes(p));
+    muxUploads.current = muxUploads.current.filter((u) => !kept.includes(u));
     close(item ? "Prato salvo." : "Prato criado.");
   };
 
@@ -346,23 +427,43 @@ export function ItemDrawer({
       {tab === "prato" ? (
         <div className="dr-form">
           <div className="dr-photo">
-            <button className="dr-photo-box" onClick={() => fileRef.current?.click()} disabled={uploading} aria-label={photo ? "Trocar foto" : "Enviar foto"}>
-              {photo ? <img src={photo.url} alt="" /> : <Icon d={CAMERA} />}
-              {uploading && <span className="dr-photo-busy">Enviando…</span>}
+            <button className="dr-photo-box" onClick={() => fileRef.current?.click()} disabled={uploading} aria-label={media ? "Trocar foto ou vídeo" : "Enviar foto ou vídeo"}>
+              {media?.kind === "video" ? (
+                <video src={media.url.startsWith("blob:") || media.status === "ready" ? media.url : undefined} poster={media.thumb} muted playsInline loop autoPlay />
+              ) : media ? (
+                <img src={media.url} alt="" />
+              ) : (
+                <Icon d={CAMERA} />
+              )}
+              {uploading && (
+                <span className="dr-photo-busy">
+                  Enviando…{progress != null && progress > 0 && <b>{progress}%</b>}
+                  {progress != null && <i style={{ width: `${progress}%` }} />}
+                </span>
+              )}
             </button>
             <div className="dr-photo-txt">
-              <b>Foto do prato</b>
-              <span>Vertical fica melhor no story (9:16). PNG, JPG ou WebP.</span>
+              <b>Foto ou vídeo do prato</b>
+              <span>
+                Vertical fica melhor no story (9:16). Foto em PNG, JPG ou WebP; vídeo em MP4 ou MOV, na qualidade
+                original.
+              </span>
+              {media?.kind === "video" && media.status === "processing" && (
+                <span className="dr-note">O vídeo entra no cardápio assim que terminar de ser preparado, em poucos minutos.</span>
+              )}
+              {media?.kind === "video" && media.status === "failed" && (
+                <span className="dr-note bad">Não foi possível preparar este vídeo. Envie de novo.</span>
+              )}
               <div className="pf-btns">
                 <button className="btn small" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                  {photo ? "Trocar foto" : "Enviar foto"}
+                  {media ? "Trocar" : "Enviar foto ou vídeo"}
                 </button>
-                {photo && (
+                {media && (
                   <button
                     className="btn small ghost"
                     onClick={() => {
-                      setPhoto(null);
-                      setPhotoChanged(true);
+                      setMedia(null);
+                      setMediaChanged(true);
                     }}
                     disabled={uploading}
                   >
@@ -371,7 +472,13 @@ export function ItemDrawer({
                 )}
               </div>
             </div>
-            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime,video/webm,.mov,.mp4,.m4v"
+              hidden
+              onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
+            />
           </div>
 
           <label className="dr-field">

@@ -38,7 +38,11 @@ async function Cardapio() {
       .eq("restaurant_id", r.id)
       .order("position")
       .order("created_at"),
-    supabase.from("media").select("item_id, kind, storage_path, poster_path, position").eq("restaurant_id", r.id).order("position"),
+    supabase
+      .from("media")
+      .select("item_id, kind, storage_path, poster_path, mux_playback_id, status, position")
+      .eq("restaurant_id", r.id)
+      .order("position"),
     supabase.from("translations").select("language, name, description, auto, category_id, item_id").eq("restaurant_id", r.id),
   ]);
   for (const q of [cats, items, media, trs]) if (q.error) throw q.error;
@@ -54,7 +58,7 @@ async function Cardapio() {
     items: (items.data ?? [])
       .filter((i) => i.category_id === c.id)
       .map((i) => {
-        const photo = (media.data ?? []).find((m) => m.item_id === i.id && m.kind === "photo");
+        const m = (media.data ?? []).find((x) => x.item_id === i.id);
         return {
           id: i.id,
           categoryId: i.category_id,
@@ -64,8 +68,15 @@ async function Cardapio() {
           promoCents: i.promo_price_cents,
           tags: i.tags ?? [],
           active: i.active,
-          photo: photo
-            ? { url: mediaUrl(photo.storage_path)!, thumb: mediaUrl(photo.poster_path ?? photo.storage_path)! }
+          media: m
+            ? {
+                kind: m.kind,
+                status: m.status,
+                url: (m.mux_playback_id ? `https://stream.mux.com/${m.mux_playback_id}.m3u8` : mediaUrl(m.storage_path)) ?? "",
+                thumb:
+                  mediaUrl(m.poster_path ?? m.storage_path) ??
+                  (m.mux_playback_id ? `https://image.mux.com/${m.mux_playback_id}/thumbnail.jpg` : ""),
+              }
             : null,
           translations: translations.filter((t) => t.item_id === i.id).map(pick),
         };

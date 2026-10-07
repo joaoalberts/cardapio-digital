@@ -7,7 +7,7 @@ import { fetchPublicMenu } from "@/lib/menu/client";
 import { DEFAULT_FONT_THEME, isFontTheme } from "@/lib/menu/font-themes";
 import { statusLabel, type StatusLabel } from "@/lib/menu/hours";
 import { tagLabel } from "@/lib/menu/tags";
-import { KNOWN_LANGS, LANG_FLAG, LANG_NAME, pickLanguage, t as tr, type StringKey } from "@/lib/menu/i18n";
+import { LANG_FLAG, LANG_NAME, pickLanguage, t as tr, type StringKey } from "@/lib/menu/i18n";
 import { formatPrice, mediaUrl, posterSrc, thumbSrc, videoSrc } from "@/lib/menu/media";
 import type { MenuCategory, MenuItem, PublicMenu } from "@/lib/menu/types";
 import { Flag } from "./flag";
@@ -154,7 +154,9 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
     panelEls.current.forEach((p, i) => {
       const vid = p?.querySelector("video");
       if (!vid) return;
-      if (i === v.cur && playing()) vid.play().catch(() => {});
+      const want = i === v.cur && playing();
+      vid.dataset.want = want ? "1" : "";
+      if (want) vid.play().catch(() => {});
       else vid.pause();
     });
     const hero = heroVidRef.current;
@@ -165,8 +167,7 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
   }, [playing]);
 
   const scrollTab = useCallback((c: number) => {
-    const tab = vTabsRef.current?.children[c] as HTMLElement | undefined;
-    tab?.scrollIntoView({ inline: "center", block: "nearest", behavior: reduce.current ? "auto" : "smooth" });
+    centerTab(vTabsRef.current, c, !reduce.current);
   }, []);
 
   const goCat = useCallback(
@@ -573,8 +574,7 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
     if (box && sec) box.scrollTop = sec.offsetTop - box.offsetTop;
   }, [view.listOpen]);
   useEffect(() => {
-    const tab = lTabsRef.current?.children[view.listCat] as HTMLElement | undefined;
-    tab?.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
+    centerTab(lTabsRef.current, view.listCat, true);
   }, [view.listCat, view.listOpen]);
 
   const pickFromList = (c: number, i: number) => {
@@ -632,6 +632,47 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
   return (
     <div className={`cm${relang ? " relang" : ""}`} data-font={isFontTheme(restaurant.font_theme) ? restaurant.font_theme : DEFAULT_FONT_THEME} style={style}>
       <main className="home" aria-hidden={view.open}>
+        <div className="hero-top">
+          <button className="round" onClick={() => openViewer(0, true)} aria-label={t("viewList")} disabled={!cats.length}>
+            <ListIcon />
+          </button>
+          {languages.length > 1 && (
+            // Bandeira atual; tocou, abre a coluna com as outras. Escolheu, troca o idioma.
+            <div className={`langpick${view.langOpen ? " open" : ""}`}>
+              <button
+                className="flagbtn cur"
+                onClick={() => update({ langOpen: !viewRef.current.langOpen })}
+                aria-expanded={view.langOpen}
+                aria-label={`${t("lang")}: ${LANG_NAME[lang] ?? lang}`}
+              >
+                <span className="flag">
+                  <Flag code={flagCode} />
+                </span>
+              </button>
+              {view.langOpen &&
+                languages
+                  .filter((l) => l !== lang)
+                  .map((l, k) => (
+                    <button
+                      key={l}
+                      className="flagbtn"
+                      style={{ "--k": k } as CSSProperties}
+                      lang={l}
+                      aria-label={LANG_NAME[l] ?? l}
+                      onClick={() => {
+                        update({ langOpen: false });
+                        void changeLang(l, true);
+                      }}
+                    >
+                      <span className="flag">
+                        <Flag code={LANG_FLAG[l] ?? "xx"} />
+                      </span>
+                    </button>
+                  ))}
+            </div>
+          )}
+        </div>
+        {view.langOpen && <div className="langcatch" onClick={() => update({ langOpen: false })} />}
         <section className="hero">
           {coverVideo ? (
             <video
@@ -647,22 +688,6 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
           ) : (
             coverImage && <img src={coverImage} alt="" />
           )}
-          <div className="hero-top">
-            <button className="round" onClick={() => openViewer(0, true)} aria-label={t("viewList")} disabled={!cats.length}>
-              <ListIcon />
-            </button>
-            {languages.length > 1 && (
-              <button
-                className="round"
-                onClick={() => update({ langOpen: true })}
-                aria-label={`${t("lang")}: ${LANG_NAME[lang] ?? lang}`}
-              >
-                <span className="flag">
-                  <Flag code={flagCode} />
-                </span>
-              </button>
-            )}
-          </div>
           <div className="brand">
             {/* A logo é a imagem enviada pelo restaurante; não muda com a fonte do cardápio. */}
             <div className="logo">{logo ? <img src={logo} alt={restaurant.name} /> : <b>{restaurant.name}</b>}</div>
@@ -714,7 +739,7 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
         )}
       </main>
 
-      <div className={`viewer${view.held ? " held" : ""}`} ref={viewerRef} hidden={!view.open} aria-hidden={!view.open}>
+      <div className={`viewer${view.held ? " held" : ""}${view.listOpen ? " listing" : ""}`} ref={viewerRef} hidden={!view.open} aria-hidden={!view.open}>
         <div
           className="stage"
           onPointerDown={onPointerDown}
@@ -805,6 +830,10 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
 
         {view.listOpen && (
           <div className="list" role="dialog" aria-labelledby="cm-list-title">
+            {/* Fundo: a foto da categoria atual, bem desfocada (uma imagem pequena, leve). */}
+            {thumbSrc(cats[view.listCat]?.items[0]) && (
+              <img key={view.listCat} className="lbg" src={thumbSrc(cats[view.listCat]?.items[0])!} alt="" aria-hidden />
+            )}
             <header>
               <div>
                 <span className="kicker">{restaurant.name}</span>
@@ -838,9 +867,15 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
                     {c.items.map((it, i) => {
                       const th = thumbSrc(it);
                       return (
-                        <button key={it.id} className="dish" onClick={() => pickFromList(ci, i)}>
+                        <button
+                          key={it.id}
+                          className="dish"
+                          style={{ "--i": ci === view.listCat ? i : 0 } as CSSProperties}
+                          onClick={() => pickFromList(ci, i)}
+                        >
                           <span className="dimg">
                             {th ? <img src={th} alt="" loading={ci === view.listCat ? "eager" : "lazy"} /> : null}
+                            <Price item={it} lang={lang} as="em" className="tagp" />
                             {isVideo(it) && (
                               <svg className="icon play" viewBox="0 0 24 24" aria-hidden>
                                 <path d="M8 5.5v13l11-6.5z" />
@@ -849,7 +884,6 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
                           </span>
                           <b>{it.name}</b>
                           {it.description && <span className="ddesc">{it.description}</span>}
-                          <Price item={it} lang={lang} as="em" />
                         </button>
                       );
                     })}
@@ -860,61 +894,6 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
           </div>
         )}
       </div>
-
-      {view.langOpen && (
-        <div
-          className="lang"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) update({ langOpen: false });
-          }}
-        >
-          <div className="lsheet" role="dialog" aria-labelledby="cm-lang-title">
-            <div className="grab" />
-            <div className="lhead">
-              <svg className="icon" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M3 12h18M12 3c2.6 2.6 3.8 5.6 3.8 9s-1.2 6.4-3.8 9c-2.6-2.6-3.8-5.6-3.8-9S9.4 5.6 12 3z" />
-              </svg>
-              <h2 id="cm-lang-title" className="fd">
-                {t("lang")}
-              </h2>
-            </div>
-            <p className="lsub">
-              {KNOWN_LANGS.filter((l) => languages.includes(l))
-                .map((l) => tr("lang", l))
-                .filter((v, i, a) => a.indexOf(v) === i)
-                .join(" · ")}
-            </p>
-            <div className="lgrid" role="radiogroup">
-              {languages.map((l) => (
-                <button
-                  key={l}
-                  className="lopt"
-                  role="radio"
-                  aria-checked={l === lang}
-                  lang={l}
-                  onClick={() => {
-                    void changeLang(l, l !== lang);
-                    setTimeout(() => update({ langOpen: false }), 220);
-                  }}
-                >
-                  <i className="fl">
-                    <Flag code={LANG_FLAG[l] ?? "xx"} />
-                  </i>
-                  <span>{LANG_NAME[l] ?? l}</span>
-                  {l === lang && (
-                    <span className="check" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" width="16" height="16">
-                        <path d="M4 8.5l2.6 2.5L12 5.5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {toast && (
         <div className="toast" role="status">
@@ -963,6 +942,14 @@ function Price({ item, lang, className, as: Tag = "span" }: { item: MenuItem; la
   );
 }
 
+// Centraliza a aba só dentro da própria barra (scrollIntoView rolaria a tela toda).
+function centerTab(bar: HTMLElement | null, i: number, smooth: boolean) {
+  const tab = bar?.children[i] as HTMLElement | undefined;
+  if (!bar || !tab) return;
+  const left = tab.offsetLeft - (bar.clientWidth - tab.offsetWidth) / 2;
+  bar.scrollTo({ left, behavior: smooth ? "smooth" : "auto" });
+}
+
 const warmed = new Set<string>();
 function warm(src: string | null) {
   if (!src || warmed.has(src)) return;
@@ -981,11 +968,39 @@ function StoryMedia({ item, onEnded }: { item: MenuItem; onEnded: () => void }) 
   const vidRef = useRef<HTMLVideoElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [ready, setReady] = useState(false);
+  const src = m ? (m.kind === "video" ? videoSrc(m) : mediaUrl(m.storage_path)) : null;
+  const hls = !!src && src.endsWith(".m3u8");
   useLayoutEffect(() => {
     if (vidRef.current) vidRef.current.muted = true;
     const img = imgRef.current;
     if (img?.complete && img.naturalWidth) setReady(true);
   }, []);
+  // Vídeo do Mux (HLS): o Safari toca direto; nos outros navegadores entra o hls.js,
+  // que troca de qualidade conforme a internet para não travar.
+  useEffect(() => {
+    const v = vidRef.current;
+    if (!v || !hls || !src) return;
+    if (v.canPlayType("application/vnd.apple.mpegurl")) {
+      v.src = src;
+      if (v.dataset.want) v.play().catch(() => {});
+      return;
+    }
+    let player: import("hls.js").default | undefined;
+    let gone = false;
+    void import("hls.js").then(({ default: Hls }) => {
+      if (gone || !Hls.isSupported()) return;
+      player = new Hls({ capLevelToPlayerSize: false, startLevel: -1, maxBufferLength: 20 });
+      player.loadSource(src);
+      player.attachMedia(v);
+      player.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (v.dataset.want) v.play().catch(() => {});
+      });
+    });
+    return () => {
+      gone = true;
+      player?.destroy();
+    };
+  }, [hls, src]);
   if (!m) return null;
   const low = posterSrc(m);
   const hi = `hi${ready ? " on" : ""}`;
@@ -996,7 +1011,7 @@ function StoryMedia({ item, onEnded }: { item: MenuItem; onEnded: () => void }) 
         <video
           ref={vidRef}
           className={hi}
-          src={videoSrc(m) ?? undefined}
+          src={hls ? undefined : (src ?? undefined)}
           poster={low ?? undefined}
           muted
           playsInline
@@ -1008,7 +1023,7 @@ function StoryMedia({ item, onEnded }: { item: MenuItem; onEnded: () => void }) 
         <img
           ref={imgRef}
           className={hi}
-          src={mediaUrl(m.storage_path) ?? undefined}
+          src={src ?? undefined}
           alt={item.name}
           decoding="async"
           onLoad={() => setReady(true)}
