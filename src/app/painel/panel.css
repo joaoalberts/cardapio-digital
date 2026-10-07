@@ -82,7 +82,14 @@
     padding: 10px 8px;
     border-block: 1px solid rgba(255, 255, 255, 0.08);
   }
+  & .ap-rest i img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+  }
   & .ap-rest i {
+    overflow: hidden;
     width: 34px;
     height: 34px;
     border-radius: 50%;
@@ -444,12 +451,43 @@
     inset: 0;
     background: linear-gradient(180deg, rgba(0, 0, 0, 0.25), transparent 40%, #211814 100%);
   }
-  & .c-logo {
+  & .c-brand {
     position: absolute;
     z-index: 1;
-    left: 50%;
-    top: 24%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    top: 22%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  & .c-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10.5px;
+    padding: 4px 10px;
+    border-radius: 99px;
+    background: rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+  }
+  & .c-status i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #e5675b;
+  }
+  & .c-status em {
+    font-style: normal;
+    padding-left: 9px;
+    border-left: 1px solid rgba(255, 255, 255, 0.28);
+  }
+  & .c-status.is-open i {
+    background: #5fd38a;
+  }
+  & .c-logo {
+    overflow: hidden;
     width: 104px;
     height: 104px;
     border-radius: 50%;
@@ -460,10 +498,18 @@
     text-align: center;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   }
+  & .c-logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* Sem logo enviada: nome em fonte fixa, igual ao cardápio. */
   & .c-logo b {
-    font-size: calc(18px * var(--display-scale));
-    line-height: 1;
-    padding: 0 8px;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.05;
+    padding: 0 10px;
   }
   & .c-body {
     position: absolute;
@@ -580,6 +626,182 @@
     font-style: normal;
     font-size: 12px;
     font-weight: 600;
+  }
+
+  /* Perfil: logo e horário */
+  & .pf {
+    display: grid;
+    gap: 20px;
+    max-width: 760px;
+  }
+  & .pf-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 20px;
+  }
+  & .pf-card h2 {
+    margin: 0 0 14px;
+    font-size: 17px;
+    font-weight: 600;
+  }
+  & .pf-logo-row {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  & .pf-logo {
+    width: 124px;
+    height: 124px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex: none;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    background: #f7efe6;
+    color: #2b1d17;
+    box-shadow: 0 6px 18px rgba(30, 20, 10, 0.18);
+  }
+  & .pf-logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  & .pf-logo b {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 17px;
+    padding: 0 12px;
+    line-height: 1.1;
+  }
+  & .pf-logo-actions {
+    flex: 1;
+    min-width: 200px;
+    display: grid;
+    gap: 12px;
+  }
+  & .pf-logo-actions p,
+  & .pf-note {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  & .pf-btns {
+    display: flex;
+    gap: 10px;
+  }
+  & .pf-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+  & .pf-head h2 {
+    margin: 0;
+  }
+  & .pf-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    border-radius: 99px;
+    background: #211814;
+    color: #fff;
+    font-size: 13px;
+  }
+  & .pf-status i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #e5675b;
+  }
+  & .pf-status.is-open i {
+    background: #5fd38a;
+  }
+  & .pf-status em {
+    font-style: normal;
+    padding-left: 9px;
+    border-left: 1px solid rgba(255, 255, 255, 0.28);
+  }
+  & .pf-days {
+    display: grid;
+    margin-top: 12px;
+  }
+  & .pf-day {
+    display: grid;
+    grid-template-columns: 130px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 0;
+    border-top: 1px solid var(--line);
+  }
+  & .pf-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  & .pf-toggle input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--gold);
+  }
+  & .pf-ranges {
+    display: grid;
+    gap: 6px;
+  }
+  & .pf-closed {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  & .pf-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  & .pf-range input {
+    font: inherit;
+    font-size: 14px;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 8px;
+  }
+  & .pf-x {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 18px;
+    line-height: 1;
+    color: var(--muted);
+  }
+  & .pf-x:hover {
+    background: var(--gold-soft);
+  }
+  & .pf-day-actions {
+    display: flex;
+    gap: 12px;
+    font-size: 13px;
+  }
+  & .pf-day-actions button {
+    color: var(--gold);
+    font-weight: 500;
+  }
+  @media (max-width: 760px) {
+    & .pf-day {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+    }
+    & .pf-card {
+      padding: 16px;
+    }
   }
 
   /* Barra de publicar */

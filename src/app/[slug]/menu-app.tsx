@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { fetchPublicMenu } from "@/lib/menu/client";
 import { DEFAULT_FONT_THEME, isFontTheme } from "@/lib/menu/font-themes";
+import { statusLabel, type StatusLabel } from "@/lib/menu/hours";
 import { KNOWN_LANGS, LANG_FLAG, LANG_NAME, pickLanguage, t as tr, type StringKey } from "@/lib/menu/i18n";
 import { formatPrice, mediaUrl, posterSrc, thumbSrc, videoSrc } from "@/lib/menu/media";
 import type { MenuCategory, MenuItem, PublicMenu } from "@/lib/menu/types";
@@ -76,6 +77,7 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
   const [hint, setHint] = useState(false);
   const [relang, setRelang] = useState(false);
   const [homeTab, setHomeTab] = useState(0);
+  const [status, setStatus] = useState<StatusLabel | null>(null);
 
   const viewerRef = useRef<HTMLDivElement>(null);
   const panelEls = useRef<(HTMLDivElement | null)[]>([]);
@@ -553,6 +555,19 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
     else goCat(c);
   };
 
+  // Aberto/fechado no fuso do restaurante; calculado no celular e refeito a cada minuto.
+  const { opening_hours: hours, timezone } = menu.restaurant;
+  useEffect(() => {
+    if (!hours) return;
+    const run = () => setStatus(statusLabel(hours, timezone, lang));
+    const first = setTimeout(run, 0);
+    const id = setInterval(run, 60_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(id);
+    };
+  }, [hours, timezone, lang]);
+
   // ---------- Desenho ----------
   const { restaurant } = menu;
   const languages = restaurant.languages.length ? restaurant.languages : ["pt-BR"];
@@ -600,7 +615,15 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
             {languages.length > 1 && langButton("round")}
           </div>
           <div className="brand">
-            <div className="logo">{logo ? <img src={logo} alt={restaurant.name} /> : <b className="fd">{restaurant.name}</b>}</div>
+            {/* A logo é a imagem enviada pelo restaurante; não muda com a fonte do cardápio. */}
+            <div className="logo">{logo ? <img src={logo} alt={restaurant.name} /> : <b>{restaurant.name}</b>}</div>
+            {hours && status && (
+              <span className={`status${status.open ? " is-open" : ""}`}>
+                <i aria-hidden />
+                {status.state}
+                {status.detail && <em>{status.detail}</em>}
+              </span>
+            )}
           </div>
         </section>
 

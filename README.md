@@ -44,6 +44,8 @@ Com um projeto na nuvem:
 - `src/app/(auth)/`: cadastro e login.
 - `src/app/painel/`: painel do restaurante; `aparencia/` escolhe a fonte do cardápio com
   prévia ao vivo.
+- `src/app/painel/perfil/`: logo (enviada ao Storage, bucket `media`, pasta por restaurante)
+  e horário de funcionamento, que vira o selo "Aberto | até 23h" abaixo da logo.
 - `src/app/[slug]/`: cardápio público em stories (`/<endereço-do-restaurante>`), com
   idiomas por bandeira e lista.
 - `src/lib/menu/`: leitura do cardápio, idiomas, fontes e mídia.
