@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { signOut } from "./actions";
+import { syncVideos } from "./cardapio/actions";
 
 // Restaurante no topo da barra lateral: tocou, abre Editar Perfil, Suporte e Sair.
 export function ShellMenu({ name, slug, avatar }: { name: string; slug: string; avatar: React.ReactNode }) {
@@ -48,4 +50,23 @@ export function TopButton() {
       </svg>
     </button>
   );
+}
+
+// Confere no Mux a cada poucos segundos e atualiza a página quando algum vídeo fica pronto.
+export function VideoSync({ restaurantId, pending }: { restaurantId: string; pending: number }) {
+  const router = useRouter();
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      const r = await syncVideos(restaurantId).catch(() => null);
+      if (alive && r && r.pending < pending) router.refresh();
+    };
+    void tick();
+    const id = setInterval(tick, 6000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [restaurantId, pending, router]);
+  return null;
 }

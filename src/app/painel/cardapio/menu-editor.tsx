@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useOptimistic, useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatPrice } from "@/lib/menu/media";
-import { createCategory, reorder, syncVideos } from "./actions";
+import { createCategory, reorder } from "./actions";
 import { CategoryModal, ItemModal } from "./modals";
 import { LinkModal, SettingsModal } from "./menu-modals";
 
@@ -106,19 +106,6 @@ export function MenuEditor({
   const [creating, setCreating] = useState(false);
   const [help, setHelp] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-
-  // Vídeos ainda em preparo no Mux: confere a cada poucos segundos até ficarem prontos.
-  const preparing = categories.some(
-    (c) => c.media?.status === "processing" || c.items.some((i) => i.media?.status === "processing"),
-  );
-  useEffect(() => {
-    if (!preparing) return;
-    const id = setInterval(async () => {
-      const { pending } = await syncVideos(restaurantId);
-      if (pending === 0) router.refresh();
-    }, 6000);
-    return () => clearInterval(id);
-  }, [preparing, restaurantId, router]);
 
   const ctx: EditorContext = { restaurantId, languages, canTranslate, categories: cats };
   const featured = cats.flatMap((c) => c.items.filter((i) => i.featured));

@@ -30,7 +30,7 @@ async function Aparencia() {
   const sampleDish = menu?.categories.find((c) => c.items.length)?.items[0]?.name ?? "Margherita da Casa";
 
   return (
-    <PanelShell restaurant={{ name: r.name, slug: r.slug, logo }} active="/painel/aparencia" title="Aparência">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo }} active="/painel/aparencia" title="Aparência">
       <section className="ap-card">
         <div className="ap-card-head">
           <svg className="icon" viewBox="0 0 24 24" aria-hidden>

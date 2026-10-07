@@ -110,7 +110,7 @@ async function Cardapio() {
 
   const logo = mediaUrl(r.logo_path);
   return (
-    <PanelShell restaurant={{ name: r.name, slug: r.slug, logo }} active="/painel/cardapio" title="Cardápio Digital">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo }} active="/painel/cardapio" title="Cardápio Digital">
       <MenuEditor
         restaurant={{
           id: r.id,

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Raleway } from "next/font/google";
-import { ShellMenu, TopButton } from "./shell-menu";
+import { createClient } from "@/lib/supabase/server";
+import { ShellMenu, TopButton, VideoSync } from "./shell-menu";
 
 // Fonte do painel (a mesma família leve do DGuests); só o painel baixa.
 const raleway = Raleway({ subsets: ["latin"], display: "swap", variable: "--f-panel" });
@@ -14,17 +15,26 @@ const NAV = [
 
 export type PanelHref = (typeof NAV)[number]["href"];
 
-export function PanelShell({
+export async function PanelShell({
   restaurant,
   active,
   title,
   children,
 }: {
-  restaurant: { name: string; slug: string; logo: string | null };
+  restaurant: { id: string; name: string; slug: string; logo: string | null };
   active: PanelHref;
   title: string;
   children: React.ReactNode;
 }) {
+  // Vídeos ainda em preparo no Mux (de prato, categoria ou banner): qualquer página do
+  // painel confere até ficarem prontos.
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("media")
+    .select("id", { count: "exact", head: true })
+    .eq("restaurant_id", restaurant.id)
+    .eq("status", "processing")
+    .not("mux_upload_id", "is", null);
   return (
     <div className={`ap-app ${raleway.variable}`}>
       <aside>
@@ -68,6 +78,7 @@ export function PanelShell({
         <main>{children}</main>
       </div>
       <TopButton />
+      {!!count && <VideoSync restaurantId={restaurant.id} pending={count} />}
     </div>
   );
 }

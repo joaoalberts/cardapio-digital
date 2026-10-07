@@ -58,7 +58,7 @@ async function Perfil() {
   ]);
   const logo = mediaUrl(r.logo_path);
   return (
-    <PanelShell restaurant={{ name: r.name, slug: r.slug, logo }} active="/painel/perfil" title="Editar Perfil">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo }} active="/painel/perfil" title="Editar Perfil">
       <ProfileForm
         data={{
           id: r.id,
