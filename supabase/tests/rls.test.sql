@@ -93,6 +93,16 @@ begin
   end;
 end $$;
 
+-- Endereço reservado do sistema é recusado.
+do $$
+begin
+  begin
+    perform public.create_restaurant('Painel', 'painel');
+    raise exception 'slug reservado foi aceito';
+  exception when check_violation then null;
+  end;
+end $$;
+
 -- Visitante (anon): não lê tabelas, só o cardápio público, sem itens inativos.
 reset role;
 select set_config('request.jwt.claim.sub', '', false);
