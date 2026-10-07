@@ -220,11 +220,11 @@ html:has(.cm .viewer:not([hidden])) body {
     border-radius: 0;
     padding: 14px 16px;
   }
-  /* Cards de categoria de ponta a ponta, cantos retos, um espaço pequeno entre eles. */
+  /* Cards de categoria de ponta a ponta, cantos retos, encostados uns nos outros. */
   & .cards {
     display: grid;
-    gap: 6px;
-    padding: 4px 0 0;
+    gap: 0;
+    padding: 0;
   }
   & .card {
     position: relative;
