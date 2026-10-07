@@ -3,7 +3,7 @@
 insert into public.restaurants (id, name, slug, languages, brand_color, cover_video_path, cover_image_path,
                                 logo_path, opening_hours)
 values ('00000000-0000-4000-8000-0000000000f0', 'Forno Aurora', 'forno-aurora', '{pt-BR,en,es,fr,it,de}', '#e8b04b',
-        '/demo/v-forno.mp4', '/demo/v-forno-poster.jpg', '/demo/logo-forno-aurora.svg',
+        '/demo/v-forno.mp4', '/demo/v-forno-poster.jpg', '/demo/logo-forno-aurora.png',
         -- domingo a sábado; sexta e sábado passam da meia-noite
         '[[{"open":"12:00","close":"16:00"},{"open":"18:00","close":"23:00"}],
           [],
