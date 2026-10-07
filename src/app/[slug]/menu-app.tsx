@@ -281,7 +281,7 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
       if (!hintShown.current && !withList) {
         hintShown.current = true;
         setHint(true);
-        setTimeout(() => setHint(false), 2600);
+        setTimeout(() => setHint(false), 2200);
       }
     },
     [resetTimer, tick, update],
@@ -568,6 +568,27 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
     };
   }, [hours, timezone, lang]);
 
+  // Pré-carrega os próximos pratos da categoria e o prato atual das vizinhas,
+  // para que a troca já encontre a imagem decodificada.
+  const idxKey = view.idx.join(",");
+  useEffect(() => {
+    if (!view.open) return;
+    const all = catsOf();
+    const want: (MenuItem | undefined)[] = [];
+    const cur = all[view.cur];
+    const at = view.idx[view.cur] ?? 0;
+    if (cur) for (let k = 1; k <= 2; k++) want.push(cur.items[(at + k) % cur.items.length]);
+    for (const c of [view.cur - 1, view.cur + 1]) want.push(all[c]?.items[view.idx[c] ?? 0]);
+    for (const item of want) {
+      const m = item?.media[0];
+      if (!m) continue;
+      warm(posterSrc(m));
+      if (m.kind === "photo") warm(mediaUrl(m.storage_path));
+    }
+    // idxKey resume view.idx sem disparar a cada novo array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.open, view.cur, idxKey, menu]);
+
   // ---------- Desenho ----------
   const { restaurant } = menu;
   const languages = restaurant.languages.length ? restaurant.languages : ["pt-BR"];
@@ -685,6 +706,7 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
                 <div className="media">
                   {near(i) && (
                     <StoryMedia
+                      key={item.media[0]?.id ?? item.id}
                       item={item}
                       onEnded={() => {
                         if (viewRef.current.cur === i && playing()) next();
@@ -751,13 +773,7 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
           </svg>
         </button>
 
-        {hint && (
-          <div className="hint">
-            {t("hint1")}
-            <br />
-            {t("hint2")}
-          </div>
-        )}
+        {hint && <div className="hint">{t("hint")}</div>}
 
         {view.listOpen && (
           <div className="list">
@@ -891,28 +907,59 @@ function CategoryCard({
   );
 }
 
+const warmed = new Set<string>();
+function warm(src: string | null) {
+  if (!src || warmed.has(src)) return;
+  warmed.add(src);
+  const img = new Image();
+  img.decoding = "async";
+  img.src = src;
+  img.decode?.().catch(() => {});
+}
+
+// Duas camadas: a miniatura (já em cache pela capa ou pelo pré-carregamento)
+// aparece na hora e a mídia em qualidade total entra por cima quando está pronta.
+// Assim a troca de prato nunca passa por tela preta.
 function StoryMedia({ item, onEnded }: { item: MenuItem; onEnded: () => void }) {
   const m = item.media[0];
-  const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.muted = true;
-  }, [m?.id]);
+  const vidRef = useRef<HTMLVideoElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [ready, setReady] = useState(false);
+  useLayoutEffect(() => {
+    if (vidRef.current) vidRef.current.muted = true;
+    const img = imgRef.current;
+    if (img?.complete && img.naturalWidth) setReady(true);
+  }, []);
   if (!m) return null;
-  if (m.kind === "video") {
-    return (
-      <video
-        key={m.id}
-        ref={ref}
-        src={videoSrc(m) ?? undefined}
-        poster={posterSrc(m) ?? undefined}
-        muted
-        playsInline
-        preload="auto"
-        onEnded={onEnded}
-      />
-    );
-  }
-  return <img key={m.id} src={mediaUrl(m.storage_path) ?? undefined} alt={item.name} decoding="async" />;
+  const low = posterSrc(m);
+  const hi = `hi${ready ? " on" : ""}`;
+  return (
+    <>
+      {low && <img className="lo" src={low} alt="" aria-hidden />}
+      {m.kind === "video" ? (
+        <video
+          ref={vidRef}
+          className={hi}
+          src={videoSrc(m) ?? undefined}
+          poster={low ?? undefined}
+          muted
+          playsInline
+          preload="auto"
+          onPlaying={() => setReady(true)}
+          onEnded={onEnded}
+        />
+      ) : (
+        <img
+          ref={imgRef}
+          className={hi}
+          src={mediaUrl(m.storage_path) ?? undefined}
+          alt={item.name}
+          decoding="async"
+          onLoad={() => setReady(true)}
+        />
+      )}
+    </>
+  );
 }
 
 function ListIcon() {
