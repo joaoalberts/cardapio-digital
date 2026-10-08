@@ -24,6 +24,12 @@ const L6 = (a: [string, string, string, string, string, string]) =>
   Object.fromEntries(KNOWN_LANGS.map((l, i) => [l, a[i]])) as Record<string, string>;
 
 const STRINGS = {
+  featured: L6(["Destaques", "Highlights", "Destacados", "Coups de cœur", "In evidenza", "Empfehlungen"]),
+  serves: L6(["Serve {n}", "Serves {n}", "Para {n}", "Pour {n}", "Per {n}", "Für {n}"]),
+  from: L6(["a partir de", "from", "desde", "à partir de", "da", "ab"]),
+  info: L6(["Informações", "Information", "Información", "Informations", "Informazioni", "Informationen"]),
+  wifi: L6(["Wi-Fi", "Wi-Fi", "Wi-Fi", "Wi-Fi", "Wi-Fi", "WLAN"]),
+  password: L6(["Senha", "Password", "Contraseña", "Mot de passe", "Password", "Passwort"]),
   items: L6(["itens", "items", "platos", "plats", "piatti", "Gerichte"]),
   video: L6(["vídeo", "video", "vídeo", "vidéo", "video", "Video"]),
   viewList: L6(["Ver lista", "View list", "Ver lista", "Voir la liste", "Vedi lista", "Liste"]),

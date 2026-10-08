@@ -28,6 +28,22 @@ Com um projeto na nuvem:
 3. Copie `.env.example` para `.env.local` e preencha a URL e a chave publishable.
 4. `npm install` e `npm run dev`, depois abra http://localhost:3000.
 
+## Publicar (Vercel)
+
+1. Importe o repositório em vercel.com/new e defina `NEXT_PUBLIC_SUPABASE_URL` e
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (as mesmas do `.env.local`, com os dados do
+   projeto no Supabase). `ANTHROPIC_API_KEY` é opcional e liga a sugestão de traduções.
+   `MUX_TOKEN_ID` e `MUX_TOKEN_SECRET` (token do Mux com permissão de Mux Video) ligam o
+   vídeo dos pratos em qualidade máxima; sem eles, o vídeo vai para o Storage (até 50 MB).
+   Marque cada variável em Production e Preview e faça um novo deploy depois de mudar
+   qualquer uma, porque elas só valem a partir do próximo deploy.
+   `SUPPORT_WHATSAPP` (opcional, só dígitos com DDI, ex.: 5511999999999) mostra o botão de
+   WhatsApp na página Suporte do painel. As mensagens do formulário ficam na tabela
+   `support_requests`.
+2. No Supabase, em Authentication > URL Configuration, use o endereço de produção como
+   Site URL e adicione `https://*-<seu-time>.vercel.app/**` às Redirect URLs, para os
+   links de pré-visualização de cada PR também conseguirem fazer login.
+
 ## Verificações
 
 - `npm run lint` e `npm run typecheck`
@@ -42,6 +58,9 @@ Com um projeto na nuvem:
   (`create_restaurant`, `get_public_menu`).
 - `src/proxy.ts`: renova a sessão e protege `/painel`.
 - `src/app/(auth)/`: cadastro e login.
+- `src/app/painel/cardapio/`: categorias e pratos (foto, preço, promoção, selos, ordem,
+  esconder) e traduções. Com `ANTHROPIC_API_KEY` no `.env.local`, o painel sugere as
+  traduções sozinho e o dono revisa; sem ela, traduz à mão.
 - `src/app/painel/`: painel do restaurante; `aparencia/` escolhe a fonte do cardápio com
   prévia ao vivo.
 - `src/app/painel/perfil/`: logo (enviada ao Storage, bucket `media`, pasta por restaurante)

@@ -21,7 +21,7 @@ export function SignInForm() {
       />
       <Field label="Senha" name="password" type="password" autoComplete="current-password" required />
       <FormMessage {...state} />
-      <SubmitButton pending={pending}>Entrar</SubmitButton>
+      <SubmitButton pending={pending}>ENTRAR</SubmitButton>
     </form>
   );
 }

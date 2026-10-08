@@ -1,34 +1,32 @@
-/* Painel > Aparência: barra lateral escura, opções de fonte à esquerda e celular com
-   prévia ao vivo à direita. No celular a prévia fica em cima e as fontes numa faixa. */
+/* Painel no visual do DGuests: barra lateral preta com o restaurante no topo, barra
+   superior preta com o título da página, fundo cinza claro, cartões brancos e botões
+   dourados. Vale para todas as páginas do painel. */
 .ap {
-  --side: #17120f;
-  --side-fg: #efe6dc;
-  --side-muted: rgba(239, 230, 220, 0.55);
-  --bg: #f4f0ea;
-  --card: #fffdf9;
-  --line: #e4dbcf;
-  --fg: #2a211b;
-  --muted: #7c6f63;
-  --gold: #b8862f;
-  --gold-soft: rgba(184, 134, 47, 0.12);
+  --side: #0d0d0d;
+  --side-item: #1d1d1d;
+  --side-fg: #f2f2f2;
+  --side-muted: rgba(242, 242, 242, 0.7);
+  --bg: #f1f2f4;
+  --card: #fff;
+  --line: #dedede;
+  --fg: #3d3d3d;
+  --muted: #8b8b8b;
+  --gold: #c08a3e;
+  --gold-dark: #a8742c;
+  --gold-soft: rgba(192, 138, 62, 0.14);
+  --green: #6aa43a;
+  --orange: #e2862f;
+  --red: #d63c3c;
+  --blue: #3fa9df;
   flex: 1;
   min-height: 100dvh;
   background: var(--bg);
   color: var(--fg);
-  font-family: var(--f-worksans), system-ui, sans-serif;
+  font-family: var(--f-panel), system-ui, sans-serif;
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-
-  @media (prefers-color-scheme: dark) {
-    --bg: #1d1814;
-    --card: #262019;
-    --line: #3a3129;
-    --fg: #f2e9de;
-    --muted: #a89a8b;
-    --gold-soft: rgba(184, 134, 47, 0.18);
-    color-scheme: dark;
-  }
+  color-scheme: light;
 
   & button {
     font: inherit;
@@ -38,7 +36,8 @@
     padding: 0;
     cursor: pointer;
   }
-  & button:focus-visible {
+  & button:focus-visible,
+  & a:focus-visible {
     outline: 2px solid var(--gold);
     outline-offset: 2px;
   }
@@ -55,94 +54,205 @@
 
   & .ap-app {
     display: grid;
-    grid-template-columns: 250px minmax(0, 1fr);
+    grid-template-columns: 236px minmax(0, 1fr);
     min-height: 100dvh;
+    font-family: var(--f-panel), system-ui, sans-serif;
   }
   & aside {
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    overflow-y: auto;
     background: var(--side);
     color: var(--side-fg);
-    padding: 24px 16px;
+    padding: 22px 12px;
     display: flex;
     flex-direction: column;
-    gap: 22px;
+    gap: 14px;
   }
   & .ap-brand {
-    font-weight: 600;
-    letter-spacing: 0.22em;
-    font-size: 15px;
-    padding: 0 8px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    font-size: 17px;
+    padding: 0 8px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   }
   & .ap-brand b {
     color: var(--gold);
   }
   & .ap-rest {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    padding-bottom: 14px;
+  }
+  & .ap-rest-btn {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 8px;
-    border-block: 1px solid rgba(255, 255, 255, 0.08);
-  }
-  & .ap-rest i img {
     width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 50%;
+    padding: 6px 8px;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 600;
   }
-  & .ap-rest i {
+  & .ap-rest-btn span {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
-    width: 34px;
-    height: 34px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  & .caret {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+    transition: transform 0.15s;
+  }
+  & .ap-rest.open .caret {
+    transform: rotate(180deg);
+  }
+  & .ap-avatar {
+    overflow: hidden;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    background: var(--side-fg);
-    color: #2b1d17;
+    border: 2px solid #b39a6b;
+    background: #2a2a2a;
+    color: var(--side-fg);
     display: grid;
     place-items: center;
     font-style: normal;
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: 700;
+    flex: none;
   }
-  & nav {
+  & .ap-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  & .ap-rest-menu {
     display: grid;
-    gap: 6px;
+    gap: 8px;
+    padding-top: 12px;
   }
-  & nav a {
+  & :is(.ap-rest-menu a, .ap-rest-menu button, nav a) {
     display: flex;
     align-items: center;
     gap: 12px;
+    width: 100%;
     padding: 11px 12px;
-    border-radius: 10px;
-    color: var(--side-muted);
-    text-decoration: none;
-  }
-  & nav a:hover {
+    border-radius: 8px;
+    background: var(--side-item);
     color: var(--side-fg);
+    font-size: 13.5px;
+    font-weight: 600;
+    text-decoration: none;
+    text-align: left;
+    transition: background 0.15s;
+  }
+  & :is(.ap-rest-menu a, .ap-rest-menu button, nav a):hover {
+    background: #2a2a2a;
+  }
+  & nav {
+    display: grid;
+    gap: 10px;
+  }
+  & nav .icon {
+    width: 17px;
+    height: 17px;
   }
   & nav a.on {
-    background: rgba(255, 255, 255, 0.07);
-    color: var(--side-fg);
+    background: #2b2b2b;
+    box-shadow: inset 3px 0 0 var(--gold);
   }
   & nav a.on .icon {
     color: var(--gold);
   }
 
+  & .ap-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  & .ap-top {
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    background: var(--side);
+    color: #fff;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+  }
+  & .ap-top h1 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
   & main {
-    padding: 28px clamp(16px, 3vw, 40px) 120px;
+    padding: 18px clamp(12px, 2vw, 18px) 120px;
     min-width: 0;
   }
-  & .ap-crumb {
-    font-size: 13px;
-    color: var(--muted);
+  & .ap-up {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 8;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: var(--orange);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
   }
-  & h1 {
-    margin: 4px 0 6px;
-    font-size: 28px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
+  & .ap-up svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+  }
+
+  /* Cartão branco com título fino e linha embaixo, como no DGuests. */
+  & .ap-card {
+    background: var(--card);
+    border: 1px solid #e8e8e8;
+    border-radius: 4px;
+    padding: 18px 18px 22px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+  & .ap-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1.5px solid #6b6b6b;
+    margin-bottom: 18px;
+  }
+  & .ap-card-head h2 {
+    margin: 0;
+    flex: 1;
+    font-size: 21px;
+    font-weight: 400;
+    color: #6b6b6b;
+  }
+  & .ap-card-head .icon {
+    width: 22px;
+    height: 22px;
+    color: #4a4a4a;
+  }
+  & .ap-help {
+    color: var(--orange);
+    font-weight: 800;
+    font-size: 18px;
   }
   & .ap-lead {
-    margin: 0 0 24px;
+    margin: 0 0 18px;
     color: var(--muted);
-    max-width: 62ch;
+    max-width: 70ch;
+    font-size: 14px;
   }
   & .ap-work {
     display: grid;
@@ -299,6 +409,18 @@
     overflow: hidden;
     background: #000;
     color: #fff;
+  }
+  /* O cardápio real desenhado em 390 px e reduzido para a tela do celular da prévia. */
+  & .ap-frame {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 390px;
+    height: 802px;
+    border: 0;
+    transform: scale(0.6923);
+    transform-origin: 0 0;
+    background: #231a16;
   }
   & .ap-notch {
     position: absolute;
@@ -641,185 +763,322 @@
   }
 
   /* Perfil: logo e horário */
-  & .pf {
+  /* ---------- Editar Perfil (Editar Cadastro do DGuests) ---------- */
+  & .pf-form {
+    border: 0;
+    margin: 0;
+    padding: 0 6px;
     display: grid;
-    gap: 20px;
-    max-width: 760px;
+    gap: 16px;
+    max-width: 560px;
+    min-width: 0;
   }
-  & .pf-card {
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    padding: 20px;
+  & .pf-banner {
+    display: grid;
+    justify-items: start;
+    gap: 4px;
   }
-  & .pf-card h2 {
-    margin: 0 0 14px;
-    font-size: 17px;
-    font-weight: 600;
-  }
-  & .pf-logo-row {
-    display: flex;
-    gap: 20px;
-    align-items: center;
-    flex-wrap: wrap;
+  & .pf-banner .ms {
+    justify-items: center;
+    width: min(100%, 420px);
   }
   & .pf-logo {
-    width: 124px;
-    height: 124px;
-    border-radius: 50%;
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    width: min(100%, 420px);
+  }
+  & .pf-logo-img {
+    width: 92px;
+    height: 92px;
     overflow: hidden;
-    flex: none;
+    background: #1d1d1d;
+    color: #fff;
     display: grid;
     place-items: center;
     text-align: center;
-    background: #f7efe6;
-    color: #2b1d17;
-    box-shadow: 0 6px 18px rgba(30, 20, 10, 0.18);
+    font-size: 12px;
+    padding: 0;
   }
-  & .pf-logo img {
+  & .pf-logo-img img {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
-  & .pf-logo b {
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    font-size: 17px;
-    padding: 0 12px;
-    line-height: 1.1;
+  & .pf-hint {
+    font-size: 12px;
+    color: #9a9a9a;
   }
-  & .pf-logo-actions {
-    flex: 1;
-    min-width: 200px;
+  & .pf-field {
     display: grid;
-    gap: 12px;
+    gap: 6px;
+    min-width: 0;
   }
-  & .pf-logo-actions p,
-  & .pf-note {
-    margin: 0;
-    font-size: 13px;
-    color: var(--muted);
+  & .pf-cap {
+    color: #8a8a8a;
+    font-size: 15px;
   }
-  & .pf-btns {
+  & .pf-cap:first-child:has(+ .pf-link) {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: #aaa;
+  }
+  & .pf-title {
     display: flex;
-    gap: 10px;
-  }
-  & .pf-head {
-    display: flex;
-    justify-content: space-between;
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
-    margin-bottom: 4px;
+    color: #8a8a8a;
+    font-size: 16px;
   }
-  & .pf-head h2 {
+  & :is(.pf-field > input, .pf-field textarea, .pf-pre input, .pf-link input, .pf-range input) {
+    font: inherit;
+    font-size: 13.5px;
+    color: #555;
+    background: #fff;
+    border: 1px solid #d9d9d9;
+    border-radius: 3px;
+    padding: 8px 10px;
+    width: 100%;
+    min-width: 0;
+  }
+  & .pf-field textarea {
+    resize: vertical;
+  }
+  & .pf-field input.ro {
+    background: #ececec;
+    color: #999;
+  }
+  & .pf-link {
+    display: flex;
+  }
+  & .pf-link input {
+    background: #ececec;
+    color: #999;
+    border-radius: 3px 0 0 3px;
+  }
+  & .pf-link button {
+    display: grid;
+    place-items: center;
+    padding: 0 10px;
+    background: var(--gold);
+    color: #fff;
+    border-radius: 0 3px 3px 0;
+  }
+  & .pf-link .icon {
+    width: 17px;
+    height: 17px;
+  }
+  & .pf-field > input.pf-color {
+    width: 46px;
+    height: 28px;
+    padding: 1px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background: #fff;
+  }
+  & .pf-pre {
+    display: flex;
+  }
+  & .pf-pre i {
+    font-style: normal;
+    display: grid;
+    place-items: center;
+    padding: 0 8px;
+    background: #c9c9c9;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 3px 0 0 3px;
+    white-space: nowrap;
+  }
+  & .pf-pre input {
+    border-left: 0;
+    border-radius: 0 3px 3px 0;
+  }
+  & .pf-small-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #9a9a9a;
+    cursor: pointer;
+  }
+  & .pf-small-check input {
+    accent-color: var(--blue);
+    width: 14px;
+    height: 14px;
     margin: 0;
+  }
+  & .pf-pays {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
   }
   & .pf-status {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 5px 12px;
+    gap: 6px;
+    font-size: 12px;
+    padding: 3px 10px;
     border-radius: 99px;
-    background: #211814;
-    color: #fff;
-    font-size: 13px;
+    background: #f3f3f3;
+    color: #666;
   }
   & .pf-status i {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: #e5675b;
+    background: #c9c9c9;
   }
   & .pf-status.is-open i {
-    background: #5fd38a;
+    background: var(--green);
   }
   & .pf-status em {
     font-style: normal;
-    padding-left: 9px;
-    border-left: 1px solid rgba(255, 255, 255, 0.28);
+    color: #999;
+  }
+  & .pf-langs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  & .pf-lang {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border: 1px solid #d9d9d9;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 13.5px;
+    color: #666;
+  }
+  & .pf-lang[aria-pressed="true"] {
+    border-color: var(--gold);
+    background: var(--gold-soft);
+    color: #3d3d3d;
+  }
+  & .pf-lang:disabled {
+    cursor: default;
   }
   & .pf-days {
     display: grid;
-    margin-top: 12px;
+    gap: 6px;
   }
   & .pf-day {
     display: grid;
-    grid-template-columns: 130px minmax(0, 1fr) auto;
-    gap: 12px;
+    grid-template-columns: 150px minmax(0, 1fr) auto;
     align-items: center;
-    padding: 10px 0;
-    border-top: 1px solid var(--line);
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid #f0f0f0;
   }
   & .pf-toggle {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-weight: 500;
+    gap: 8px;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #9a9a9a;
     cursor: pointer;
   }
   & .pf-toggle input {
-    width: 18px;
-    height: 18px;
-    accent-color: var(--gold);
+    accent-color: var(--blue);
   }
   & .pf-ranges {
     display: grid;
     gap: 6px;
   }
   & .pf-closed {
-    color: var(--muted);
-    font-size: 14px;
+    font-size: 13px;
+    color: #aaa;
   }
   & .pf-range {
     display: flex;
     align-items: center;
     gap: 8px;
     font-size: 13px;
-    color: var(--muted);
+    color: #999;
   }
   & .pf-range input {
-    font: inherit;
-    font-size: 14px;
-    color: var(--fg);
-    background: var(--bg);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 6px 8px;
+    width: auto;
+    padding: 5px 8px;
   }
   & .pf-x {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    font-size: 18px;
-    line-height: 1;
-    color: var(--muted);
+    font-size: 20px;
+    color: #aaa;
+    padding: 0 4px;
   }
   & .pf-x:hover {
-    background: var(--gold-soft);
+    color: var(--red);
   }
   & .pf-day-actions {
     display: flex;
-    gap: 12px;
-    font-size: 13px;
+    gap: 10px;
   }
   & .pf-day-actions button {
-    color: var(--gold);
-    font-weight: 500;
+    font-size: 12px;
+    color: var(--blue);
   }
   @media (max-width: 760px) {
     & .pf-day {
       grid-template-columns: minmax(0, 1fr);
-      gap: 8px;
+      gap: 6px;
     }
-    & .pf-card {
-      padding: 16px;
-    }
+  }
+
+  /* ---------- Suporte ---------- */
+  & .sp {
+    display: grid;
+    gap: 14px;
+    max-width: 340px;
+  }
+  & .sp-note {
+    margin: 0;
+    padding: 12px 14px;
+    background: #d6ebf0;
+    color: #1f4d59;
+    font-weight: 700;
+    font-size: 13.5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  & .sp-note svg {
+    width: 20px;
+    height: 20px;
+  }
+  & .sp-field {
+    display: grid;
+    gap: 4px;
+  }
+  & .sp-field span {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    color: #aaa;
+  }
+  & .sp-field :is(input, textarea) {
+    font: inherit;
+    font-size: 14px;
+    border: 1px solid #d9d9d9;
+    border-radius: 3px;
+    padding: 8px 10px;
+    resize: vertical;
+  }
+  & .sp-ok {
+    margin: 0;
+    color: var(--green);
+    font-size: 13.5px;
   }
 
   /* Barra de publicar */
   & .ap-bar {
     position: fixed;
-    left: 250px;
+    left: 236px;
     right: 0;
     bottom: 0;
     z-index: 5;
@@ -839,17 +1098,33 @@
     color: var(--muted);
   }
   & .btn {
-    height: 44px;
-    padding: 0 20px;
-    border-radius: 10px;
-    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 38px;
+    padding: 0 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
   }
-  & .btn.ghost {
-    border: 1px solid var(--line);
+  & .btn.ghost,
+  & .btn.outline {
+    border: 1.5px solid var(--gold);
+    color: #4a4a4a;
+    background: #fff;
+  }
+  & .btn.ghost:hover,
+  & .btn.outline:hover {
+    background: var(--gold-soft);
   }
   & .btn.primary {
     background: var(--gold);
     color: #fff;
+  }
+  & .btn.primary:hover {
+    background: var(--gold-dark);
   }
   & .btn:disabled {
     opacity: 0.45;
@@ -892,22 +1167,42 @@
       grid-template-columns: minmax(0, 1fr);
       grid-template-rows: auto 1fr;
     }
+    /* No celular a barra lateral vira o topo: marca e restaurante numa linha, menu numa faixa. */
     & aside {
-      flex-direction: row;
-      align-items: center;
-      padding: 10px 16px;
-      gap: 12px;
+      position: static;
+      height: auto;
+      padding: 12px 0 10px;
+      gap: 10px;
     }
-    & aside nav,
-    & aside .ap-rest {
-      display: none;
+    & .ap-brand {
+      padding: 0 16px 10px;
+    }
+    & .ap-rest {
+      padding: 0 8px 10px;
+    }
+    & aside nav {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 0 12px;
+      scrollbar-width: none;
+    }
+    & .ap-app aside nav a {
+      flex: none;
+      width: auto;
+      padding: 8px 12px;
+      gap: 8px;
+    }
+    & .ap-top {
+      height: 48px;
+      padding: 0 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
     }
     & .ap-bar {
       left: 0;
       padding-block: 12px calc(12px + env(safe-area-inset-bottom, 0px));
     }
     & .ap-bar .msg,
-    & .ap-crumb,
     & .ap-lead,
     & .ap-plabel {
       display: none;
@@ -918,10 +1213,6 @@
     & main {
       padding-top: 16px;
       padding-bottom: 260px;
-    }
-    & h1 {
-      margin: 0 0 8px;
-      font-size: 20px;
     }
     & .ap-seg button {
       padding: 5px 12px;

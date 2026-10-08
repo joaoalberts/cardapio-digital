@@ -178,4 +178,28 @@ exception when check_violation then null;
 end $$;
 reset role;
 
+-- Ordem: Ana reordena os pratos dela; os do Sushi não mudam.
+set role authenticated;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+do $$
+declare ids uuid[]; first_name text;
+begin
+  select array_agg(id order by name desc) into ids from public.items;
+  perform public.set_positions('items', ids);
+  select name into first_name from public.items order by position limit 1;
+  assert first_name = 'Margherita', 'reordenar deveria pôr Margherita primeiro, veio ' || first_name;
+  -- Preço promocional maior que o preço é recusado.
+  begin
+    update public.items set promo_price_cents = price_cents + 1 where name = 'Margherita';
+    raise exception 'promoção acima do preço não deveria entrar';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.items set tags = '{inventado}' where name = 'Margherita';
+    raise exception 'selo desconhecido não deveria entrar';
+  exception when check_violation then null;
+  end;
+end $$;
+reset role;
+
 \echo 'rls.test.sql: tudo certo'

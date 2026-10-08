@@ -1,14 +1,17 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- fotos do cardápio ocupam a tela toda e já vêm em tamanho certo do Storage */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { fetchPublicMenu } from "@/lib/menu/client";
 import { DEFAULT_FONT_THEME, isFontTheme } from "@/lib/menu/font-themes";
-import { statusLabel, type StatusLabel } from "@/lib/menu/hours";
-import { KNOWN_LANGS, LANG_FLAG, LANG_NAME, pickLanguage, t as tr, type StringKey } from "@/lib/menu/i18n";
+import { inWindow, statusLabel, type StatusLabel } from "@/lib/menu/hours";
+import { countryLabel, tagLabel } from "@/lib/menu/tags";
+import { paymentLabel } from "@/lib/menu/payments";
+import { LANG_FLAG, LANG_NAME, pickLanguage, t as tr, type StringKey } from "@/lib/menu/i18n";
 import { formatPrice, mediaUrl, posterSrc, thumbSrc, videoSrc } from "@/lib/menu/media";
-import type { MenuCategory, MenuItem, PublicMenu } from "@/lib/menu/types";
+import { useAutoplay, useHls } from "@/lib/menu/use-hls";
+import type { MenuCategory, MenuItem, MenuMedia, PublicMenu } from "@/lib/menu/types";
 import { Flag } from "./flag";
 
 const AUTO_MS = 6000; // cada foto fica 6 s; vídeo usa a própria duração
@@ -44,13 +47,35 @@ type Gesture = {
 
 const isVideo = (item: MenuItem | undefined) => item?.media[0]?.kind === "video";
 
+const FEATURED_ID = "destaques";
+
+// Categorias que o cliente vê agora: só as com pratos e dentro do horário (ex.: almoço),
+// com "Destaques" na frente quando o restaurante marcou pratos em destaque.
+// Sem relógio (primeira pintura, igual à do servidor) o horário ainda não filtra.
+function visibleCats(menu: PublicMenu, now: number | null): MenuCategory[] {
+  const tz = menu.restaurant.timezone;
+  const base = menu.categories.filter(
+    (c) => c.items.length > 0 && (now == null || inWindow(c.available_from, c.available_to, tz, new Date(now))),
+  );
+  const featured = base.flatMap((c) => c.items.filter((i) => i.featured));
+  if (!featured.length) return base;
+  const first = featured.find((i) => i.media[0]);
+  return [
+    { id: FEATURED_ID, name: tr("featured", menu.restaurant.language), items: featured, cover: first?.media[0] ?? null },
+    ...base,
+  ];
+}
+
 export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
   const slug = initialMenu.restaurant.slug;
   const [menu, setMenuState] = useState(initialMenu);
   const menuRef = useRef(initialMenu);
   const menus = useRef(new Map<string, PublicMenu>([[initialMenu.restaurant.language, initialMenu]]));
   const lang = menu.restaurant.language;
-  const cats = menu.categories.filter((c) => c.items.length > 0);
+  // Relógio do horário das categorias: começa depois da primeira pintura e anda a cada minuto.
+  const [now, setNow] = useState<number | null>(null);
+  const cats = useMemo(() => visibleCats(menu, now), [menu, now]);
+  const catsRef = useRef(cats);
   const t = (k: StringKey) => tr(k, lang);
 
   const [view, setView] = useState<View>({
@@ -77,11 +102,14 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
   const [hint, setHint] = useState(false);
   const [relang, setRelang] = useState(false);
   const [homeTab, setHomeTab] = useState(0);
+  const [infoOpen, setInfoOpen] = useState(false);
   const [status, setStatus] = useState<StatusLabel | null>(null);
 
   const viewerRef = useRef<HTMLDivElement>(null);
   const panelEls = useRef<(HTMLDivElement | null)[]>([]);
   const vTabsRef = useRef<HTMLDivElement>(null);
+  const lTabsRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const heroVidRef = useRef<HTMLVideoElement>(null);
   const cardEls = useRef<(HTMLButtonElement | null)[]>([]);
   const pos = useRef(0);
@@ -97,7 +125,30 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
   const hintShown = useRef(false);
   const reduce = useRef(false);
 
-  const catsOf = () => menuRef.current.categories.filter((c) => c.items.length > 0);
+  const catsOf = () => catsRef.current;
+  useLayoutEffect(() => {
+    catsRef.current = cats;
+    // Mudou a lista (horário, idioma): cada categoria volta ao primeiro prato.
+    if (viewRef.current.idx.length !== cats.length) {
+      const v = viewRef.current;
+      const cur = Math.min(v.cur, Math.max(0, cats.length - 1));
+      const next = { ...v, idx: cats.map(() => 0), cur, target: cur, listCat: Math.min(v.listCat, cur) };
+      viewRef.current = next;
+      setView(next);
+    }
+  }, [cats]);
+  useEffect(() => {
+    const clock = () => {
+      // Com o cardápio aberto, a lista não muda debaixo do dedo do cliente.
+      if (!viewRef.current.open) setNow(Date.now());
+    };
+    const first = setTimeout(clock, 0);
+    const id = setInterval(clock, 60_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(id);
+    };
+  }, []);
 
   const showToast = useCallback((text: string) => {
     setToast(text);
@@ -151,19 +202,24 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
     panelEls.current.forEach((p, i) => {
       const vid = p?.querySelector("video");
       if (!vid) return;
-      if (i === v.cur && playing()) vid.play().catch(() => {});
+      const want = i === v.cur && playing();
+      vid.dataset.want = want ? "1" : "";
+      if (want) vid.play().catch(() => {});
       else vid.pause();
     });
     const hero = heroVidRef.current;
     if (hero) {
-      if (v.open || document.visibilityState !== "visible") hero.pause();
+      // Com o story aberto o banner fica parado ("hold"), e o toque não o religa.
+      const hold = v.open || document.visibilityState !== "visible";
+      hero.dataset.hold = hold ? "1" : "";
+      hero.dataset.want = hold ? "" : "1";
+      if (hold) hero.pause();
       else hero.play().catch(() => {});
     }
   }, [playing]);
 
   const scrollTab = useCallback((c: number) => {
-    const tab = vTabsRef.current?.children[c] as HTMLElement | undefined;
-    tab?.scrollIntoView({ inline: "center", block: "nearest", behavior: reduce.current ? "auto" : "smooth" });
+    centerTab(vTabsRef.current, c, !reduce.current);
   }, []);
 
   const goCat = useCallback(
@@ -305,6 +361,31 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
     el.style.opacity = "0";
     setTimeout(done, 300);
   }, [update]);
+
+  // Prévia do painel (Aparência): o cardápio roda num iframe e o painel manda a fonte
+  // escolhida e a tela a mostrar (capa, story ou lista). Fora de iframe, nada muda.
+  const [previewFont, setPreviewFont] = useState<string | null>(null);
+  useEffect(() => {
+    if (window.parent === window) return;
+    const on = (e: MessageEvent) => {
+      if (e.origin !== location.origin || e.data?.type !== "cm-preview") return;
+      const { font, view: screen } = e.data as { font?: string; view?: string };
+      if (font && isFontTheme(font)) setPreviewFont(font);
+      const v = viewRef.current;
+      if (screen === "capa" && v.open) closeViewer();
+      if (screen === "story") {
+        if (v.open) update({ listOpen: false });
+        else openViewer(0);
+      }
+      if (screen === "lista") {
+        if (v.open) update({ listOpen: true, listCat: v.cur });
+        else openViewer(0, true);
+      }
+    };
+    addEventListener("message", on);
+    parent.postMessage({ type: "cm-ready" }, location.origin);
+    return () => removeEventListener("message", on);
+  }, [openViewer, closeViewer, update]);
 
   // ---------- Idioma ----------
   const setMenu = useCallback((m: PublicMenu) => {
@@ -526,7 +607,8 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
         setTimeout(() => (el.style.transition = ""), 260);
       }
     } else if (!g.mode && !g.held && !cancel && dtot < 350) {
-      if (e.clientX < w * 0.3) prev();
+      const x = e.clientX - (viewerRef.current?.getBoundingClientRect().left ?? 0);
+      if (x < w * 0.3) prev();
       else next();
     }
   };
@@ -534,7 +616,7 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
   // ---------- Ações ----------
   const share = async (item: MenuItem) => {
     const url = location.href.split("#")[0];
-    const text = `${item.name} · ${formatPrice(item.price_cents, lang)}`;
+    const text = item.hide_price ? item.name : `${item.name} · ${formatPrice(item.promo_price_cents ?? item.price_cents, lang)}`;
     try {
       if (navigator.share) {
         await navigator.share({ title: menu.restaurant.name, text, url });
@@ -545,7 +627,33 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
     } catch {}
   };
 
-  const openListAt = (c: number) => update({ listCat: c });
+  // Lista: todas as categorias numa rolagem só; as abas acompanham a rolagem.
+  const sectionOf = (c: number) => listRef.current?.querySelector<HTMLElement>(`.lsec[data-ci="${c}"]`);
+  const openListAt = (c: number) => {
+    const box = listRef.current;
+    const sec = sectionOf(c);
+    if (box && sec) box.scrollTo({ top: sec.offsetTop - box.offsetTop, behavior: reduce.current ? "auto" : "smooth" });
+    update({ listCat: c });
+  };
+  const onListScroll = () => {
+    const box = listRef.current;
+    if (!box) return;
+    let at = 0;
+    box.querySelectorAll<HTMLElement>(".lsec").forEach((sec, i) => {
+      if (sec.offsetTop - box.offsetTop <= box.scrollTop + 80) at = i;
+    });
+    if (box.scrollTop + box.clientHeight >= box.scrollHeight - 2) at = catsOf().length - 1;
+    if (at !== viewRef.current.listCat) update({ listCat: at });
+  };
+  useLayoutEffect(() => {
+    if (!view.listOpen) return;
+    const box = listRef.current;
+    const sec = sectionOf(viewRef.current.listCat);
+    if (box && sec) box.scrollTop = sec.offsetTop - box.offsetTop;
+  }, [view.listOpen]);
+  useEffect(() => {
+    centerTab(lTabsRef.current, view.listCat, true);
+  }, [view.listCat, view.listOpen]);
 
   const pickFromList = (c: number, i: number) => {
     const idx = [...viewRef.current.idx];
@@ -593,46 +701,75 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
   const { restaurant } = menu;
   const languages = restaurant.languages.length ? restaurant.languages : ["pt-BR"];
   const flagCode = LANG_FLAG[lang] ?? "xx";
-  const coverVideo = mediaUrl(restaurant.cover_video_path);
-  const coverImage = mediaUrl(restaurant.cover_image_path) ?? thumbSrc(cats[0]?.items[0]);
+  // Banner enviado em Editar Perfil (foto ou vídeo); sem ele, a capa antiga ou o 1º prato.
+  const banner = restaurant.cover;
+  const coverVideo = banner ? (banner.kind === "video" ? videoSrc(banner, "card") : null) : mediaUrl(restaurant.cover_video_path);
+  const coverImage = banner
+    ? banner.kind === "photo"
+      ? mediaUrl(banner.storage_path)
+      : posterSrc(banner)
+    : (mediaUrl(restaurant.cover_image_path) ?? thumbSrc(cats[0]?.items[0]));
   const logo = mediaUrl(restaurant.logo_path);
   const near = (i: number) => view.open && (Math.abs(i - view.cur) <= 1 || Math.abs(i - view.target) <= 1);
   const style = { "--accent": restaurant.brand_color ?? undefined } as CSSProperties;
 
   return (
-    <div className={`cm${relang ? " relang" : ""}`} data-font={isFontTheme(restaurant.font_theme) ? restaurant.font_theme : DEFAULT_FONT_THEME} style={style}>
+    <div className={`cm${relang ? " relang" : ""}`} data-font={previewFont ?? (isFontTheme(restaurant.font_theme) ? restaurant.font_theme : DEFAULT_FONT_THEME)} style={style}>
       <main className="home" aria-hidden={view.open}>
-        <section className="hero">
-          {coverVideo ? (
-            <video
-              ref={heroVidRef}
-              src={coverVideo}
-              poster={coverImage ?? undefined}
-              muted
-              playsInline
-              autoPlay
-              loop
-              preload="auto"
-            />
-          ) : (
-            coverImage && <img src={coverImage} alt="" />
-          )}
-          <div className="hero-top">
-            <button className="round" onClick={() => openViewer(0, true)} aria-label={t("viewList")} disabled={!cats.length}>
-              <ListIcon />
-            </button>
-            {languages.length > 1 && (
+        <div className="hero-top">
+          <button className="round" onClick={() => openViewer(0, true)} aria-label={t("viewList")} disabled={!cats.length}>
+            <ListIcon />
+          </button>
+          {languages.length > 1 && (
+            // Bandeira atual; tocou, abre a coluna com as outras. Escolheu, troca o idioma.
+            <div className={`langpick${view.langOpen ? " open" : ""}`}>
               <button
-                className="round"
-                onClick={() => update({ langOpen: true })}
+                className="flagbtn cur"
+                onClick={() => update({ langOpen: !viewRef.current.langOpen })}
+                aria-expanded={view.langOpen}
                 aria-label={`${t("lang")}: ${LANG_NAME[lang] ?? lang}`}
               >
                 <span className="flag">
                   <Flag code={flagCode} />
                 </span>
               </button>
-            )}
-          </div>
+              {view.langOpen &&
+                languages
+                  .filter((l) => l !== lang)
+                  .map((l, k) => (
+                    <button
+                      key={l}
+                      className="flagbtn"
+                      style={{ "--k": k } as CSSProperties}
+                      lang={l}
+                      aria-label={LANG_NAME[l] ?? l}
+                      onClick={() => {
+                        update({ langOpen: false });
+                        void changeLang(l, true);
+                      }}
+                    >
+                      <span className="flag">
+                        <Flag code={LANG_FLAG[l] ?? "xx"} />
+                      </span>
+                    </button>
+                  ))}
+            </div>
+          )}
+        </div>
+        {view.langOpen && <div className="langcatch" onClick={() => update({ langOpen: false })} />}
+        {hasInfo(restaurant) && (
+          <button className="round hero-info" onClick={() => setInfoOpen(true)} aria-label={t("info")}>
+            <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+              <path d="M12 22a10 10 0 100-20 10 10 0 000 20zM12 16v-5M12 8h.01" />
+            </svg>
+          </button>
+        )}
+        <section className="hero">
+          {coverVideo ? (
+            <LoopVideo ref={heroVidRef} src={coverVideo} poster={coverImage} eager />
+          ) : (
+            coverImage && <img src={coverImage} alt="" />
+          )}
           <div className="brand">
             {/* A logo é a imagem enviada pelo restaurante; não muda com a fonte do cardápio. */}
             <div className="logo">{logo ? <img src={logo} alt={restaurant.name} /> : <b>{restaurant.name}</b>}</div>
@@ -684,7 +821,9 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
         )}
       </main>
 
-      <div className={`viewer${view.held ? " held" : ""}`} ref={viewerRef} hidden={!view.open} aria-hidden={!view.open}>
+      {/* No computador, fora da coluna do story: clicar fecha. */}
+      <div className="viewer-bg" hidden={!view.open} onClick={closeViewer} aria-hidden />
+      <div className={`viewer${view.held ? " held" : ""}${view.listOpen ? " listing" : ""}`} ref={viewerRef} hidden={!view.open} aria-hidden={!view.open}>
         <div
           className="stage"
           onPointerDown={onPointerDown}
@@ -727,12 +866,31 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
                   <span className="cat">{c.name}</span>
                   <h3 className="fd">{item.name}</h3>
                   {item.description && <p>{item.description}</p>}
+                  {(!!item.tags?.length || item.serves || item.country) && (
+                    <ul className="tags">
+                      {item.serves && <li>{tr("serves", lang).replace("{n}", String(item.serves))}</li>}
+                      {item.country && <li>{countryLabel(item.country, lang)}</li>}
+                      {item.tags?.map((tg) => (
+                        <li key={tg}>{tagLabel(tg, lang)}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {!item.hide_price && !!item.price_options?.length && (
+                    <ul className="opts">
+                      {item.price_options.map((o) => (
+                        <li key={o.label}>
+                          <span>{o.label}</span>
+                          <b>{formatPrice(o.price_cents, lang)}</b>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   <div className="acts">
                     <button onClick={() => share(item)}>
                       <ShareIcon />
                       <span>{t("share")}</span>
                     </button>
-                    <span className="price">{formatPrice(item.price_cents, lang)}</span>
+                    <Price item={item} lang={lang} className="price" />
                   </div>
                 </div>
                 <div className="dim" />
@@ -763,112 +921,88 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
           </button>
         </div>
 
-        <button
-          className="pause"
-          onClick={() => update({ userPaused: !viewRef.current.userPaused })}
-          aria-label={t(view.userPaused ? "resume" : "pause")}
-        >
-          <svg className="icon" viewBox="0 0 24 24">
-            {view.userPaused ? <path d="M7 5l12 7-12 7z" /> : <path d="M8 5v14M16 5v14" />}
-          </svg>
-        </button>
 
         {hint && <div className="hint">{t("hint")}</div>}
 
         {view.listOpen && (
-          <div className="list">
+          <div className="list" role="dialog" aria-labelledby="cm-list-title">
+            {/* Fundo: a foto da categoria atual, bem desfocada (uma imagem pequena, leve). */}
+            {thumbSrc(cats[view.listCat]?.items[0]) && (
+              <img key={view.listCat} className="lbg" src={thumbSrc(cats[view.listCat]?.items[0])!} alt="" aria-hidden />
+            )}
             <header>
-              <h2 className="fd">{t("listTitle")}</h2>
-              <button className="close" onClick={() => update({ listOpen: false })} aria-label={t("close")}>
+              <div>
+                <span className="kicker">{restaurant.name}</span>
+                <h2 id="cm-list-title" className="fd">
+                  {t("listTitle")}
+                </h2>
+              </div>
+              <button className="close glass" onClick={() => update({ listOpen: false })} aria-label={t("close")}>
                 <svg className="icon" viewBox="0 0 24 24">
                   <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
               </button>
             </header>
-            <div className="tabs vtabs" role="tablist">
+            <div className="tabs ltabs" role="tablist" ref={lTabsRef}>
               {cats.map((c, i) => (
                 <button key={c.id} role="tab" aria-selected={i === view.listCat} onClick={() => openListAt(i)}>
                   {c.name}
                 </button>
               ))}
             </div>
-            <div className="lbox">
-              {cats[view.listCat] && (
-                <>
-                  <h4 className="fd">{cats[view.listCat].name}</h4>
-                  {cats[view.listCat].items.map((it, i) => {
-                    const th = thumbSrc(it);
-                    return (
-                      <button key={it.id} className="li" onClick={() => pickFromList(view.listCat, i)}>
-                        {th ? <img src={th} alt="" loading="lazy" /> : <span className="noimg" />}
-                        <div>
+            <div className="lscroll" ref={listRef} onScroll={onListScroll}>
+              {cats.map((c, ci) => (
+                <section key={c.id} className="lsec" data-ci={ci}>
+                  <h3 className="fd">
+                    {c.name}
+                    <small>
+                      {c.items.length} {t("items")}
+                    </small>
+                  </h3>
+                  {c.description && <p className="lobs">{c.description}</p>}
+                  <div className="dgrid">
+                    {c.items.map((it, i) => {
+                      const th = thumbSrc(it);
+                      return (
+                        <button
+                          key={it.id}
+                          className="dish"
+                          style={{ "--i": ci === view.listCat ? i : 0 } as CSSProperties}
+                          onClick={() => pickFromList(ci, i)}
+                        >
+                          <span className="dimg">
+                            {th ? <img src={th} alt="" loading={ci === view.listCat ? "eager" : "lazy"} /> : null}
+                            <Price item={it} lang={lang} as="em" className="tagp" />
+                            {isVideo(it) && (
+                              <svg className="icon play" viewBox="0 0 24 24" aria-hidden>
+                                <path d="M8 5.5v13l11-6.5z" />
+                              </svg>
+                            )}
+                          </span>
                           <b>{it.name}</b>
-                          {it.description && <span>{it.description}</span>}
-                          <em>{formatPrice(it.price_cents, lang)}</em>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </>
-              )}
+                          {it.description && <span className="ddesc">{it.description}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
             </div>
           </div>
         )}
       </div>
 
-      {view.langOpen && (
-        <div
-          className="lang"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) update({ langOpen: false });
+      {infoOpen && (
+        <InfoSheet
+          restaurant={restaurant}
+          lang={lang}
+          status={status}
+          onClose={() => setInfoOpen(false)}
+          onCopy={(v) => {
+            void navigator.clipboard?.writeText(v).catch(() => {});
+            showToast(t("copied"));
           }}
-        >
-          <div className="lsheet" role="dialog" aria-labelledby="cm-lang-title">
-            <div className="grab" />
-            <div className="lhead">
-              <svg className="icon" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M3 12h18M12 3c2.6 2.6 3.8 5.6 3.8 9s-1.2 6.4-3.8 9c-2.6-2.6-3.8-5.6-3.8-9S9.4 5.6 12 3z" />
-              </svg>
-              <h2 id="cm-lang-title" className="fd">
-                {t("lang")}
-              </h2>
-            </div>
-            <p className="lsub">
-              {KNOWN_LANGS.filter((l) => languages.includes(l))
-                .map((l) => tr("lang", l))
-                .filter((v, i, a) => a.indexOf(v) === i)
-                .join(" · ")}
-            </p>
-            <div className="lgrid" role="radiogroup">
-              {languages.map((l) => (
-                <button
-                  key={l}
-                  className="lopt"
-                  role="radio"
-                  aria-checked={l === lang}
-                  lang={l}
-                  onClick={() => {
-                    void changeLang(l, l !== lang);
-                    setTimeout(() => update({ langOpen: false }), 220);
-                  }}
-                >
-                  <i className="fl">
-                    <Flag code={LANG_FLAG[l] ?? "xx"} />
-                  </i>
-                  <span>{LANG_NAME[l] ?? l}</span>
-                  {l === lang && (
-                    <span className="check" aria-hidden="true">
-                      <svg viewBox="0 0 16 16" width="16" height="16">
-                        <path d="M4 8.5l2.6 2.5L12 5.5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+        />
       )}
 
       {toast && (
@@ -893,18 +1027,252 @@ function CategoryCard({
   refCb: (el: HTMLButtonElement | null) => void;
   onOpen: () => void;
 }) {
-  const th = thumbSrc(cat.items[0]);
+  // Foto ou vídeo da categoria (painel > editar categoria); sem ela, o primeiro prato.
+  const cover: MenuMedia | null | undefined = cat.cover;
+  const th = cover ? (cover.kind === "photo" ? (posterSrc(cover) ?? mediaUrl(cover.storage_path)) : posterSrc(cover)) : thumbSrc(cat.items[0]);
   return (
-    <button className="card" ref={refCb} data-i={index} onClick={onOpen}>
-      {th && <img src={th} alt="" loading={index < 2 ? "eager" : "lazy"} />}
+    <button className={`card${cat.id === FEATURED_ID ? " feat" : ""}`} ref={refCb} data-i={index} onClick={onOpen}>
+      {cover?.kind === "video" ? (
+        <LoopVideo src={videoSrc(cover, "card")} poster={th} />
+      ) : (
+        th && <img src={th} alt="" loading={index < 2 ? "eager" : "lazy"} />
+      )}
       <div className="card-txt">
         <b className="fd">{cat.name}</b>
-        <span>
-          {cat.items.length} {tr("items", lang)}
-        </span>
+        <span>{cat.description || `${cat.items.length} ${tr("items", lang)}`}</span>
       </div>
     </button>
   );
+}
+
+const hasInfo = (r: PublicMenu["restaurant"]) =>
+  !!(r.description || r.address || r.phone || r.instagram || r.facebook || r.wifi_name || r.payment_methods?.length);
+
+// Informações do restaurante (Editar Perfil): endereço, contato, redes, Wi-Fi e pagamento.
+function InfoSheet({
+  restaurant: r,
+  lang,
+  status,
+  onClose,
+  onCopy,
+}: {
+  restaurant: PublicMenu["restaurant"];
+  lang: string;
+  status: StatusLabel | null;
+  onClose: () => void;
+  onCopy: (v: string) => void;
+}) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  }, [onClose]);
+  const digits = (r.phone ?? "").replace(/\D/g, "");
+  return (
+    <div className="infowrap" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="infosheet" role="dialog" aria-label={r.name}>
+        <header>
+          <h2 className="fd">{r.name}</h2>
+          <button className="close glass" onClick={onClose} aria-label={tr("close", lang)}>
+            <svg className="icon" viewBox="0 0 24 24">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </header>
+        {r.description && <p className="idesc">{r.description}</p>}
+        {status && r.opening_hours && (
+          <p className={`istatus${status.open ? " is-open" : ""}`}>
+            <i aria-hidden />
+            {status.state}
+            {status.detail && <em>{status.detail}</em>}
+          </p>
+        )}
+        <ul className="ilist">
+          {r.address && (
+            <li>
+              <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.address)}`} target="_blank" rel="noreferrer">
+                <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+                  <path d="M12 21s-7-6.1-7-11.5a7 7 0 0114 0C19 14.9 12 21 12 21zM12 12a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
+                </svg>
+                {r.address}
+              </a>
+            </li>
+          )}
+          {digits.length >= 10 && (
+            <li>
+              <a href={`https://wa.me/${digits.length <= 11 ? "55" : ""}${digits}`} target="_blank" rel="noreferrer">
+                <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+                  <path d="M4 20l1.3-4A8 8 0 1112 20a8 8 0 01-3.9-1zM9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.5-2-1-1 .8a4 4 0 01-1.8-1.8l.8-1-1-2z" />
+                </svg>
+                {r.phone}
+              </a>
+            </li>
+          )}
+          {r.instagram && (
+            <li>
+              <a href={`https://instagram.com/${r.instagram}`} target="_blank" rel="noreferrer">
+                <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+                  <path d="M7 3h10a4 4 0 014 4v10a4 4 0 01-4 4H7a4 4 0 01-4-4V7a4 4 0 014-4zM12 16a4 4 0 100-8 4 4 0 000 8zM17.5 6.5h.01" />
+                </svg>
+                @{r.instagram}
+              </a>
+            </li>
+          )}
+          {r.facebook && (
+            <li>
+              <a href={`https://facebook.com/${r.facebook}`} target="_blank" rel="noreferrer">
+                <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+                  <path d="M14 8h3V4h-3a4 4 0 00-4 4v3H7v4h3v6h4v-6h3l1-4h-4V8z" />
+                </svg>
+                {r.facebook}
+              </a>
+            </li>
+          )}
+          {r.wifi_name && (
+            <li>
+              <button onClick={() => r.wifi_password && onCopy(r.wifi_password)}>
+                <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+                  <path d="M2 9a15 15 0 0120 0M5.5 12.5a10 10 0 0113 0M9 16a5 5 0 016 0M12 19.5h.01" />
+                </svg>
+                <span>
+                  {tr("wifi", lang)}: <b>{r.wifi_name}</b>
+                  {r.wifi_password && (
+                    <>
+                      <br />
+                      {tr("password", lang)}: <b>{r.wifi_password}</b>
+                    </>
+                  )}
+                </span>
+              </button>
+            </li>
+          )}
+        </ul>
+        {!!r.payment_methods?.length && (
+          <div className="ipay">
+            {r.payment_methods.map((p) => (
+              <span key={p}>{paymentLabel(p, lang)}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Vídeo mudo em loop (banner e cards): só toca enquanto aparece na tela, para não
+// pesar o celular; Mux (HLS) entra pelo hls.js fora do Safari.
+function LoopVideo({
+  src,
+  poster,
+  eager,
+  ref,
+}: {
+  src: string | null;
+  poster: string | null;
+  eager?: boolean;
+  ref?: React.Ref<HTMLVideoElement>;
+}) {
+  const own = useRef<HTMLVideoElement>(null);
+  // Só carrega o vídeo quando o card chega perto da tela (o banner, na hora), e solta de
+  // volta quando sai: no celular, cada vídeo aberto ocupa memória e decodificação, e com
+  // muitas categorias isso trava a página. Ao voltar, mostra a capa e retoma.
+  const [active, setActive] = useState(!!eager);
+  const setRefs = useCallback(
+    (el: HTMLVideoElement | null) => {
+      own.current = el;
+      if (typeof ref === "function") ref(el);
+      else if (ref) (ref as React.RefObject<HTMLVideoElement | null>).current = el;
+    },
+    [ref],
+  );
+  const live = active ? src : null;
+  useAutoplay(own);
+  useHls(own, live);
+  useEffect(() => {
+    const v = own.current;
+    if (!v) return;
+    // Carrega antes de aparecer (uma tela de folga), para o vídeo já estar pronto quando o
+    // card chega. Só solta quando ele fica bem longe: sem isso, cada vaivém da rolagem
+    // recomeçava o download e o vídeo demorava de novo para começar.
+    const load = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) setActive(true);
+        else if (!eager) setActive(false);
+      },
+      { rootMargin: "100% 0px" },
+    );
+    // Toca só um vídeo de categoria por vez, e só o que está de fato na tela: no celular,
+    // dois vídeos decodificando juntos já travam a rolagem. O último a aparecer assume.
+    const play = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting && e.intersectionRatio >= 0.5) {
+          if (!v.dataset.hold) {
+            document.querySelectorAll<HTMLVideoElement>("video[data-loop]").forEach((o) => {
+              if (o !== v && o.dataset.want) {
+                o.dataset.want = "";
+                o.pause();
+              }
+            });
+            v.dataset.want = "1";
+            v.play().catch(() => {});
+          }
+        } else {
+          v.dataset.want = "";
+          v.pause();
+        }
+      },
+      { threshold: [0, 0.5] },
+    );
+    load.observe(v);
+    play.observe(v);
+    return () => {
+      load.disconnect();
+      play.disconnect();
+    };
+  }, [eager]);
+  const hls = !!live && live.includes(".m3u8");
+  return (
+    <video
+      ref={setRefs}
+      src={hls ? undefined : (live ?? undefined)}
+      poster={poster ?? undefined}
+      muted
+      playsInline
+      loop
+      preload={eager ? "auto" : "metadata"}
+      autoPlay={eager}
+      data-loop={eager ? undefined : ""}
+    />
+  );
+}
+
+// Com promoção: preço antigo riscado e o novo em destaque. Vários preços: "a partir de".
+// Preço oculto: nada.
+function Price({ item, lang, className, as: Tag = "span" }: { item: MenuItem; lang: string; className?: string; as?: "span" | "em" }) {
+  if (item.hide_price) return null;
+  if (item.price_options?.length) {
+    const min = Math.min(...item.price_options.map((o) => o.price_cents));
+    return (
+      <Tag className={className}>
+        <small>{tr("from", lang)}</small> {formatPrice(min, lang)}
+      </Tag>
+    );
+  }
+  const promo = item.promo_price_cents;
+  if (promo == null) return <Tag className={className}>{formatPrice(item.price_cents, lang)}</Tag>;
+  return (
+    <Tag className={`${className ?? ""} has-promo`.trim()}>
+      <s>{formatPrice(item.price_cents, lang)}</s> {formatPrice(promo, lang)}
+    </Tag>
+  );
+}
+
+// Centraliza a aba só dentro da própria barra (scrollIntoView rolaria a tela toda).
+function centerTab(bar: HTMLElement | null, i: number, smooth: boolean) {
+  const tab = bar?.children[i] as HTMLElement | undefined;
+  if (!bar || !tab) return;
+  const left = tab.offsetLeft - (bar.clientWidth - tab.offsetWidth) / 2;
+  bar.scrollTo({ left, behavior: smooth ? "smooth" : "auto" });
 }
 
 const warmed = new Set<string>();
@@ -925,11 +1293,15 @@ function StoryMedia({ item, onEnded }: { item: MenuItem; onEnded: () => void }) 
   const vidRef = useRef<HTMLVideoElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [ready, setReady] = useState(false);
+  const src = m ? (m.kind === "video" ? videoSrc(m) : mediaUrl(m.storage_path)) : null;
+  const hls = !!src && src.includes(".m3u8");
+  useAutoplay(vidRef);
   useLayoutEffect(() => {
     if (vidRef.current) vidRef.current.muted = true;
     const img = imgRef.current;
     if (img?.complete && img.naturalWidth) setReady(true);
   }, []);
+  useHls(vidRef, src);
   if (!m) return null;
   const low = posterSrc(m);
   const hi = `hi${ready ? " on" : ""}`;
@@ -940,7 +1312,7 @@ function StoryMedia({ item, onEnded }: { item: MenuItem; onEnded: () => void }) 
         <video
           ref={vidRef}
           className={hi}
-          src={videoSrc(m) ?? undefined}
+          src={hls ? undefined : (src ?? undefined)}
           poster={low ?? undefined}
           muted
           playsInline
@@ -952,7 +1324,7 @@ function StoryMedia({ item, onEnded }: { item: MenuItem; onEnded: () => void }) 
         <img
           ref={imgRef}
           className={hi}
-          src={mediaUrl(m.storage_path) ?? undefined}
+          src={src ?? undefined}
           alt={item.name}
           decoding="async"
           onLoad={() => setReady(true)}
