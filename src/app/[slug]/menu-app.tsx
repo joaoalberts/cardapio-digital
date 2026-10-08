@@ -1201,11 +1201,18 @@ function LoopVideo({
       },
       { rootMargin: "100% 0px" },
     );
-    // Toca só o que está de fato na tela; o resto fica pausado.
+    // Toca só um vídeo de categoria por vez, e só o que está de fato na tela: no celular,
+    // dois vídeos decodificando juntos já travam a rolagem. O último a aparecer assume.
     const play = new IntersectionObserver(
       ([e]) => {
-        if (e.isIntersecting) {
+        if (e.isIntersecting && e.intersectionRatio >= 0.5) {
           if (!v.dataset.hold) {
+            document.querySelectorAll<HTMLVideoElement>("video[data-loop]").forEach((o) => {
+              if (o !== v && o.dataset.want) {
+                o.dataset.want = "";
+                o.pause();
+              }
+            });
             v.dataset.want = "1";
             v.play().catch(() => {});
           }
@@ -1214,7 +1221,7 @@ function LoopVideo({
           v.pause();
         }
       },
-      { threshold: 0.25 },
+      { threshold: [0, 0.5] },
     );
     load.observe(v);
     play.observe(v);
@@ -1234,6 +1241,7 @@ function LoopVideo({
       loop
       preload={eager ? "auto" : "metadata"}
       autoPlay={eager}
+      data-loop={eager ? undefined : ""}
     />
   );
 }
