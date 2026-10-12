@@ -6,6 +6,7 @@ import { fontVariables } from "@/lib/menu/fonts";
 import { getPublicMenu } from "@/lib/menu/data";
 import { isValidSlug } from "@/lib/slug";
 import { MenuApp } from "./menu-app";
+import { MesaTag } from "./mesa-tag";
 import "@/styles/font-themes.css";
 import "./menu.css";
 
@@ -23,15 +24,21 @@ export async function generateMetadata({ params }: PageProps<"/[slug]">): Promis
   return { title: menu.restaurant.name, description: `Cardápio de ${menu.restaurant.name}` };
 }
 
-export default function MenuPage({ params }: PageProps<"/[slug]">) {
+export default function MenuPage({ params, searchParams }: PageProps<"/[slug]">) {
   return (
     <Suspense fallback={<div className="cm-loading" aria-busy="true" />}>
-      <Menu params={params} />
+      <Menu params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function Menu({ params }: { params: PageProps<"/[slug]">["params"] }) {
+async function Menu({
+  params,
+  searchParams,
+}: {
+  params: PageProps<"/[slug]">["params"];
+  searchParams: PageProps<"/[slug]">["searchParams"];
+}) {
   const slug = (await params).slug.toLowerCase();
   if (!isValidSlug(slug)) notFound();
   const menu = await getPublicMenu(slug);
@@ -42,7 +49,15 @@ async function Menu({ params }: { params: PageProps<"/[slug]">["params"] }) {
   if (process.env.NEXT_PUBLIC_SUPABASE_URL) preconnect(process.env.NEXT_PUBLIC_SUPABASE_URL);
   return (
     <div className={fontVariables}>
-      <MenuApp initialMenu={menu} />
+      {/* Mesa do QR: resolvida à parte, para o cardápio aparecer sem esperar por ela. */}
+      <MenuApp
+        initialMenu={menu}
+        tableTag={
+          <Suspense fallback={null}>
+            <MesaTag slug={slug} search={searchParams} />
+          </Suspense>
+        }
+      />
     </div>
   );
 }

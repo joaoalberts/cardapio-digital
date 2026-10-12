@@ -1,0 +1,59 @@
+/* Lista de mesas do painel: campo de nome, botão e uma linha por mesa. */
+.mz {
+  display: grid;
+  gap: 16px;
+}
+.mz-note {
+  margin: 0;
+  color: #6b6b6b;
+  font-size: 13.5px;
+}
+.mz-add {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.mz-field {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 220px;
+}
+.mz-field span {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  color: #aaa;
+}
+.mz-field input {
+  font: inherit;
+  font-size: 14px;
+  border: 1px solid #d9d9d9;
+  border-radius: 3px;
+  padding: 8px 10px;
+}
+.mz-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.mz-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid #e8e8e8;
+  border-radius: 3px;
+  font-size: 15px;
+}
+.mz-empty {
+  margin: 0;
+  color: #888;
+  font-size: 14px;
+}
+.mz-foot {
+  display: flex;
+  justify-content: flex-end;
+}

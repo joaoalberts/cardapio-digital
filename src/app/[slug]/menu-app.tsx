@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- fotos do cardápio ocupam a tela toda e já vêm em tamanho certo do Storage */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { fetchPublicMenu } from "@/lib/menu/client";
 import { DEFAULT_FONT_THEME, isFontTheme } from "@/lib/menu/font-themes";
 import { inWindow, statusLabel, type StatusLabel } from "@/lib/menu/hours";
@@ -66,7 +66,7 @@ function visibleCats(menu: PublicMenu, now: number | null): MenuCategory[] {
   ];
 }
 
-export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
+export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; tableTag?: ReactNode }) {
   const slug = initialMenu.restaurant.slug;
   const [menu, setMenuState] = useState(initialMenu);
   const menuRef = useRef(initialMenu);
@@ -756,6 +756,7 @@ export function MenuApp({ initialMenu }: { initialMenu: PublicMenu }) {
             </div>
           )}
         </div>
+        {tableTag}
         {view.langOpen && <div className="langcatch" onClick={() => update({ langOpen: false })} />}
         {hasInfo(restaurant) && (
           <button className="round hero-info" onClick={() => setInfoOpen(true)} aria-label={t("info")}>

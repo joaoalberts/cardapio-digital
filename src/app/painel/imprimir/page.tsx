@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { getPublicMenu } from "@/lib/menu/data";
 import { formatPrice, mediaUrl } from "@/lib/menu/media";
 import { tagLabel } from "@/lib/menu/tags";
+import { createClient } from "@/lib/supabase/server";
 import { currentRestaurant } from "../current";
 import { PrintNow } from "./print-now";
 import "./imprimir.css";
@@ -30,6 +31,46 @@ async function Imprimir({ searchParams }: { searchParams: Promise<{ tipo?: strin
   const link = `${proto}://${host}/${r.slug}`;
   const logo = mediaUrl(r.logo_path);
   const accent = r.brand_color ?? "#b8862f";
+
+  if (tipo === "mesas") {
+    const supabase = await createClient();
+    const { data } = await supabase.from("dining_tables").select("label, code").eq("restaurant_id", r.id).order("created_at");
+    // Um QR por mesa, com o código dela: o cardápio abre com o nome da mesa.
+    const mesas = await Promise.all(
+      (data ?? []).map(async (t) => ({
+        label: t.label,
+        svg: await QRCode.toString(`${link}?mesa=${t.code}`, { type: "svg", margin: 0, errorCorrectionLevel: "M" }),
+      })),
+    );
+    if (!mesas.length) {
+      return (
+        <div className="pr-sheet menu">
+          <p className="pr-empty">Ainda não há mesas. Crie as mesas em Mesas, no painel, e volte aqui para imprimir.</p>
+        </div>
+      );
+    }
+    // Quatro mesas por folha A4, como os displays.
+    const folhas = Array.from({ length: Math.ceil(mesas.length / 4) }, (_, s) => mesas.slice(s * 4, s * 4 + 4));
+    return (
+      <>
+        <PrintNow label="Imprimir QR das mesas" />
+        {folhas.map((folha, s) => (
+          <div key={s} className="pr-sheet mesa" style={{ "--accent": accent } as React.CSSProperties}>
+            {folha.map((m, k) => (
+              <section key={k} className="pr-card">
+                {/* eslint-disable-next-line @next/next/no-img-element -- logo enviada pelo restaurante */}
+                {logo ? <img className="pr-logo" src={logo} alt="" /> : <b className="pr-name">{r.name}</b>}
+                <p className="pr-table">{m.label}</p>
+                <div className="pr-qr" dangerouslySetInnerHTML={{ __html: m.svg }} />
+                <p className="pr-call">Aponte a câmera do celular</p>
+                <p className="pr-link">{link.replace(/^https?:\/\//, "")}</p>
+              </section>
+            ))}
+          </div>
+        ))}
+      </>
+    );
+  }
 
   if (tipo !== "cardapio") {
     const qr = await QRCode.toString(link, { type: "svg", margin: 0, errorCorrectionLevel: "M" });

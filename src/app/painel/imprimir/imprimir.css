@@ -47,6 +47,16 @@
 .pr-name {
   font-size: 26px;
 }
+.pr-table {
+  margin: 0;
+  font-size: 30px;
+}
+.pr-empty {
+  padding: 40px 24px;
+  text-align: center;
+  color: #777;
+  font: 16px system-ui, sans-serif;
+}
 .pr-kicker {
   margin: 0;
   font: 600 11px system-ui, sans-serif;
@@ -145,5 +155,8 @@
   }
   .pr-sheet.menu {
     padding: 14mm 0;
+  }
+  .pr-sheet.mesa + .pr-sheet.mesa {
+    break-before: page;
   }
 }
