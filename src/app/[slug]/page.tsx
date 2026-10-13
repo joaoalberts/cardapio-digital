@@ -43,10 +43,9 @@ async function Menu({
   if (!isValidSlug(slug)) notFound();
   const menu = await getPublicMenu(slug);
   if (!menu) notFound();
-  // Abre a conexão com o Mux e o Storage enquanto a página ainda carrega: o primeiro
-  // vídeo e as fotos começam algumas centenas de ms antes no celular.
+  // Abre a conexão com o Mux enquanto a página ainda carrega: o primeiro vídeo começa
+  // algumas centenas de ms antes no celular.
   preconnect("https://stream.mux.com");
-  if (process.env.NEXT_PUBLIC_SUPABASE_URL) preconnect(process.env.NEXT_PUBLIC_SUPABASE_URL);
   return (
     <div className={fontVariables}>
       {/* Mesa do QR: resolvida à parte, para o cardápio aparecer sem esperar por ela. */}

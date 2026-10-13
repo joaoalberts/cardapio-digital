@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Raleway } from "next/font/google";
-import { MUX_PENDING } from "@/lib/media-store";
-import { createClient } from "@/lib/supabase/server";
+import * as db from "@/lib/db/nocodb";
+import { muxPending } from "@/lib/media-store";
 import { ShellMenu, TopButton, VideoSync } from "./shell-menu";
 
 // Fonte do painel (a mesma família leve do DGuests); só o painel baixa.
@@ -30,13 +30,8 @@ export async function PanelShell({
 }) {
   // Vídeos ainda em preparo no Mux (de prato, categoria ou banner): qualquer página do
   // painel confere até ficarem prontos.
-  const supabase = await createClient();
-  const { count } = await supabase
-    .from("media")
-    .select("id", { count: "exact", head: true })
-    .eq("restaurant_id", restaurant.id)
-    .or(MUX_PENDING)
-    .not("mux_upload_id", "is", null);
+  type Pending = { status: string | null; mux_mp4: string | null; mux_upload_id: string | null };
+  const count = (await db.list<Pending>("media", { restaurant_id: restaurant.id })).filter(muxPending).length;
   return (
     <div className={`ap-app ${raleway.variable}`}>
       <aside>

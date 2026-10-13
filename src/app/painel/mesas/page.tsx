@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { mediaUrl } from "@/lib/menu/media";
-import { createClient } from "@/lib/supabase/server";
+import * as db from "@/lib/db/nocodb";
 import { currentRestaurant } from "../current";
 import { PanelShell } from "../shell";
 import { TablesEditor } from "./tables-editor";
@@ -24,20 +24,15 @@ export default function MesasPage() {
 async function Mesas() {
   const { restaurant } = await currentRestaurant("logo_path");
   const r = restaurant as typeof restaurant & { logo_path: string | null };
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("dining_tables")
-    .select("id, label, code")
-    .eq("restaurant_id", r.id)
-    .order("created_at");
-  if (error) throw error;
+  const rows = await db.list<{ id: string; label: string; code: string }>("dining_tables", { restaurant_id: r.id });
+  const data = rows.map(({ id, label, code }) => ({ id, label, code }));
   return (
     <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/mesas" title="Mesas">
       <section className="ap-card">
         <div className="ap-card-head">
           <h2>Mesas e QR Code</h2>
         </div>
-        <TablesEditor restaurantId={r.id} initial={data ?? []} />
+        <TablesEditor restaurantId={r.id} initial={data} />
       </section>
     </PanelShell>
   );

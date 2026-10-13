@@ -1,6 +1,7 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { currentUserId, isMember } from "@/lib/auth";
+import * as db from "@/lib/db/nocodb";
 
 export async function sendSupport(
   restaurantId: string,
@@ -10,8 +11,12 @@ export async function sendSupport(
   const message = String(input.message ?? "").trim().slice(0, 3000);
   const whatsapp = String(input.whatsapp ?? "").trim().slice(0, 30) || null;
   if (!subject || !message) return { error: "Preencha o assunto e a descrição." };
-  const supabase = await createClient();
-  const { error } = await supabase.from("support_requests").insert({ restaurant_id: restaurantId, subject, whatsapp, message });
-  if (error) return { error: "Não foi possível enviar. Tente de novo ou chame no WhatsApp." };
+  const userId = await currentUserId();
+  if (!userId || !(await isMember(restaurantId))) return { error: "Entre de novo no painel." };
+  try {
+    await db.insertOne("support_requests", { restaurant_id: restaurantId, user_id: userId, subject, whatsapp, message });
+  } catch {
+    return { error: "Não foi possível enviar. Tente de novo ou chame no WhatsApp." };
+  }
   return {};
 }

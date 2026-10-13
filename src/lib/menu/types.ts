@@ -1,4 +1,4 @@
-// Formato devolvido por get_public_menu (supabase/migrations).
+// Formato do cardápio público (montado em lib/menu/data.ts).
 export type MenuMedia = {
   id: string;
   kind: "photo" | "video";

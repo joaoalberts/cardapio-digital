@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- prévia da logo enviada */
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { uploadFile } from "@/lib/upload-client";
 import { shrinkImage } from "@/lib/images/shrink";
 import { mediaUrl } from "@/lib/menu/media";
 import { statusLabel, type StatusLabel } from "@/lib/menu/hours";
@@ -100,17 +100,13 @@ export function ProfileForm({ data: d, canTranslate, canEdit }: { data: ProfileD
     setLogoBusy(true);
     try {
       const blob = await shrinkImage(file, MAX_SIDE, 0.9);
-      const path = `${restaurantId}/logo-${Date.now()}.webp`;
-      const { error } = await createClient()
-        .storage.from("media")
-        .upload(path, blob, { contentType: "image/webp", cacheControl: "31536000" });
-      if (error) throw error;
+      const path = await uploadFile(restaurantId, `logo/${Date.now()}.webp`, blob);
       const res = await setLogo(restaurantId, path);
       if (res.error) throw new Error(res.error);
       setLogoUrl(mediaUrl(path));
       setToast("Logo atualizada no cardápio.");
     } catch (e) {
-      fail(e instanceof Error && e.message.startsWith("Não") ? e.message : "Não foi possível enviar a logo. Tente de novo.");
+      fail(e instanceof Error && (e.message.startsWith("Não") || e.message.startsWith("O envio")) ? e.message : "Não foi possível enviar a logo. Tente de novo.");
     } finally {
       setLogoBusy(false);
     }

@@ -1,34 +1,40 @@
 "use server";
 
 import { updateTag } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { isOwner } from "@/lib/auth";
+import * as db from "@/lib/db/nocodb";
 import { menuTag } from "@/lib/menu/data";
 import type { OpeningHours } from "@/lib/menu/types";
 import { backfillTranslations } from "@/lib/menu/auto-translate";
 import { replaceMedia, validMedia, type MediaInput } from "@/lib/media-store";
+import { ownsFile, removeFiles } from "@/lib/storage";
 import { PAYMENT_IDS } from "@/lib/menu/payments";
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DENIED = "Não foi possível salvar. Só o dono do restaurante pode mudar o perfil.";
 
+type Restaurant = { Id: number; slug: string; logo_path: string | null; languages: string[] | null };
+
+// Só o dono muda o restaurante (antes, regra do banco). Grava e devolve a linha de antes.
+async function updateRestaurant(restaurantId: string, patch: Record<string, unknown>): Promise<Restaurant | null> {
+  if (!(await isOwner(restaurantId))) return null;
+  const before = await db.first<Restaurant>("restaurants", { uid: restaurantId });
+  if (!before) return null;
+  try {
+    await db.updateRows("restaurants", [{ Id: before.Id, ...patch }]);
+  } catch {
+    return null;
+  }
+  return before;
+}
+
 // Guarda a logo já enviada ao Storage e apaga a anterior da pasta do restaurante.
 export async function setLogo(restaurantId: string, path: string | null): Promise<{ error?: string }> {
-  if (path !== null && !path.startsWith(`${restaurantId}/`)) return { error: "Arquivo inválido." };
-  const supabase = await createClient();
-  const { data: before } = await supabase.from("restaurants").select("logo_path").eq("id", restaurantId).maybeSingle();
-  const { data, error } = await supabase
-    .from("restaurants")
-    .update({ logo_path: path })
-    .eq("id", restaurantId)
-    .select("slug")
-    .maybeSingle();
-  if (error || !data) return { error: DENIED };
-
-  const old = before?.logo_path as string | null | undefined;
-  if (old && old !== path && old.startsWith(`${restaurantId}/`)) {
-    await supabase.storage.from("media").remove([old]);
-  }
-  updateTag(menuTag(data.slug));
+  if (path !== null && !(typeof path === "string" && ownsFile(restaurantId, path))) return { error: "Arquivo inválido." };
+  const before = await updateRestaurant(restaurantId, { logo_path: path });
+  if (!before) return { error: DENIED };
+  if (before.logo_path && before.logo_path !== path) await removeFiles([before.logo_path]);
+  updateTag(menuTag(before.slug));
   return {};
 }
 
@@ -49,15 +55,9 @@ export async function saveHours(restaurantId: string, hours: OpeningHours): Prom
   const valid = validHours(hours);
   if (!valid) return { error: "Confira os horários: use HH:MM e abertura diferente do fechamento." };
 
-  const supabase = await createClient();
   const clean = hours.map((day) => day.map(({ open, close }) => ({ open, close })));
-  const { data, error } = await supabase
-    .from("restaurants")
-    .update({ opening_hours: clean })
-    .eq("id", restaurantId)
-    .select("slug")
-    .maybeSingle();
-  if (error || !data) return { error: DENIED };
+  const data = await updateRestaurant(restaurantId, { opening_hours: clean });
+  if (!data) return { error: DENIED };
   updateTag(menuTag(data.slug));
   return {};
 }
@@ -67,17 +67,10 @@ const MENU_LANGS = ["en", "es", "fr", "it", "de"];
 // Idiomas do cardápio (português sempre). Ligar um idioma já sugere a tradução de tudo.
 export async function saveLanguages(restaurantId: string, langs: string[]): Promise<{ error?: string; translated?: number }> {
   const chosen = MENU_LANGS.filter((l) => langs.includes(l));
-  const supabase = await createClient();
-  const { data: before } = await supabase.from("restaurants").select("languages").eq("id", restaurantId).maybeSingle();
-  const { data, error } = await supabase
-    .from("restaurants")
-    .update({ languages: ["pt-BR", ...chosen] })
-    .eq("id", restaurantId)
-    .select("slug")
-    .maybeSingle();
-  if (error || !data) return { error: DENIED };
-  const added = chosen.filter((l) => !((before?.languages as string[] | undefined) ?? []).includes(l));
-  const translated = added.length ? await backfillTranslations(supabase, restaurantId) : 0;
+  const data = await updateRestaurant(restaurantId, { languages: ["pt-BR", ...chosen] });
+  if (!data) return { error: DENIED };
+  const added = chosen.filter((l) => !(data.languages ?? []).includes(l));
+  const translated = added.length ? await backfillTranslations(restaurantId) : 0;
   updateTag(menuTag(data.slug));
   return { translated };
 }
@@ -91,18 +84,12 @@ export async function saveMenuSettings(
   input: { brandColor: string; wifiName: string; wifiPassword: string },
 ): Promise<{ error?: string }> {
   if (!HEX.test(input.brandColor)) return { error: "Escolha uma cor válida." };
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("restaurants")
-    .update({
+  const data = await updateRestaurant(restaurantId, {
       brand_color: input.brandColor.toLowerCase(),
       wifi_name: opt(input.wifiName, 60),
       wifi_password: opt(input.wifiPassword, 60),
-    })
-    .eq("id", restaurantId)
-    .select("slug")
-    .maybeSingle();
-  if (error || !data) return { error: DENIED };
+    });
+  if (!data) return { error: DENIED };
   updateTag(menuTag(data.slug));
   return {};
 }
@@ -136,10 +123,7 @@ export async function saveProfile(restaurantId: string, input: ProfileInput): Pr
   if (!validHours(input.hours)) return { error: "Confira os horários: use HH:MM e abertura diferente do fechamento." };
   if (input.banner && !validMedia(restaurantId, input.banner)) return { error: "Arquivo inválido." };
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("restaurants")
-    .update({
+  const data = await updateRestaurant(restaurantId, {
       name,
       phone: opt(input.phone, 30),
       address: opt(input.address, 200),
@@ -153,13 +137,10 @@ export async function saveProfile(restaurantId: string, input: ProfileInput): Pr
       opening_hours: input.hours.map((day) => day.map(({ open, close }) => ({ open, close }))),
       show_payments: !!input.showPayments,
       payment_methods: PAYMENT_IDS.filter((p) => input.paymentMethods.includes(p)),
-    })
-    .eq("id", restaurantId)
-    .select("slug")
-    .maybeSingle();
-  if (error || !data) return { error: DENIED };
+    });
+  if (!data) return { error: DENIED };
   if (input.banner !== undefined) {
-    const res = await replaceMedia(supabase, restaurantId, { banner: restaurantId }, input.banner);
+    const res = await replaceMedia(restaurantId, { banner: restaurantId }, input.banner);
     if (res.error) return res;
   }
   updateTag(menuTag(data.slug));

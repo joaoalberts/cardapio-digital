@@ -5,7 +5,7 @@ import QRCode from "qrcode";
 import { getPublicMenu } from "@/lib/menu/data";
 import { formatPrice, mediaUrl } from "@/lib/menu/media";
 import { tagLabel } from "@/lib/menu/tags";
-import { createClient } from "@/lib/supabase/server";
+import * as db from "@/lib/db/nocodb";
 import { currentRestaurant } from "../current";
 import { PrintNow } from "./print-now";
 import "./imprimir.css";
@@ -33,8 +33,7 @@ async function Imprimir({ searchParams }: { searchParams: Promise<{ tipo?: strin
   const accent = r.brand_color ?? "#b8862f";
 
   if (tipo === "mesas") {
-    const supabase = await createClient();
-    const { data } = await supabase.from("dining_tables").select("label, code").eq("restaurant_id", r.id).order("created_at");
+    const data = await db.list<{ label: string; code: string }>("dining_tables", { restaurant_id: r.id });
     // Um QR por mesa, com o código dela: o cardápio abre com o nome da mesa.
     const mesas = await Promise.all(
       (data ?? []).map(async (t) => ({

@@ -2,12 +2,13 @@
 /* eslint-disable @next/next/no-img-element -- foto e vídeo enviados pelo restaurante */
 
 import { useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { uploadFile } from "@/lib/upload-client";
 import { extOf, IMAGE_TYPES, shrinkImage } from "@/lib/images/shrink";
 import { capturePoster, VIDEO_TYPES } from "@/lib/images/poster";
 import { mediaUrl } from "@/lib/menu/media";
 import { useAutoplay, useHls } from "@/lib/menu/use-hls";
 import { discardVideo, startVideoUpload, type MediaInput } from "./cardapio/actions";
+import { discardFiles } from "./files-actions";
 
 // Foto ou vídeo de um prato, categoria ou banner, já com o que o painel precisa mostrar.
 export type SlotMedia = {
@@ -18,8 +19,8 @@ export type SlotMedia = {
   input?: MediaInput;
 } | null;
 
-// Sem Mux, o vídeo vai inteiro para o Storage, que aceita até 50 MB por arquivo.
-const STORAGE_VIDEO_MAX = 50 * 1024 * 1024;
+// Sem Mux, o vídeo vai inteiro pelo nosso servidor, que aceita até 4 MB por arquivo.
+const STORAGE_VIDEO_MAX = 4 * 1024 * 1024;
 
 export const MEDIA_ACCEPT = "image/png,image/jpeg,image/webp,video/mp4,video/quicktime,video/webm,.mov,.mp4,.m4v";
 
@@ -56,15 +57,12 @@ export function useMediaSlot(restaurantId: string, folder: "items" | "categories
       const start = await startVideoUpload(restaurantId);
       if (start.error) throw new Error(start.error);
       if (!start.mux && file.size > STORAGE_VIDEO_MAX) {
-        throw new Error("Vídeo maior que 50 MB. Ligue o Mux para enviar vídeos sem limite de qualidade.");
+        throw new Error("Vídeo maior que 4 MB. Ligue o Mux para enviar vídeos sem limite de qualidade.");
       }
-      const storage = createClient().storage.from("media");
       const id = crypto.randomUUID();
       const poster = await capturePoster(file).catch(() => null);
       if (!poster) throw new Error("Não foi possível ler este vídeo. Tente um MP4 ou MOV.");
-      const posterPath = `${restaurantId}/${folder}/${id}-p.${extOf(poster)}`;
-      const p = await storage.upload(posterPath, poster, { contentType: poster.type, cacheControl: "31536000" });
-      if (p.error) throw p.error;
+      const posterPath = await uploadFile(restaurantId, `${folder}/${id}-p.${extOf(poster)}`, poster);
       uploaded.current.push(posterPath);
 
       let input: MediaInput;
@@ -79,10 +77,9 @@ export function useMediaSlot(restaurantId: string, folder: "items" | "categories
         muxUploads.current.push(start.uploadId!);
         input = { kind: "video", poster: posterPath, uploadId: start.uploadId };
       } else {
-        const ext = (file.name.split(".").pop() ?? "mp4").toLowerCase();
-        const path = `${restaurantId}/${folder}/${id}.${ext}`;
-        const v = await storage.upload(path, file, { contentType: file.type || "video/mp4", cacheControl: "31536000" });
-        if (v.error) throw v.error;
+        const ext = (file.name.split(".").pop() ?? "mp4").toLowerCase().replace(/[^a-z0-9]/g, "") || "mp4";
+        const video = file.type ? file : new Blob([file], { type: "video/mp4" });
+        const path = await uploadFile(restaurantId, `${folder}/${id}.${ext}`, video);
         uploaded.current.push(path);
         input = { kind: "video", poster: posterPath, path };
       }
@@ -111,12 +108,10 @@ export function useMediaSlot(restaurantId: string, folder: "items" | "categories
         shrinkImage(file, folder === "items" ? 640 : 1080, 0.82, "image/jpeg"),
       ]);
       const id = crypto.randomUUID();
-      const path = `${restaurantId}/${folder}/${id}.${extOf(full)}`;
-      const thumbPath = `${restaurantId}/${folder}/${id}-t.${extOf(small)}`;
-      const storage = createClient().storage.from("media");
-      const opts = (b: Blob) => ({ contentType: b.type, cacheControl: "31536000" });
-      const [a, b] = await Promise.all([storage.upload(path, full, opts(full)), storage.upload(thumbPath, small, opts(small))]);
-      if (a.error || b.error) throw a.error ?? b.error;
+      const [path, thumbPath] = await Promise.all([
+        uploadFile(restaurantId, `${folder}/${id}.${extOf(full)}`, full),
+        uploadFile(restaurantId, `${folder}/${id}-t.${extOf(small)}`, small),
+      ]);
       uploaded.current.push(path, thumbPath);
       put({
         kind: "photo",
@@ -125,8 +120,9 @@ export function useMediaSlot(restaurantId: string, folder: "items" | "categories
         status: "ready",
         input: { kind: "photo", path, thumb: thumbPath },
       });
-    } catch {
-      setError("Não foi possível enviar a foto. Tente de novo.");
+    } catch (e) {
+      const msg = e instanceof Error && e.message.startsWith("O envio") ? e.message : null;
+      setError(msg ?? "Não foi possível enviar a foto. Tente de novo.");
     } finally {
       setUploading(false);
     }
@@ -159,7 +155,7 @@ export function useMediaSlot(restaurantId: string, folder: "items" | "categories
       this.discard();
     },
     discard() {
-      if (uploaded.current.length) void createClient().storage.from("media").remove(uploaded.current);
+      if (uploaded.current.length) void discardFiles(restaurantId, uploaded.current);
       muxUploads.current.forEach((id) => void discardVideo(id));
       uploaded.current = [];
       muxUploads.current = [];

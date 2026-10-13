@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { updateSession } from "@/lib/supabase/proxy";
+import { SESSION_COOKIE, readSessionValue } from "@/lib/auth/session";
 
 export async function proxy(request: NextRequest) {
-  const { response, user } = await updateSession(request);
+  const user = await readSessionValue(request.cookies.get(SESSION_COOKIE)?.value);
   const { pathname } = request.nextUrl;
 
   // Verificação rápida; a página do painel confere de novo no servidor.
@@ -19,9 +19,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/painel/:path*", "/entrar", "/cadastro", "/auth/:path*"],
+  matcher: ["/painel/:path*", "/entrar", "/cadastro"],
 };

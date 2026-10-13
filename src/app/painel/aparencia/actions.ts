@@ -1,23 +1,22 @@
 "use server";
 
 import { updateTag } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { isOwner } from "@/lib/auth";
+import * as db from "@/lib/db/nocodb";
 import { isFontTheme } from "@/lib/menu/font-themes";
 import { menuTag } from "@/lib/menu/data";
 
 export async function publishFontTheme(restaurantId: string, theme: string): Promise<{ error?: string }> {
   if (!isFontTheme(theme)) return { error: "Fonte inválida." };
-
-  const supabase = await createClient();
-  // As regras do banco só deixam o dono mudar; para os outros a linha não volta.
-  const { data, error } = await supabase
-    .from("restaurants")
-    .update({ font_theme: theme })
-    .eq("id", restaurantId)
-    .select("slug")
-    .maybeSingle();
-  if (error || !data) return { error: "Não foi possível publicar. Só o dono do restaurante pode mudar a fonte." };
-
-  updateTag(menuTag(data.slug));
+  const denied = { error: "Não foi possível publicar. Só o dono do restaurante pode mudar a fonte." };
+  if (!(await isOwner(restaurantId))) return denied;
+  const r = await db.first<{ Id: number; slug: string }>("restaurants", { uid: restaurantId });
+  if (!r) return denied;
+  try {
+    await db.updateRows("restaurants", [{ Id: r.Id, font_theme: theme }]);
+  } catch {
+    return { error: "Não foi possível publicar. Tente de novo." };
+  }
+  updateTag(menuTag(r.slug));
   return {};
 }

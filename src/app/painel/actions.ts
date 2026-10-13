@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { currentUserId, endSession } from "@/lib/auth";
+import { createRestaurantFor, slugTaken } from "@/lib/restaurants";
 import { isValidSlug, slugify } from "@/lib/slug";
 import type { FormState } from "@/app/(auth)/actions";
 
@@ -14,19 +15,19 @@ export async function createRestaurant(_prev: FormState, formData: FormData): Pr
     return { error: "Esse endereço não pode ser usado. Use de 3 a 40 letras, números ou hífens." };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("create_restaurant", { p_name: name, p_slug: slug });
-  if (error) {
-    if (error.code === "23505") return { error: "Esse endereço já está em uso. Escolha outro." };
+  const userId = await currentUserId();
+  if (!userId) redirect("/entrar");
+  if (await slugTaken(slug)) return { error: "Esse endereço já está em uso. Escolha outro." };
+  try {
+    await createRestaurantFor(userId, name, slug);
+  } catch {
     return { error: "Não foi possível criar o restaurante. Tente de novo." };
   }
-  await supabase.auth.updateUser({ data: { pending_restaurant: null } });
   revalidatePath("/painel");
   redirect("/painel");
 }
 
 export async function signOut() {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
+  await endSession();
   redirect("/entrar");
 }

@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { mediaUrl } from "@/lib/menu/media";
 import type { OpeningHours } from "@/lib/menu/types";
-import { createClient } from "@/lib/supabase/server";
+import { currentUser } from "@/lib/auth";
+import * as db from "@/lib/db/nocodb";
 import { translationEnabled } from "@/lib/translate";
 import { currentRestaurant } from "../current";
 import { PanelShell } from "../shell";
@@ -43,19 +44,15 @@ async function Perfil() {
     show_payments: boolean;
     payment_methods: string[];
   };
-  const supabase = await createClient();
-  const [{ data: auth }, { data: cover }] = await Promise.all([
-    supabase.auth.getUser(),
-    supabase
-      .from("media")
-      .select("kind, storage_path, poster_path, mux_playback_id, status")
-      .eq("restaurant_id", r.id)
-      .is("item_id", null)
-      .is("category_id", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+  type Cover = {
+    Id: number; item_id: string | null; category_id: string | null; kind: "photo" | "video"; storage_path: string | null;
+    poster_path: string | null; mux_playback_id: string | null; status: "processing" | "ready" | "failed";
+  };
+  const [user, banners] = await Promise.all([
+    currentUser(),
+    db.list<Cover>("media", { restaurant_id: r.id, item_id: null, category_id: null }, { sort: "-Id", limit: 1 }),
   ]);
+  const cover = banners[0];
   const logo = mediaUrl(r.logo_path);
   return (
     <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo }} active="/painel/perfil" title="Editar Perfil">
@@ -64,7 +61,7 @@ async function Perfil() {
           id: r.id,
           name: r.name,
           slug: r.slug,
-          email: auth.user?.email ?? "",
+          email: user?.email ?? "",
           logo,
           banner: cover
             ? {
@@ -84,12 +81,12 @@ async function Perfil() {
           facebook: r.facebook ?? "",
           wifiName: r.wifi_name ?? "",
           wifiPassword: r.wifi_password ?? "",
-          showHours: r.show_hours,
+          showHours: !!r.show_hours,
           hours: r.opening_hours,
-          timezone: r.timezone,
-          showPayments: r.show_payments,
+          timezone: r.timezone || "America/Sao_Paulo",
+          showPayments: !!r.show_payments,
           paymentMethods: r.payment_methods ?? [],
-          languages: r.languages,
+          languages: r.languages ?? ["pt-BR"],
         }}
         canTranslate={translationEnabled()}
         canEdit={isOwner}

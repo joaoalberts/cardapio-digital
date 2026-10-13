@@ -1,14 +1,13 @@
 "use server";
 
-import { updateTag } from "next/cache";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
-import { menuTag } from "@/lib/menu/data";
+import { currentUserId, isMember } from "@/lib/auth";
+import * as db from "@/lib/db/nocodb";
+import { refreshMenu } from "@/lib/restaurants";
 import { TAG_IDS } from "@/lib/menu/tags";
 import { suggestTranslation, translationEnabled, type Texts } from "@/lib/translate";
 import { autoTranslate } from "@/lib/menu/auto-translate";
 import { createUpload, deleteAsset, muxEnabled, videoState, type VideoState } from "@/lib/mux";
-import { MUX_PENDING, mediaFilesOf, muxRow, removeMedia, replaceMedia, validMedia, type MediaInput } from "@/lib/media-store";
+import { mediaFilesOf, muxPending, muxRow, removeMedia, replaceMedia, validMedia, type MediaInput } from "@/lib/media-store";
 
 export type { MediaInput };
 import { headers } from "next/headers";
@@ -17,34 +16,54 @@ type Result = { error?: string };
 type Target = { categoryId: string } | { itemId: string };
 
 const FAIL = "Não foi possível salvar. Tente de novo.";
+const DENIED = "Entre de novo no painel.";
 
-// Depois de cada mudança, o cardápio público em cache é refeito na próxima visita.
-async function refreshMenu(supabase: SupabaseClient, restaurantId: string) {
-  const { data } = await supabase.from("restaurants").select("slug").eq("id", restaurantId).maybeSingle();
-  if (data) updateTag(menuTag(data.slug));
-}
+// Toda ação confere se quem chamou é membro do restaurante, e toda busca filtra por ele.
+const UUIDS = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const okId = (id: unknown): id is string => typeof id === "string" && UUIDS.test(id);
 
 const clean = (s: unknown, max: number) => String(s ?? "").trim().slice(0, max);
+
+
+type CatRow = { Id: number; id: string; name: string; description: string | null };
+type ItemRow = {
+  Id: number;
+  id: string;
+  category_id: string;
+  name: string;
+  description: string | null;
+  price_cents: number;
+  promo_price_cents: number | null;
+  tags: string[] | null;
+  position: number | null;
+  featured: boolean;
+  hide_price: boolean;
+  serves: number | null;
+  country: string | null;
+  price_options: unknown;
+};
 
 // ---------- Categorias ----------
 
 export async function createCategory(restaurantId: string, name: string): Promise<Result & { id?: string }> {
   const n = clean(name, 60);
   if (!n) return { error: "Dê um nome para a categoria." };
-  const supabase = await createClient();
-  const { count } = await supabase
-    .from("categories")
-    .select("id", { count: "exact", head: true })
-    .eq("restaurant_id", restaurantId);
-  const { data, error } = await supabase
-    .from("categories")
-    .insert({ restaurant_id: restaurantId, name: n, position: count ?? 0 })
-    .select("id")
-    .single();
-  if (error) return { error: FAIL };
-  await autoTranslate(supabase, restaurantId, { categoryId: data.id }, { name: n, description: "" });
-  await refreshMenu(supabase, restaurantId);
-  return { id: data.id };
+  if (!(await isMember(restaurantId))) return { error: DENIED };
+  try {
+    const count = await db.count("categories", { restaurant_id: restaurantId });
+    const row = await db.insertOne("categories", {
+      restaurant_id: restaurantId,
+      name: n,
+      description: "",
+      position: count,
+      active: true,
+    });
+    await autoTranslate(restaurantId, { categoryId: row.id }, { name: n, description: "" });
+    await refreshMenu(restaurantId);
+    return { id: row.id };
+  } catch {
+    return { error: FAIL };
+  }
 }
 
 export type CategoryInput = {
@@ -69,40 +88,73 @@ export async function updateCategory(restaurantId: string, id: string, input: Ca
     return { error: "Confira o horário da categoria: início e fim diferentes, no formato HH:MM." };
   }
   if (input.media && !validMedia(restaurantId, input.media)) return { error: "Arquivo inválido." };
-  const supabase = await createClient();
-  const { data: before } = await supabase.from("categories").select("name, description").eq("id", id).maybeSingle();
-  const row: Record<string, unknown> = { name: n, active: input.active };
+  if (!okId(id) || !(await isMember(restaurantId))) return { error: DENIED };
+  const before = await db.first<CatRow>("categories", { uid: id, restaurant_id: restaurantId });
+  if (!before) return { error: FAIL };
+  const row: Record<string, unknown> = { name: n, active: !!input.active };
   const description = input.description === undefined ? undefined : clean(input.description, 300);
-  if (description !== undefined) Object.assign(row, { description, available_from: from, available_to: to });
-  const { error } = await supabase.from("categories").update(row).eq("id", id);
-  if (error) return { error: FAIL };
+  if (description !== undefined) {
+    Object.assign(row, {
+      description,
+      available_from: from ? `${from}:00` : null,
+      available_to: to ? `${to}:00` : null,
+    });
+  }
+  try {
+    await db.updateRows("categories", [{ Id: before.Id, ...row }]);
+  } catch {
+    return { error: FAIL };
+  }
   if (input.media !== undefined) {
-    const res = await replaceMedia(supabase, restaurantId, { categoryId: id }, input.media);
+    const res = await replaceMedia(restaurantId, { categoryId: id }, input.media);
     if (res.error) return res;
   }
-  const desc = description ?? before?.description ?? "";
-  if (before?.name !== n || before?.description !== desc) {
-    await autoTranslate(supabase, restaurantId, { categoryId: id }, { name: n, description: desc });
+  const desc = description ?? before.description ?? "";
+  if (before.name !== n || (before.description ?? "") !== desc) {
+    await autoTranslate(restaurantId, { categoryId: id }, { name: n, description: desc });
   }
-  await refreshMenu(supabase, restaurantId);
+  await refreshMenu(restaurantId);
   return {};
 }
 
 export async function deleteCategory(restaurantId: string, id: string): Promise<Result> {
-  const supabase = await createClient();
-  const files = await mediaFilesOf(supabase, { anyInCategory: id });
-  const { error } = await supabase.from("categories").delete().eq("id", id);
-  if (error) return { error: "Não foi possível excluir a categoria." };
-  await removeMedia(supabase, files);
-  await refreshMenu(supabase, restaurantId);
+  if (!okId(id) || !(await isMember(restaurantId))) return { error: DENIED };
+  try {
+    const files = await mediaFilesOf(restaurantId, { anyInCategory: id });
+    const items = await db.list<{ id: string }>("items", { restaurant_id: restaurantId, category_id: id });
+    // Sem "on delete cascade" no NocoDB: apaga pratos e traduções junto.
+    const trs = await db.list<{ Id: number; category_id: string | null; item_id: string | null }>("translations", {
+      restaurant_id: restaurantId,
+    });
+    const itemIds = new Set(items.map((i) => i.id));
+    await db.removeIds(
+      "translations",
+      trs.filter((t) => t.category_id === id || (t.item_id && itemIds.has(t.item_id))).map((t) => t.Id),
+    );
+    await db.remove("items", { restaurant_id: restaurantId, category_id: id });
+    await db.remove("categories", { restaurant_id: restaurantId, uid: id });
+    await removeMedia(files);
+  } catch {
+    return { error: "Não foi possível excluir a categoria." };
+  }
+  await refreshMenu(restaurantId);
   return {};
 }
 
 export async function reorder(restaurantId: string, table: "categories" | "items", ids: string[]): Promise<Result> {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("set_positions", { p_table: table, p_ids: ids });
-  if (error) return { error: "Não foi possível mudar a ordem." };
-  await refreshMenu(supabase, restaurantId);
+  if (table !== "categories" && table !== "items") return { error: "Não foi possível mudar a ordem." };
+  if (!Array.isArray(ids) || !ids.every(okId) || !(await isMember(restaurantId))) return { error: DENIED };
+  try {
+    const rows = await db.list<{ Id: number; id: string }>(table, { restaurant_id: restaurantId });
+    const pos = new Map(ids.map((id, i) => [id, i]));
+    await db.updateRows(
+      table,
+      rows.filter((r) => pos.has(r.id)).map((r) => ({ Id: r.Id, position: pos.get(r.id)! })),
+    );
+  } catch {
+    return { error: "Não foi possível mudar a ordem." };
+  }
+  await refreshMenu(restaurantId);
   return {};
 }
 
@@ -137,7 +189,7 @@ export async function saveItem(restaurantId: string, input: ItemInput): Promise<
   if (!input.priceOptions && promo != null && !(promo >= 0 && promo < price)) {
     return { error: "O preço promocional precisa ser menor que o preço normal." };
   }
-  const tags = input.tags.filter((t) => (TAG_IDS as string[]).includes(t));
+  const tags = (input.tags ?? []).filter((t) => (TAG_IDS as string[]).includes(t));
   const m = input.media;
   if (m && !validMedia(restaurantId, m)) return { error: "Arquivo inválido." };
   const options = (input.priceOptions ?? [])
@@ -151,8 +203,12 @@ export async function saveItem(restaurantId: string, input: ItemInput): Promise<
   }
   const serves = input.serves == null ? null : Math.round(Number(input.serves));
   if (serves != null && !(serves >= 1 && serves <= 20)) return { error: "Quantidade de pessoas inválida." };
+  if (!okId(input.categoryId) || (input.id !== undefined && !okId(input.id)) || !(await isMember(restaurantId))) {
+    return { error: DENIED };
+  }
+  // A categoria precisa ser deste restaurante (antes, a chave estrangeira garantia).
+  if (!(await db.first("categories", { uid: input.categoryId, restaurant_id: restaurantId }))) return { error: FAIL };
 
-  const supabase = await createClient();
   const row = {
     category_id: input.categoryId,
     name,
@@ -160,7 +216,7 @@ export async function saveItem(restaurantId: string, input: ItemInput): Promise<
     price_cents: input.priceOptions ? Math.min(...options.map((o) => o.price_cents)) : price,
     promo_price_cents: input.priceOptions ? null : promo,
     tags,
-    active: input.active,
+    active: !!input.active,
     featured: !!input.featured,
     hide_price: !!input.hidePrice,
     serves,
@@ -170,42 +226,41 @@ export async function saveItem(restaurantId: string, input: ItemInput): Promise<
 
   let id = input.id;
   let textsChanged = true;
-  if (id) {
-    const { data: before } = await supabase.from("items").select("name, description").eq("id", id).maybeSingle();
-    textsChanged = before?.name !== name || before?.description !== description;
-    const { error } = await supabase.from("items").update(row).eq("id", id);
-    if (error) return { error: FAIL };
-  } else {
-    const { count } = await supabase
-      .from("items")
-      .select("id", { count: "exact", head: true })
-      .eq("category_id", input.categoryId);
-    const { data, error } = await supabase
-      .from("items")
-      .insert({ ...row, restaurant_id: restaurantId, position: count ?? 0 })
-      .select("id")
-      .single();
-    if (error) return { error: FAIL };
-    id = data.id as string;
+  try {
+    if (id) {
+      const before = await db.first<ItemRow>("items", { uid: id, restaurant_id: restaurantId });
+      if (!before) return { error: FAIL };
+      textsChanged = before.name !== name || (before.description ?? "") !== description;
+      await db.updateRows("items", [{ Id: before.Id, ...row }]);
+    } else {
+      const count = await db.count("items", { restaurant_id: restaurantId, category_id: input.categoryId });
+      id = (await db.insertOne("items", { ...row, restaurant_id: restaurantId, position: count })).id;
+    }
+  } catch {
+    return { error: FAIL };
   }
 
   if (m !== undefined) {
-    const res = await replaceMedia(supabase, restaurantId, { itemId: id }, m);
+    const res = await replaceMedia(restaurantId, { itemId: id }, m);
     if (res.error) return { ...res, id };
   }
 
-  if (textsChanged) await autoTranslate(supabase, restaurantId, { itemId: id }, { name, description });
-  await refreshMenu(supabase, restaurantId);
+  if (textsChanged) await autoTranslate(restaurantId, { itemId: id }, { name, description });
+  await refreshMenu(restaurantId);
   return { id };
 }
 
 export async function deleteItem(restaurantId: string, id: string): Promise<Result> {
-  const supabase = await createClient();
-  const files = await mediaFilesOf(supabase, { itemId: id });
-  const { error } = await supabase.from("items").delete().eq("id", id);
-  if (error) return { error: "Não foi possível excluir o prato." };
-  await removeMedia(supabase, files);
-  await refreshMenu(supabase, restaurantId);
+  if (!okId(id) || !(await isMember(restaurantId))) return { error: DENIED };
+  try {
+    const files = await mediaFilesOf(restaurantId, { itemId: id });
+    await db.remove("translations", { restaurant_id: restaurantId, item_id: id });
+    await db.remove("items", { restaurant_id: restaurantId, uid: id });
+    await removeMedia(files);
+  } catch {
+    return { error: "Não foi possível excluir o prato." };
+  }
+  await refreshMenu(restaurantId);
   return {};
 }
 
@@ -215,9 +270,7 @@ export async function deleteItem(restaurantId: string, id: string): Promise<Resu
 export async function startVideoUpload(
   restaurantId: string,
 ): Promise<{ error?: string; mux?: boolean; uploadId?: string; url?: string }> {
-  const supabase = await createClient();
-  const { data } = await supabase.from("restaurants").select("id").eq("id", restaurantId).maybeSingle();
-  if (!data) return { error: "Entre de novo no painel." };
+  if (!(await isMember(restaurantId))) return { error: DENIED };
   if (!muxEnabled()) return { mux: false };
   const origin = (await headers()).get("origin") ?? "*";
   try {
@@ -233,11 +286,7 @@ export async function startVideoUpload(
 // Vídeo enviado e não salvo: apaga no Mux para não ocupar a conta.
 export async function discardVideo(uploadId: string) {
   if (!muxEnabled()) return;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
+  if (!(await currentUserId())) return;
   for (let k = 0; k < 4; k++) {
     const st = await videoState(uploadId).catch((): VideoState => ({ status: "failed" }));
     if ("assetId" in st && st.assetId) return deleteAsset(st.assetId);
@@ -246,79 +295,108 @@ export async function discardVideo(uploadId: string) {
   }
 }
 
+type PendingRow = { Id: number; status: string | null; mux_upload_id: string | null; mux_mp4: string | null };
+
 // Confere no Mux os vídeos ainda em preparo; os prontos passam a aparecer no cardápio.
 export async function syncVideos(restaurantId: string): Promise<{ pending: number }> {
-  if (!muxEnabled()) return { pending: 0 };
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("media")
-    .select("id, status, mux_upload_id, mux_mp4")
-    .eq("restaurant_id", restaurantId)
-    .or(MUX_PENDING)
-    .not("mux_upload_id", "is", null);
+  if (!muxEnabled() || !(await isMember(restaurantId))) return { pending: 0 };
+  const rows = (await db.list<PendingRow>("media", { restaurant_id: restaurantId })).filter(muxPending);
   let pending = 0;
   let changed = false;
-  for (const m of data ?? []) {
+  for (const m of rows) {
     const row = await muxRow(m.mux_upload_id!);
-    if (row.status === "processing" || (row.status === "ready" && row.mux_mp4 === null)) pending++;
-    if (row.status !== m.status || ("mux_mp4" in row && row.mux_mp4 !== m.mux_mp4)) changed = true;
-    await supabase.from("media").update(row).eq("id", m.id);
+    if (row.status === "processing" || (row.status === "ready" && row.mux_mp4 == null)) pending++;
+    if (row.status !== m.status || ("mux_mp4" in row && row.mux_mp4 !== m.mux_mp4)) {
+      changed = true;
+      await db.updateRows("media", [{ Id: m.Id, ...row }]);
+    }
   }
-  if (changed) await refreshMenu(supabase, restaurantId);
+  if (changed) await refreshMenu(restaurantId);
   return { pending };
 }
 
 // Cópia sem foto (o arquivo é do prato original) e escondida, para o dono ajustar antes.
 export async function duplicateItem(restaurantId: string, id: string): Promise<Result & { id?: string }> {
-  const supabase = await createClient();
-  const { data: it } = await supabase
-    .from("items")
-    .select("category_id, name, description, price_cents, promo_price_cents, tags, position, featured, hide_price, serves, country, price_options")
-    .eq("id", id)
-    .maybeSingle();
-  if (!it) return { error: FAIL };
-  const { data, error } = await supabase
-    .from("items")
-    .insert({ ...it, restaurant_id: restaurantId, name: `${it.name} (cópia)`.slice(0, 80), active: false, position: it.position + 1 })
-    .select("id")
-    .single();
-  if (error) return { error: FAIL };
-  const { data: tr } = await supabase.from("translations").select("language, name, description, auto").eq("item_id", id);
-  if (tr?.length) {
-    await supabase
-      .from("translations")
-      .insert(tr.map((t) => ({ ...t, restaurant_id: restaurantId, item_id: data.id })));
+  if (!okId(id) || !(await isMember(restaurantId))) return { error: DENIED };
+  try {
+    const it = await db.first<ItemRow>("items", { uid: id, restaurant_id: restaurantId });
+    if (!it) return { error: FAIL };
+    const copy = await db.insertOne("items", {
+      restaurant_id: restaurantId,
+      category_id: it.category_id,
+      name: `${it.name} (cópia)`.slice(0, 80),
+      description: it.description ?? "",
+      price_cents: it.price_cents,
+      promo_price_cents: it.promo_price_cents,
+      tags: it.tags ?? [],
+      position: (it.position ?? 0) + 1,
+      active: false,
+      featured: it.featured,
+      hide_price: it.hide_price,
+      serves: it.serves,
+      country: it.country,
+      price_options: it.price_options ?? null,
+    });
+    const tr = await db.list<{ language: string; name: string; description: string | null; auto: boolean }>(
+      "translations",
+      { restaurant_id: restaurantId, item_id: id },
+    );
+    await db.insert(
+      "translations",
+      tr.map((t) => ({
+        restaurant_id: restaurantId,
+        item_id: copy.id,
+        language: t.language,
+        name: t.name,
+        description: t.description ?? "",
+        auto: t.auto,
+      })),
+    );
+    await refreshMenu(restaurantId);
+    return { id: copy.id };
+  } catch {
+    return { error: FAIL };
   }
-  await refreshMenu(supabase, restaurantId);
-  return { id: data.id };
 }
 
 // ---------- Traduções ----------
 
 export type TranslationRow = { language: string; name: string; description: string };
 
+const LANG = /^[a-z]{2}(-[A-Z]{2})?$/;
+
 // Salva o que o dono revisou: vira tradução aprovada (auto = false). Nome vazio apaga.
 export async function saveTranslations(restaurantId: string, target: Target, rows: TranslationRow[]): Promise<Result> {
-  const supabase = await createClient();
   const col = "itemId" in target ? "item_id" : "category_id";
   const id = "itemId" in target ? target.itemId : target.categoryId;
-  const { data: existing } = await supabase.from("translations").select("id, language").eq(col, id);
-  for (const r of rows) {
-    const name = clean(r.name, 80);
-    const description = clean(r.description, 500);
-    const row = existing?.find((e) => e.language === r.language);
-    const res = !name
-      ? row
-        ? await supabase.from("translations").delete().eq("id", row.id)
-        : { error: null }
-      : row
-        ? await supabase.from("translations").update({ name, description, auto: false }).eq("id", row.id)
-        : await supabase
-            .from("translations")
-            .insert({ restaurant_id: restaurantId, [col]: id, language: r.language, name, description, auto: false });
-    if (res.error) return { error: "Não foi possível salvar as traduções." };
+  if (!okId(id) || !(await isMember(restaurantId))) return { error: DENIED };
+  try {
+    const parent = await db.first(col === "item_id" ? "items" : "categories", { uid: id, restaurant_id: restaurantId });
+    if (!parent) return { error: FAIL };
+    const existing = await db.list<{ Id: number; language: string }>("translations", {
+      restaurant_id: restaurantId,
+      [col]: id,
+    });
+    const del: number[] = [];
+    const upd: { Id: number; name: string; description: string; auto: boolean }[] = [];
+    const ins: Record<string, unknown>[] = [];
+    for (const r of rows) {
+      if (!LANG.test(String(r.language))) continue;
+      const name = clean(r.name, 80);
+      const description = clean(r.description, 500);
+      const row = existing.find((e) => e.language === r.language);
+      if (!name) {
+        if (row) del.push(row.Id);
+      } else if (row) upd.push({ Id: row.Id, name, description, auto: false });
+      else ins.push({ restaurant_id: restaurantId, [col]: id, language: r.language, name, description, auto: false });
+    }
+    await db.removeIds("translations", del);
+    await db.updateRows("translations", upd);
+    await db.insert("translations", ins);
+  } catch {
+    return { error: "Não foi possível salvar as traduções." };
   }
-  await refreshMenu(supabase, restaurantId);
+  await refreshMenu(restaurantId);
   return {};
 }
 
@@ -328,11 +406,7 @@ export async function suggestTranslations(
 ): Promise<{ error?: string; suggestions?: Record<string, Texts> }> {
   if (!translationEnabled()) return { error: "A sugestão automática ainda não está ligada neste sistema." };
   // Só quem está logado no painel usa o serviço de tradução (ele tem custo).
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Entre de novo no painel." };
+  if (!(await currentUserId())) return { error: "Entre de novo no painel." };
   const pairs = await Promise.all(
     languages.filter((l) => l !== "pt-BR").map(async (l) => [l, await suggestTranslation(texts, l).catch(() => null)] as const),
   );
