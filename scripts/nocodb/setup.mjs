@@ -1,0 +1,118 @@
+// Cria (ou completa) a base "Cardápio Digital" no NocoDB com as mesmas tabelas do
+// Supabase. Pode rodar de novo: só cria o que ainda não existe.
+//
+//   NOCODB_API_TOKEN=... node scripts/nocodb/setup.mjs
+//
+// Ids continuam sendo uuids em texto (coluna "uid"), e as ligações entre tabelas são
+// colunas de texto com o uid do pai (restaurant_id, category_id...). Assim os dados do
+// Supabase entram sem conversão e o isolamento por restaurante fica no código do app.
+
+const API = process.env.NOCODB_URL ?? "https://app.nocodb.com";
+const TOKEN = process.env.NOCODB_API_TOKEN;
+const WORKSPACE = process.env.NOCODB_WORKSPACE ?? "wouavjse";
+const BASE_TITLE = process.env.NOCODB_BASE_TITLE ?? "Cardápio Digital";
+
+if (!TOKEN) {
+  console.error("Falta NOCODB_API_TOKEN");
+  process.exit(1);
+}
+
+const text = (name) => ({ column_name: name, title: name, uidt: "SingleLineText" });
+const long = (name) => ({ column_name: name, title: name, uidt: "LongText" });
+const num = (name) => ({ column_name: name, title: name, uidt: "Number" });
+const bool = (name) => ({ column_name: name, title: name, uidt: "Checkbox" });
+const json = (name) => ({ column_name: name, title: name, uidt: "JSON" });
+const date = (name) => ({ column_name: name, title: name, uidt: "DateTime" });
+
+const id = text("uid");
+const created = date("created_at");
+
+export const TABLES = {
+  users: [id, { ...text("email"), uidt: "Email" }, text("password_hash"), created],
+  restaurants: [
+    id, text("name"), text("slug"), text("logo_path"), text("brand_color"),
+    json("languages"), num("menu_version"), text("plan"), text("subscription_status"),
+    date("trial_ends_at"), text("cover_video_path"), text("cover_image_path"),
+    text("font_theme"), text("timezone"), json("opening_hours"), long("description"),
+    text("phone"), text("address"), text("instagram"), text("facebook"), text("wifi_name"),
+    text("wifi_password"), json("payment_methods"), bool("show_hours"),
+    bool("show_payments"), created,
+  ],
+  members: [text("restaurant_id"), text("user_id"), text("role"), created],
+  categories: [
+    id, text("restaurant_id"), text("name"), long("description"), num("position"),
+    bool("active"), text("available_from"), text("available_to"), created,
+  ],
+  items: [
+    id, text("restaurant_id"), text("category_id"), text("name"), long("description"),
+    num("price_cents"), num("promo_price_cents"), json("price_options"), json("tags"),
+    num("position"), bool("active"), bool("featured"), bool("hide_price"), num("serves"),
+    text("country"), created,
+  ],
+  media: [
+    id, text("restaurant_id"), text("item_id"), text("category_id"), text("kind"),
+    text("storage_path"), text("poster_path"), text("mux_asset_id"), text("mux_playback_id"),
+    text("mux_upload_id"), text("mux_mp4"), num("position"), text("status"), created,
+  ],
+  translations: [
+    id, text("restaurant_id"), text("category_id"), text("item_id"), text("language"),
+    text("name"), long("description"), bool("auto"),
+  ],
+  dining_tables: [id, text("restaurant_id"), text("label"), text("code"), bool("active"), created],
+  support_requests: [
+    id, text("restaurant_id"), text("user_id"), text("subject"), text("whatsapp"),
+    long("message"), created,
+  ],
+};
+
+async function api(path, init = {}) {
+  const res = await fetch(API + path, {
+    ...init,
+    headers: { "xc-token": TOKEN, "content-type": "application/json", ...init.headers },
+  });
+  const body = await res.text();
+  if (!res.ok) throw new Error(`${init.method ?? "GET"} ${path}: ${res.status} ${body}`);
+  return body ? JSON.parse(body) : null;
+}
+
+async function main() {
+  const bases = await api(`/api/v2/meta/workspaces/${WORKSPACE}/bases`);
+  let base = bases.list.find((b) => b.title === BASE_TITLE);
+  if (!base) {
+    base = await api(`/api/v2/meta/workspaces/${WORKSPACE}/bases`, {
+      method: "POST",
+      body: JSON.stringify({ title: BASE_TITLE }),
+    });
+    console.log(`base criada: ${base.id}`);
+  } else {
+    console.log(`base existente: ${base.id}`);
+  }
+
+  const tables = await api(`/api/v2/meta/bases/${base.id}/tables`);
+  for (const [name, columns] of Object.entries(TABLES)) {
+    let table = tables.list.find((t) => t.table_name === name || t.title === name);
+    if (!table) {
+      table = await api(`/api/v2/meta/bases/${base.id}/tables`, {
+        method: "POST",
+        body: JSON.stringify({ table_name: name, title: name, columns }),
+      });
+      console.log(`tabela criada: ${name} (${table.id})`);
+      continue;
+    }
+    const meta = await api(`/api/v2/meta/tables/${table.id}`);
+    const have = new Set(meta.columns.map((c) => c.column_name));
+    for (const col of columns.filter((c) => !have.has(c.column_name))) {
+      await api(`/api/v2/meta/tables/${table.id}/columns`, {
+        method: "POST",
+        body: JSON.stringify(col),
+      });
+      console.log(`coluna criada: ${name}.${col.column_name}`);
+    }
+    console.log(`tabela ok: ${name} (${table.id})`);
+  }
+}
+
+main().catch((err) => {
+  console.error(err.message);
+  process.exit(1);
+});
