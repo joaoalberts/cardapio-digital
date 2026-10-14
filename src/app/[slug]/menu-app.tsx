@@ -1277,30 +1277,36 @@ function Price({ item, lang, className, as: Tag = "span" }: { item: MenuItem; la
 
 // Centraliza a aba só dentro da própria barra (scrollIntoView rolaria a tela toda).
 /**
- * Faz a barra de categorias caber numa linha quando dá, encolhendo um pouco a
- * letra e o espaçamento (até 85%). Se ainda não couber, as abas quebram linha
- * (no CSS): nenhum nome fica cortado, com quantas categorias houver.
+ * Mantém a barra de categorias numa linha só: primeiro encolhe um pouco a
+ * letra e o espaçamento (até 80%) para tudo caber. Se ainda não couber, a
+ * barra rola de lado e esmaece a borda onde há mais categorias.
  */
 function useFitTabs(ref: RefObject<HTMLDivElement | null>, key: string) {
   useLayoutEffect(() => {
     const bar = ref.current;
     if (!bar) return;
+    const edges = () => {
+      const max = bar.scrollWidth - bar.clientWidth;
+      bar.toggleAttribute("data-more-l", bar.scrollLeft > 2);
+      bar.toggleAttribute("data-more-r", bar.scrollLeft < max - 2);
+    };
     const fit = () => {
       bar.style.setProperty("--fit", "1");
-      bar.style.flexWrap = "nowrap";
-      bar.style.overflow = "hidden";
       const natural = bar.scrollWidth;
       const room = bar.clientWidth;
-      bar.style.flexWrap = "";
-      bar.style.overflow = "";
-      const f = room > 0 && natural > room ? Math.max(0.85, Math.floor((room / natural) * 1000) / 1000) : 1;
+      const f = room > 0 && natural > room ? Math.max(0.8, Math.floor((room / natural) * 1000) / 1000) : 1;
       bar.style.setProperty("--fit", String(f));
+      edges();
     };
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(bar);
+    bar.addEventListener("scroll", edges, { passive: true });
     document.fonts?.ready.then(fit).catch(() => {});
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      bar.removeEventListener("scroll", edges);
+    };
   }, [ref, key]);
 }
 

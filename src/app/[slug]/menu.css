@@ -199,11 +199,13 @@ html:has(.cm .viewer:not([hidden])) body {
   & .status.is-open i {
     background: #6fd08c;
   }
-  /* As abas quebram linha quando não cabem: nenhum nome fica cortado, com quantas categorias houver. */
+  /* Sempre numa linha só. Se não couber nem com a letra um pouco menor, a barra
+     rola de lado e esmaece a borda (nunca um nome cortado seco). */
   & .tabs {
     display: flex;
-    flex-wrap: wrap;
     gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
     padding: 5px;
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.06);
@@ -211,6 +213,18 @@ html:has(.cm .viewer:not([hidden])) body {
   }
   & .tabs::-webkit-scrollbar {
     display: none;
+  }
+  & .tabs[data-more-r] {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
+  }
+  & .tabs[data-more-l] {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px);
+    mask-image: linear-gradient(90deg, transparent, #000 36px);
+  }
+  & .tabs[data-more-l][data-more-r] {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent);
   }
   & .tabs button {
     flex: none;
@@ -550,8 +564,10 @@ html:has(.cm .viewer:not([hidden])) body {
     top: 0;
     padding: calc(var(--safe-top) + 24px) 12px 0;
     display: flex;
-    align-items: flex-start;
-    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px 8px;
     pointer-events: none;
   }
   & .chrome > * {
@@ -572,41 +588,35 @@ html:has(.cm .viewer:not([hidden])) body {
     place-items: center;
     color: #fff;
   }
-  /* Nos stories, só o texto sobre a foto (sem fundo de vidro); a atual ganha um traço embaixo. */
+  /* Nos stories, as categorias ganham uma linha inteira abaixo dos botões, só o
+     texto sobre a foto (sem vidro): as outras ficam apagadas e a atual acende. */
   & .vtabs {
-    flex: 1;
+    order: 3;
+    flex: 1 0 100%;
     min-width: 0;
-    min-height: 40px;
-    align-content: center;
-    justify-content: center;
-    gap: 0 2px;
+    gap: 0;
     padding: 0;
     border: 0;
     border-radius: 0;
     background: none;
   }
+  & .vtabs button:first-child {
+    margin-left: auto;
+  }
+  & .vtabs button:last-child {
+    margin-right: auto;
+  }
   & .vtabs button {
-    position: relative;
-    padding: 6px calc(9px * var(--fit, 1));
+    padding: 6px calc(10px * var(--fit, 1));
     font-size: calc(14px * var(--fit, 1));
-    color: rgba(255, 255, 255, 0.72);
+    color: #fff;
+    opacity: 0.5;
     text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
+    transition: opacity 200ms ease;
   }
   & .vtabs button[aria-selected="true"] {
-    color: #fff;
+    opacity: 1;
     background: none;
-  }
-  & .vtabs button[aria-selected="true"]::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    bottom: 1px;
-    width: 18px;
-    height: 2px;
-    margin-left: -9px;
-    border-radius: 2px;
-    background: #fff;
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
   }
   & .listbtn {
     flex: none;
