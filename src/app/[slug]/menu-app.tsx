@@ -1216,6 +1216,9 @@ function LoopVideo({
   // volta quando sai: no celular, cada vídeo aberto ocupa memória e decodificação, e com
   // muitas categorias isso trava a página. Ao voltar, mostra a capa e retoma.
   const [active, setActive] = useState(!!eager);
+  // Na tela: baixa tudo para tocar liso. Perto, mas fora da tela: só o começo, para não
+  // disputar a internet com os vídeos que a pessoa está vendo.
+  const [shown, setShown] = useState(!!eager);
   const setRefs = useCallback(
     (el: HTMLVideoElement | null) => {
       own.current = el;
@@ -1247,6 +1250,7 @@ function LoopVideo({
       ([e]) => {
         const vis = e.isIntersecting;
         v.dataset.vis = vis ? "1" : "";
+        setShown(vis || !!eager);
         if (vis && !v.dataset.hold) {
           v.dataset.want = "1";
           v.play().catch(() => {});
@@ -1274,7 +1278,7 @@ function LoopVideo({
       playsInline
       loop
       // Já carregado antes de aparecer (uma tela de folga), para começar sem esperar.
-      preload={active ? "auto" : "none"}
+      preload={shown ? "auto" : active ? "metadata" : "none"}
       autoPlay={eager}
       data-loop={eager ? undefined : ""}
     />

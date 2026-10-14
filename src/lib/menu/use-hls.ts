@@ -52,6 +52,41 @@ function armUnlock() {
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && later());
 }
 
+// Vigia: uma vez por segundo confere cada vídeo que devia estar tocando. Se o navegador
+// pausou por conta própria, dá play de novo; se o vídeo tem dados mas a imagem parou
+// (o decodificador do celular engasgou), empurra um instante para a frente, o que
+// destrava a imagem. Assim nenhum vídeo fica congelado num quadro.
+let keeperArmed = false;
+function armKeeper() {
+  if (keeperArmed || typeof window === "undefined") return;
+  keeperArmed = true;
+  const seen = new WeakMap<HTMLVideoElement, { t: number; n: number }>();
+  setInterval(() => {
+    if (document.visibilityState !== "visible") return;
+    document.querySelectorAll<HTMLVideoElement>('video[data-want="1"]').forEach((v) => {
+      if (v.dataset.hold) return;
+      if (v.paused) {
+        seen.delete(v);
+        tryPlay(v);
+        return;
+      }
+      const t = v.currentTime;
+      const prev = seen.get(v);
+      // Parado com dados no buffer (readyState 3+) por ~2 s: engasgo, não falta de internet.
+      if (prev && Math.abs(t - prev.t) < 0.01 && v.readyState >= 3) {
+        if (prev.n >= 1) {
+          const d = v.duration;
+          v.currentTime = Number.isFinite(d) && t + 0.1 >= d ? 0 : t + 0.1;
+          v.play().catch(() => {});
+          seen.delete(v);
+        } else seen.set(v, { t, n: prev.n + 1 });
+        return;
+      }
+      seen.set(v, { t, n: 0 });
+    });
+  }, 1000);
+}
+
 // Vídeo mudo que deve tocar sozinho: garante o mudo e tenta de novo quando o vídeo fica
 // pronto para tocar (o play chamado cedo demais é recusado em silêncio no celular).
 export function useAutoplay(vidRef: React.RefObject<HTMLVideoElement | null>) {
@@ -60,6 +95,7 @@ export function useAutoplay(vidRef: React.RefObject<HTMLVideoElement | null>) {
     if (!v) return;
     mute(v);
     armUnlock();
+    armKeeper();
     const retry = () => tryPlay(v);
     v.addEventListener("canplay", retry);
     v.addEventListener("loadeddata", retry);
