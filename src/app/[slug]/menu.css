@@ -439,10 +439,6 @@ html:has(.cm .viewer:not([hidden])) body {
     display: grid;
     gap: 8px;
   }
-  & .info .cat {
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.82);
-  }
   & .info h3 {
     margin: 0;
     font-size: calc(clamp(26px, 7.4vw, 34px) * var(--display-scale));

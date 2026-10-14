@@ -864,7 +864,6 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
                 </div>
                 {isVideo(item) && <span className="kind">{t("video")}</span>}
                 <div className="info">
-                  <span className="cat">{c.name}</span>
                   <h3 className="fd">{item.name}</h3>
                   {item.description && <p>{item.description}</p>}
                   {(!!item.tags?.length || item.serves || item.country) && (
