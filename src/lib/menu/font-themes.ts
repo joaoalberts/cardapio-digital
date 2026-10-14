@@ -7,6 +7,13 @@ export const FONT_THEMES = [
   { id: "neon", label: "Neon", tag: "manuscrita e romântica" },
   { id: "laboratorio", label: "Laboratório", tag: "técnica e minimalista" },
   { id: "taverna", label: "Taverna", tag: "gótica, de cervejaria" },
+  { id: "caslon", label: "Libre Caslon", tag: "clássica de livro antigo" },
+  { id: "instrument", label: "Instrument Serif", tag: "editorial e atual" },
+  { id: "marcellus", label: "Marcellus", tag: "romana suave" },
+  { id: "bellefair", label: "Bellefair", tag: "leve e luxuosa" },
+  { id: "fell-sc", label: "IM Fell SC", tag: "impressão do século 17, versalete" },
+  { id: "fell", label: "IM Fell English", tag: "impressão antiga" },
+  { id: "almendra", label: "Almendra Display", tag: "manuscrito com capitulares" },
 ] as const;
 
 export type FontThemeId = (typeof FONT_THEMES)[number]["id"];

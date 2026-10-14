@@ -15,13 +15,13 @@ const TABS: { id: Tab; label: string }[] = [
 export function FontPicker({
   restaurantId,
   slug,
-  sampleDish,
+  sampleText,
   published: initialPublished,
   canPublish,
 }: {
   restaurantId: string;
   slug: string;
-  sampleDish: string;
+  sampleText: string;
   published: FontThemeId;
   canPublish: boolean;
 }) {
@@ -150,7 +150,7 @@ export function FontPicker({
                 Aa
               </span>
               <span className="dish fd" aria-hidden>
-                {sampleDish}
+                {sampleText}
               </span>
               <span className="meta">
                 <b>{f.label}</b>

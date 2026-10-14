@@ -56,3 +56,40 @@
   --display-scale: 1.2;
   --ui: var(--f-barlow), system-ui, sans-serif;
 }
+[data-font="caslon"] {
+  --display: var(--f-caslon), "Big Caslon", Georgia, serif;
+  --display-scale: 1.05;
+  --ui: var(--f-jost), system-ui, sans-serif;
+}
+[data-font="instrument"] {
+  --display: var(--f-instrument), Georgia, serif;
+  --display-scale: 1.15;
+  --ui: var(--f-worksans), system-ui, sans-serif;
+}
+[data-font="marcellus"] {
+  --display: var(--f-marcellus), "Trajan Pro", Georgia, serif;
+  --display-transform: uppercase;
+  --display-spacing: 0.04em;
+  --ui: var(--f-jost), system-ui, sans-serif;
+}
+[data-font="bellefair"] {
+  --display: var(--f-bellefair), Didot, Georgia, serif;
+  --display-spacing: 0.01em;
+  --display-scale: 1.1;
+  --ui: var(--f-jost), system-ui, sans-serif;
+}
+[data-font="fell-sc"] {
+  --display: var(--f-fellsc), Georgia, serif;
+  --display-scale: 1.05;
+  --ui: var(--f-barlow), system-ui, sans-serif;
+}
+[data-font="fell"] {
+  --display: var(--f-fell), Georgia, serif;
+  --display-scale: 1.1;
+  --ui: var(--f-barlow), system-ui, sans-serif;
+}
+[data-font="almendra"] {
+  --display: var(--f-almendra), Georgia, serif;
+  --display-scale: 1.1;
+  --ui: var(--f-barlow), system-ui, sans-serif;
+}

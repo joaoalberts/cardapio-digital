@@ -27,7 +27,8 @@ async function Aparencia() {
   const r = restaurant as typeof restaurant & { font_theme: string; logo_path: string | null };
   const menu = await getPublicMenu(r.slug);
   const logo = mediaUrl(r.logo_path);
-  const sampleDish = menu?.categories.find((c) => c.items.length)?.items[0]?.name ?? "Margherita da Casa";
+  // Nome da primeira categoria do cardápio, escrito em cada fonte.
+  const sampleText = menu?.categories[0]?.name ?? "Entradas";
 
   return (
     <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo }} active="/painel/aparencia" title="Aparência">
@@ -48,7 +49,7 @@ async function Aparencia() {
           published={isFontTheme(r.font_theme) ? r.font_theme : DEFAULT_FONT_THEME}
           canPublish={isOwner}
           slug={r.slug}
-          sampleDish={sampleDish}
+          sampleText={sampleText}
         />
       </section>
     </PanelShell>
