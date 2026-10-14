@@ -275,12 +275,13 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
       update({ idx: nidx });
       goCat(cur + 1);
     } else {
-      // Fim: fica no último prato, parado.
-      resetTimer();
-      update({ userPaused: true });
-      showToast(tr("end", menuRef.current.restaurant.language));
+      // Fim: volta para o começo (primeira categoria, primeiro prato) e segue tocando.
+      // A categoria atual mantém o prato até sair da tela, para não piscar durante a troca.
+      update({ idx: idx.map((v, i) => (i === cur && cur !== 0 ? v : 0)) });
+      if (cur === 0) resetTimer();
+      else goCat(0);
     }
-  }, [goCat, resetTimer, setItem, showToast, update]);
+  }, [goCat, resetTimer, setItem, update]);
 
   const prev = useCallback(() => {
     const { cur, idx } = viewRef.current;
