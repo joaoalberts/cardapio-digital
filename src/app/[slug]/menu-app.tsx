@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- fotos do cardápio ocupam a tela toda e já vêm em tamanho certo do Storage */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from "react";
 import { fetchPublicMenu } from "@/lib/menu/client";
 import { DEFAULT_FONT_THEME, isFontTheme } from "@/lib/menu/font-themes";
 import { inWindow, statusLabel, type StatusLabel } from "@/lib/menu/hours";
@@ -109,6 +109,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
   const panelEls = useRef<(HTMLDivElement | null)[]>([]);
   const vTabsRef = useRef<HTMLDivElement>(null);
   const lTabsRef = useRef<HTMLDivElement>(null);
+  const hTabsRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const heroVidRef = useRef<HTMLVideoElement>(null);
   const cardEls = useRef<(HTMLButtonElement | null)[]>([]);
@@ -654,6 +655,13 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
   useEffect(() => {
     centerTab(lTabsRef.current, view.listCat, true);
   }, [view.listCat, view.listOpen]);
+  useEffect(() => {
+    centerTab(hTabsRef.current, homeTab, !reduce.current);
+  }, [homeTab]);
+  const tabsKey = `${cats.map((c) => c.name).join("|")}#${lang}#${previewFont ?? menu.restaurant.font_theme}`;
+  useFitTabs(hTabsRef, tabsKey);
+  useFitTabs(vTabsRef, `${tabsKey}#${view.open}`);
+  useFitTabs(lTabsRef, `${tabsKey}#${view.listOpen}`);
 
   const pickFromList = (c: number, i: number) => {
     const idx = [...viewRef.current.idx];
@@ -789,7 +797,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
         ) : (
           <>
             <nav className="home-tabs">
-              <div className="tabs" role="tablist">
+              <div className="tabs" role="tablist" ref={hTabsRef}>
                 {cats.map((c, i) => (
                   <button
                     key={c.id}
@@ -1268,6 +1276,41 @@ function Price({ item, lang, className, as: Tag = "span" }: { item: MenuItem; la
 }
 
 // Centraliza a aba só dentro da própria barra (scrollIntoView rolaria a tela toda).
+/**
+ * Faz a barra de categorias caber sem cortar nomes: primeiro encolhe um pouco
+ * a letra e o espaçamento (até 78%); se ainda não couber, a barra rola e
+ * mostra um esmaecido na borda onde há mais categorias, para nunca parecer
+ * um nome cortado ao meio.
+ */
+function useFitTabs(ref: RefObject<HTMLDivElement | null>, key: string) {
+  useLayoutEffect(() => {
+    const bar = ref.current;
+    if (!bar) return;
+    const edges = () => {
+      const max = bar.scrollWidth - bar.clientWidth;
+      bar.toggleAttribute("data-more-l", bar.scrollLeft > 2);
+      bar.toggleAttribute("data-more-r", bar.scrollLeft < max - 2);
+    };
+    const fit = () => {
+      bar.style.setProperty("--fit", "1");
+      const natural = bar.scrollWidth;
+      const room = bar.clientWidth;
+      const f = natural > room ? Math.max(0.78, Math.floor((room / natural) * 1000) / 1000) : 1;
+      bar.style.setProperty("--fit", String(f));
+      edges();
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(bar);
+    bar.addEventListener("scroll", edges, { passive: true });
+    document.fonts?.ready.then(fit).catch(() => {});
+    return () => {
+      ro.disconnect();
+      bar.removeEventListener("scroll", edges);
+    };
+  }, [ref, key]);
+}
+
 function centerTab(bar: HTMLElement | null, i: number, smooth: boolean) {
   const tab = bar?.children[i] as HTMLElement | undefined;
   if (!bar || !tab) return;

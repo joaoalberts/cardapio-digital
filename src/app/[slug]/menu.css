@@ -212,11 +212,24 @@ html:has(.cm .viewer:not([hidden])) body {
   & .tabs::-webkit-scrollbar {
     display: none;
   }
+  /* Quando não cabe tudo, esmaece a borda onde há mais categorias (em vez de um nome cortado seco). */
+  & .tabs[data-more-r] {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent);
+  }
+  & .tabs[data-more-l] {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 44px);
+    mask-image: linear-gradient(90deg, transparent, #000 44px);
+  }
+  & .tabs[data-more-l][data-more-r] {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent);
+  }
   & .tabs button {
     flex: none;
-    padding: 9px 14px;
+    padding: 9px calc(14px * var(--fit, 1));
     border-radius: 10px;
-    font-size: 15px;
+    font-size: calc(15px * var(--fit, 1));
     color: var(--muted);
     white-space: nowrap;
     transition: background 0.2s, color 0.2s;
@@ -243,7 +256,7 @@ html:has(.cm .viewer:not([hidden])) body {
   & .home-tabs .tabs button {
     flex: 1 0 auto;
     border-radius: 0;
-    padding: 14px 16px;
+    padding: 14px calc(16px * var(--fit, 1));
   }
   /* Cards de categoria de ponta a ponta, cantos retos, encostados uns nos outros. */
   & .cards {
@@ -583,8 +596,8 @@ html:has(.cm .viewer:not([hidden])) body {
     -webkit-backdrop-filter: blur(14px);
   }
   & .vtabs button {
-    padding: 7px 12px;
-    font-size: 14px;
+    padding: 7px calc(12px * var(--fit, 1));
+    font-size: calc(14px * var(--fit, 1));
     color: rgba(255, 255, 255, 0.7);
   }
   & .vtabs button[aria-selected="true"] {
@@ -706,8 +719,8 @@ html:has(.cm .viewer:not([hidden])) body {
     border-color: rgba(255, 255, 255, 0.12);
   }
   & .ltabs button {
-    padding: 8px 15px;
-    font-size: 14px;
+    padding: 8px calc(15px * var(--fit, 1));
+    font-size: calc(14px * var(--fit, 1));
     border-radius: 999px;
     color: rgba(255, 255, 255, 0.72);
   }
