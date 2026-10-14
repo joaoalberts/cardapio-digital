@@ -26,7 +26,8 @@ confere se quem chamou é membro do restaurante (`src/lib/auth`). O NocoDB na nu
 1. Variáveis (marque Production e Preview e faça um novo deploy depois de mudar):
    - `NOCODB_API_TOKEN`: token do NocoDB com acesso à base "Cardápio Digital".
    - `BLOB_READ_WRITE_TOKEN`: criada sozinha ao ligar um Blob store ao projeto (Storage >
-     Create > Blob). Sem ela, o painel não envia fotos.
+     Create > Blob). Crie a loja como **Public** e marque "Add a read-write token env var";
+     sem isso as fotos não abrem para o cliente ou o painel não envia fotos.
    - `AUTH_SECRET` (opcional): assina o cookie de login; sem ela, deriva do token do
      NocoDB. Trocar qualquer um dos dois desconecta todo mundo.
    - `ANTHROPIC_API_KEY` (opcional) liga a sugestão de traduções.
