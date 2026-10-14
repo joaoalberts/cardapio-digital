@@ -16,6 +16,7 @@ export async function putFile(pathname: string, body: ArrayBuffer, contentType: 
   const res = await fetch(`${API}/?pathname=${encodeURIComponent(pathname)}`, {
     method: "PUT",
     headers: headers({
+      "x-vercel-blob-access": "public",
       "x-content-type": contentType,
       "x-add-random-suffix": "0",
       "x-cache-control-max-age": "31536000",
