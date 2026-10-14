@@ -112,6 +112,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
   const hTabsRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const heroVidRef = useRef<HTMLVideoElement>(null);
+  const cardsHeld = useRef(false);
   const cardEls = useRef<(HTMLButtonElement | null)[]>([]);
   const pos = useRef(0);
   const settled = useRef(true);
@@ -216,6 +217,24 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
       hero.dataset.want = hold ? "" : "1";
       if (hold) hero.pause();
       else hero.play().catch(() => {});
+    }
+    // Vídeos das categorias da capa: parados enquanto o story está aberto (senão seguem
+    // tocando por baixo e disputam o celular com o vídeo do story). Ao fechar, volta a
+    // tocar o que está na tela.
+    const holdCards = v.open || document.visibilityState !== "visible";
+    if (holdCards !== cardsHeld.current) {
+      cardsHeld.current = holdCards;
+      const cards = [...document.querySelectorAll<HTMLVideoElement>("video[data-loop]")];
+      cards.forEach((o) => {
+        o.dataset.hold = holdCards ? "1" : "";
+        o.dataset.want = "";
+        o.pause();
+      });
+      const vis = holdCards ? undefined : [...cards].reverse().find((o) => o.dataset.vis === "1");
+      if (vis) {
+        vis.dataset.want = "1";
+        vis.play().catch(() => {});
+      }
     }
   }, [playing]);
 
@@ -858,6 +877,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
                     <StoryMedia
                       key={item.media[0]?.id ?? item.id}
                       item={item}
+                      live={i === view.cur && view.target === view.cur}
                       onEnded={() => {
                         if (viewRef.current.cur === i && playing()) next();
                       }}
@@ -1196,7 +1216,7 @@ function LoopVideo({
   );
   const live = active ? src : null;
   useAutoplay(own);
-  useHls(own, live);
+  useHls(own, live, true);
   useEffect(() => {
     const v = own.current;
     if (!v) return;
@@ -1214,7 +1234,9 @@ function LoopVideo({
     // dois vídeos decodificando juntos já travam a rolagem. O último a aparecer assume.
     const play = new IntersectionObserver(
       ([e]) => {
-        if (e.isIntersecting && e.intersectionRatio >= 0.5) {
+        const vis = e.isIntersecting && e.intersectionRatio >= 0.5;
+        v.dataset.vis = vis ? "1" : "";
+        if (vis) {
           if (!v.dataset.hold) {
             document.querySelectorAll<HTMLVideoElement>("video[data-loop]").forEach((o) => {
               if (o !== v && o.dataset.want) {
@@ -1331,12 +1353,15 @@ function warm(src: string | null) {
 // Duas camadas: a miniatura (já em cache pela capa ou pelo pré-carregamento)
 // aparece na hora e a mídia em qualidade total entra por cima quando está pronta.
 // Assim a troca de prato nunca passa por tela preta.
-function StoryMedia({ item, onEnded }: { item: MenuItem; onEnded: () => void }) {
+// Só o story da categoria atual (parado na tela) carrega e toca o vídeo; os vizinhos
+// mostram a capa. Assim nunca há mais de um vídeo baixando e decodificando ao mesmo
+// tempo, que era o que fazia o vídeo atual engasgar no celular.
+function StoryMedia({ item, live, onEnded }: { item: MenuItem; live: boolean; onEnded: () => void }) {
   const m = item.media[0];
   const vidRef = useRef<HTMLVideoElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [ready, setReady] = useState(false);
-  const src = m ? (m.kind === "video" ? videoSrc(m) : mediaUrl(m.storage_path)) : null;
+  const src = m ? (m.kind === "video" ? (live ? videoSrc(m) : null) : mediaUrl(m.storage_path)) : null;
   const hls = !!src && src.includes(".m3u8");
   useAutoplay(vidRef);
   useLayoutEffect(() => {
@@ -1345,6 +1370,11 @@ function StoryMedia({ item, onEnded }: { item: MenuItem; onEnded: () => void }) 
     if (img?.complete && img.naturalWidth) setReady(true);
   }, []);
   useHls(vidRef, src);
+  // Saiu de cena: volta a mostrar a capa (o vídeo é descarregado e ficaria preto).
+  const isVid = m?.kind === "video";
+  useEffect(() => {
+    if (!live && isVid) setReady(false);
+  }, [live, isVid]);
   if (!m) return null;
   const low = posterSrc(m);
   const hi = `hi${ready ? " on" : ""}`;
@@ -1359,7 +1389,7 @@ function StoryMedia({ item, onEnded }: { item: MenuItem; onEnded: () => void }) 
           poster={low ?? undefined}
           muted
           playsInline
-          preload="auto"
+          preload={live ? "auto" : "none"}
           onPlaying={() => setReady(true)}
           onEnded={onEnded}
         />

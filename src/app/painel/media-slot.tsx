@@ -103,7 +103,9 @@ export function useMediaSlot(restaurantId: string, folder: "items" | "categories
     setUploading(true);
     try {
       const [full, small] = await Promise.all([
-        shrinkImage(file, 2560, 0.92, "image/jpeg"),
+        // Tela cheia do celular: 2048 px no lado maior já cobre um iPhone Pro Max e pesa
+        // cerca de metade da versão de 2560 px, então o story abre mais rápido.
+        shrinkImage(file, 2048, 0.86, "image/jpeg"),
         // Miniatura: lista e cards (categoria e banner ocupam a largura do celular, então maior).
         shrinkImage(file, folder === "items" ? 640 : 1080, 0.82, "image/jpeg"),
       ]);

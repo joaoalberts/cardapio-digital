@@ -66,7 +66,9 @@ export function useAutoplay(vidRef: React.RefObject<HTMLVideoElement | null>) {
 // Vídeo do Mux (HLS): o Safari toca direto; nos outros navegadores entra o hls.js.
 // Os dois trocam de qualidade conforme a internet e o tamanho do vídeo na tela, para
 // começar rápido e não travar.
-export function useHls(vidRef: React.RefObject<HTMLVideoElement | null>, src: string | null) {
+// `loop`: vídeo curto que repete (capa e categorias). Guarda o vídeo inteiro no buffer
+// para a volta ao começo não baixar de novo nem dar o tranco do recomeço.
+export function useHls(vidRef: React.RefObject<HTMLVideoElement | null>, src: string | null, loop = false) {
   const hls = !!src && src.includes(".m3u8");
   useEffect(() => {
     const v = vidRef.current;
@@ -92,8 +94,8 @@ export function useHls(vidRef: React.RefObject<HTMLVideoElement | null>, src: st
         capLevelToPlayerSize: true,
         startLevel: -1,
         abrEwmaDefaultEstimate: 2_000_000,
-        maxBufferLength: 12,
-        backBufferLength: 10,
+        maxBufferLength: loop ? 30 : 12,
+        backBufferLength: loop ? Infinity : 10,
       });
       player.loadSource(src);
       player.attachMedia(v);
@@ -109,5 +111,5 @@ export function useHls(vidRef: React.RefObject<HTMLVideoElement | null>, src: st
       gone = true;
       player?.destroy();
     };
-  }, [vidRef, hls, src]);
+  }, [vidRef, hls, src, loop]);
 }
