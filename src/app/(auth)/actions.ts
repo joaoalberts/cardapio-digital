@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { EMAIL, checkCredentials, createUser, currentUserId, findUserByEmail, normalizeEmail, setPassword, startSession } from "@/lib/auth";
+import { EMAIL, checkCredentials, createUser, currentUser, currentUserId, findUserByEmail, normalizeEmail, setPassword, startSession } from "@/lib/auth";
 import { createRestaurantFor, slugTaken } from "@/lib/restaurants";
 import { isValidSlug, slugify } from "@/lib/slug";
 
@@ -84,4 +84,24 @@ export async function updatePassword(_prev: FormState, formData: FormData): Prom
     return dbError(e);
   }
   redirect("/painel");
+}
+
+// Painel > Editar Perfil: troca a senha conferindo a atual. Continua logado.
+export async function changePassword(_prev: FormState, formData: FormData): Promise<FormState> {
+  const current = String(formData.get("current") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+  if (!current || !password) return { error: "Preencha a senha atual e a nova." };
+  if (password.length < 8) return { error: "A senha nova precisa ter pelo menos 8 caracteres." };
+  if (password !== confirm) return { error: "A confirmação não bate com a senha nova." };
+  if (password === current) return { error: "A senha nova precisa ser diferente da atual." };
+  try {
+    const user = await currentUser();
+    if (!user) return { error: "Entre de novo para trocar a senha." };
+    if (!(await checkCredentials(user.email, current))) return { error: "A senha atual está errada." };
+    await setPassword(user.id, password);
+  } catch (e) {
+    return dbError(e);
+  }
+  return { message: "Senha alterada. Use a nova no próximo login." };
 }

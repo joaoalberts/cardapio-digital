@@ -7,6 +7,7 @@ import * as db from "@/lib/db/nocodb";
 import { translationEnabled } from "@/lib/translate";
 import { currentRestaurant } from "../current";
 import { PanelShell } from "../shell";
+import { PasswordForm } from "./password-form";
 import { ProfileForm } from "./profile-form";
 import "../panel.css";
 import "../cardapio/cardapio.css";
@@ -91,6 +92,7 @@ async function Perfil() {
         canTranslate={translationEnabled()}
         canEdit={isOwner}
       />
+      <PasswordForm />
     </PanelShell>
   );
 }
