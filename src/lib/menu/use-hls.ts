@@ -30,19 +30,26 @@ let unlockArmed = false;
 function armUnlock() {
   if (unlockArmed || typeof window === "undefined") return;
   unlockArmed = true;
+  const playAll = () => document.querySelectorAll<HTMLVideoElement>('video[data-want="1"]').forEach(tryPlay);
+  // Rolagem dispara muitas vezes: junta tudo num quadro.
   let queued = false;
-  const go = () => {
+  const later = () => {
     if (queued) return;
     queued = true;
     requestAnimationFrame(() => {
       queued = false;
-      document.querySelectorAll<HTMLVideoElement>('video[data-want="1"]').forEach(tryPlay);
+      playAll();
     });
   };
-  for (const ev of ["touchstart", "pointerdown", "scroll", "keydown"]) {
-    addEventListener(ev, go, { passive: true, capture: true });
+  // No iPhone só o fim do toque (touchend/pointerup/click) conta como gesto que libera o
+  // play, e o play tem de ser chamado ali dentro, na hora (não no quadro seguinte).
+  for (const ev of ["touchend", "pointerup", "click", "keydown"]) {
+    addEventListener(ev, playAll, { passive: true, capture: true });
   }
-  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && go());
+  for (const ev of ["touchstart", "pointerdown", "scroll"]) {
+    addEventListener(ev, later, { passive: true, capture: true });
+  }
+  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && later());
 }
 
 // Vídeo mudo que deve tocar sozinho: garante o mudo e tenta de novo quando o vídeo fica

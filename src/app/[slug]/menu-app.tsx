@@ -113,6 +113,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
   const listRef = useRef<HTMLDivElement>(null);
   const heroVidRef = useRef<HTMLVideoElement>(null);
   const cardsHeld = useRef(false);
+  const closing = useRef(false);
   const cardEls = useRef<(HTMLButtonElement | null)[]>([]);
   const pos = useRef(0);
   const settled = useRef(true);
@@ -209,10 +210,14 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
       if (want) vid.play().catch(() => {});
       else vid.pause();
     });
+    // Story aberto cobre a capa. Ao fechar, a capa já volta a tocar no próprio toque de
+    // fechar (`closing`): o navegador do WhatsApp/Instagram só aceita dar play em vídeo
+    // dentro de um toque, e depois da animação de saída o toque já tinha "expirado".
+    const covered = (v.open && !closing.current) || document.visibilityState !== "visible";
     const hero = heroVidRef.current;
     if (hero) {
       // Com o story aberto o banner fica parado ("hold"), e o toque não o religa.
-      const hold = v.open || document.visibilityState !== "visible";
+      const hold = covered;
       hero.dataset.hold = hold ? "1" : "";
       hero.dataset.want = hold ? "" : "1";
       if (hold) hero.pause();
@@ -221,7 +226,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
     // Vídeos das categorias da capa: parados enquanto o story está aberto (senão seguem
     // tocando por baixo e disputam o celular com o vídeo do story). Ao fechar, volta a
     // tocar o que está na tela.
-    const holdCards = v.open || document.visibilityState !== "visible";
+    const holdCards = covered;
     if (holdCards !== cardsHeld.current) {
       cardsHeld.current = holdCards;
       const cards = [...document.querySelectorAll<HTMLVideoElement>("video[data-loop]")];
@@ -353,6 +358,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
       pos.current = c;
       settled.current = true;
       justOpened.current = true;
+      closing.current = false;
       update({ open: true, cur: c, target: c, userPaused: false, held: false, listOpen: withList, listCat: c });
       resetTimer();
       cancelAnimationFrame(raf.current);
@@ -368,6 +374,8 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
 
   const closeViewer = useCallback(() => {
     cancelAnimationFrame(raf.current);
+    closing.current = true;
+    syncPlayback();
     const el = viewerRef.current;
     const done = () => {
       if (el) {
@@ -383,7 +391,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
     el.style.transform = "translateY(40%) scale(.85)";
     el.style.opacity = "0";
     setTimeout(done, 300);
-  }, [update]);
+  }, [syncPlayback, update]);
 
   // Prévia do painel (Aparência): o cardápio roda num iframe e o painel manda a fonte
   // escolhida e a tela a mostrar (capa, story ou lista). Fora de iframe, nada muda.
