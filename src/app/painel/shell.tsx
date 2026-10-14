@@ -8,7 +8,7 @@ import { ShellMenu, TopButton, VideoSync } from "./shell-menu";
 const raleway = Raleway({ subsets: ["latin"], display: "swap", variable: "--f-panel" });
 
 const NAV = [
-  { href: "/painel/cardapio", label: "Cardápio", icon: "M7 3v8M5 3v5a2 2 0 004 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9" },
+  { href: "/painel/cardapio", label: "Adicionar/Editar", icon: "M12 5v14M5 12h14" },
   { href: "/painel/aparencia", label: "Aparência", icon: "M12 3a9 9 0 100 18c1 0 1.5-.7 1.5-1.5 0-1.2-1-1.6-1-2.6 0-.8.7-1.4 1.5-1.4H16a5 5 0 005-5c0-4-4-7.5-9-7.5zM7.5 12a1 1 0 100-2 1 1 0 000 2zM10.5 8a1 1 0 100-2 1 1 0 000 2zM15 8a1 1 0 100-2 1 1 0 000 2z" },
   { href: "/painel/mesas", label: "Mesas", icon: "M3 4h18v4H3zM4 8v12M20 8v12M4 14h16" },
   { href: "/painel/perfil", label: "Editar Perfil", icon: "M10 12a4 4 0 100-8 4 4 0 000 8zM3 21c0-4 3.1-7 7-7 1.3 0 2.5.3 3.5.9M17.5 14.5l3 3-4.5 4.5h-3v-3z" },

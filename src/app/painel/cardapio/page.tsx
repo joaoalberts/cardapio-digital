@@ -10,7 +10,7 @@ import { MenuEditor, type EditorCategory, type EditorItem } from "./menu-editor"
 import "../panel.css";
 import "./cardapio.css";
 
-export const metadata: Metadata = { title: "Cardápio" };
+export const metadata: Metadata = { title: "Adicionar/Editar" };
 
 export default function CardapioPage() {
   return (
@@ -102,7 +102,7 @@ async function Cardapio() {
 
   const logo = mediaUrl(r.logo_path);
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo }} active="/painel/cardapio" title="Cardápio Digital">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo }} active="/painel/cardapio" title="Adicionar/Editar">
       <MenuEditor
         restaurant={{
           id: r.id,
