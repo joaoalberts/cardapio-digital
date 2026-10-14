@@ -152,18 +152,25 @@ html:has(.cm .viewer:not([hidden])) body {
     display: grid;
     place-items: center;
     overflow: hidden;
+    clip-path: circle(50%);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
     text-align: center;
+    transition: opacity 250ms ease-out;
   }
-  /* Com imagem, sem fundo claro por trás: senão vaza um fio branco na borda redonda. */
-  & .logo:has(img) {
+  /* A logo só aparece depois de medida (ver Logo em menu-app), para não piscar torta. */
+  & .logo[data-state="wait"] {
+    opacity: 0;
+  }
+  /* Logo que é foto: sem fundo claro (senão vaza um fio branco) e ampliada o bastante
+     para a parte transparente ficar fora do círculo. Logo de texto mantém o fundo claro. */
+  & .logo[data-state="photo"] {
     background: transparent;
   }
   & .logo img {
-    border-radius: 50%;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    transform: scale(var(--logo-zoom, 1));
   }
   /* Sem logo enviada, o nome aparece numa fonte fixa: a logo não segue o tema. */
   & .logo b {

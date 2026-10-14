@@ -783,7 +783,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
           )}
           <div className="brand">
             {/* A logo é a imagem enviada pelo restaurante; não muda com a fonte do cardápio. */}
-            <div className="logo">{logo ? <img src={logo} alt={restaurant.name} /> : <b>{restaurant.name}</b>}</div>
+            {logo ? <Logo src={logo} alt={restaurant.name} /> : <div className="logo"><b>{restaurant.name}</b></div>}
             {hours && status && (
               <span className={`status${status.open ? " is-open" : ""}`}>
                 <i aria-hidden />
@@ -1391,4 +1391,82 @@ function ShareIcon() {
       <path d="M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6" />
     </svg>
   );
+}
+
+/**
+ * Logo redonda. Mede a imagem num canvas pequeno: se for uma foto (quase toda opaca)
+ * com sobras transparentes na borda, tira o fundo claro e amplia só o necessário para
+ * as sobras ficarem fora do círculo. Logo com fundo transparente (texto) mantém o
+ * fundo claro. Se não der para medir, mostra como antes.
+ */
+function Logo({ src, alt }: { src: string; alt: string }) {
+  const [fit, setFit] = useState<{ state: "wait" | "photo" | "plain"; zoom: number }>({ state: "wait", zoom: 1 });
+  useEffect(() => {
+    let done = false;
+    const finish = (state: "photo" | "plain", zoom = 1) => {
+      if (done) return;
+      done = true;
+      setFit({ state, zoom });
+    };
+    // Se a medição demorar, mostra a logo do jeito simples e ajusta quando terminar.
+    const timer = setTimeout(() => setFit((f) => (f.state === "wait" ? { state: "plain", zoom: 1 } : f)), 900);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        finish(...measureLogo(img));
+      } catch {
+        finish("plain");
+      }
+    };
+    img.onerror = () => finish("plain");
+    img.src = src;
+    return () => {
+      done = true;
+      clearTimeout(timer);
+    };
+  }, [src]);
+  return (
+    <div className="logo" data-state={fit.state} style={{ "--logo-zoom": fit.zoom } as CSSProperties}>
+      <img src={src} alt={alt} />
+    </div>
+  );
+}
+
+function measureLogo(img: HTMLImageElement): ["photo" | "plain", number] {
+  const N = 96;
+  const R = N / 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = N;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx || !img.naturalWidth) return ["plain", 1];
+  // Desenha igual ao object-fit: cover do círculo.
+  const k = Math.max(N / img.naturalWidth, N / img.naturalHeight);
+  const w = img.naturalWidth * k;
+  const h = img.naturalHeight * k;
+  ctx.drawImage(img, (N - w) / 2, (N - h) / 2, w, h);
+  const data = ctx.getImageData(0, 0, N, N).data;
+  const alpha = (x: number, y: number) => data[(Math.floor(y) * N + Math.floor(x)) * 4 + 3];
+
+  let opaque = 0;
+  let total = 0;
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      if ((x + 0.5 - R) ** 2 + (y + 0.5 - R) ** 2 > R * R) continue;
+      total++;
+      if (alpha(x, y) > 200) opaque++;
+    }
+  if (!total || opaque / total < 0.6) return ["plain", 1];
+
+  // De fora para dentro, em cada direção, até achar a foto: o menor desses raios
+  // diz quanto ampliar para a foto encostar na borda do círculo.
+  let edge = R;
+  for (let a = 0; a < 120; a++) {
+    const t = (a / 120) * Math.PI * 2;
+    let r = R - 0.5;
+    while (r > 0 && alpha(R + Math.cos(t) * r, R + Math.sin(t) * r) <= 200) r -= 0.5;
+    edge = Math.min(edge, r);
+  }
+  if (edge >= R - 1.5) return ["photo", 1];
+  return ["photo", Math.min(1.45, (R / Math.max(edge, 1)) * 1.03)];
 }
