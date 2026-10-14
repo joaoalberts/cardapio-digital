@@ -660,7 +660,8 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
   }, [homeTab]);
   const tabsKey = `${cats.map((c) => c.name).join("|")}#${lang}#${previewFont ?? menu.restaurant.font_theme}`;
   useFitTabs(hTabsRef, tabsKey);
-  useFitTabs(vTabsRef, `${tabsKey}#${view.open}`);
+  // Nos stories a letra não encolhe: o que não cabe fica para deslizar.
+  useFitTabs(vTabsRef, `${tabsKey}#${view.open}`, 1);
   useFitTabs(lTabsRef, `${tabsKey}#${view.listOpen}`);
 
   const pickFromList = (c: number, i: number) => {
@@ -1281,7 +1282,7 @@ function Price({ item, lang, className, as: Tag = "span" }: { item: MenuItem; la
  * letra e o espaçamento (até 80%) para tudo caber. Se ainda não couber, a
  * barra rola de lado e esmaece a borda onde há mais categorias.
  */
-function useFitTabs(ref: RefObject<HTMLDivElement | null>, key: string) {
+function useFitTabs(ref: RefObject<HTMLDivElement | null>, key: string, minFit = 0.8) {
   useLayoutEffect(() => {
     const bar = ref.current;
     if (!bar) return;
@@ -1294,7 +1295,7 @@ function useFitTabs(ref: RefObject<HTMLDivElement | null>, key: string) {
       bar.style.setProperty("--fit", "1");
       const natural = bar.scrollWidth;
       const room = bar.clientWidth;
-      const f = room > 0 && natural > room ? Math.max(0.8, Math.floor((room / natural) * 1000) / 1000) : 1;
+      const f = room > 0 && natural > room ? Math.max(minFit, Math.floor((room / natural) * 1000) / 1000) : 1;
       bar.style.setProperty("--fit", String(f));
       edges();
     };
@@ -1307,7 +1308,7 @@ function useFitTabs(ref: RefObject<HTMLDivElement | null>, key: string) {
       ro.disconnect();
       bar.removeEventListener("scroll", edges);
     };
-  }, [ref, key]);
+  }, [ref, key, minFit]);
 }
 
 function centerTab(bar: HTMLElement | null, i: number, smooth: boolean) {

@@ -562,12 +562,10 @@ html:has(.cm .viewer:not([hidden])) body {
     left: 0;
     right: 0;
     top: 0;
-    padding: calc(var(--safe-top) + 24px) 12px 0;
+    padding: calc(var(--safe-top) + 20px) 12px 0;
     display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
     align-items: center;
-    gap: 6px 8px;
+    gap: 6px;
     pointer-events: none;
   }
   & .chrome > * {
@@ -588,11 +586,11 @@ html:has(.cm .viewer:not([hidden])) body {
     place-items: center;
     color: #fff;
   }
-  /* Nos stories, as categorias ganham uma linha inteira abaixo dos botões, só o
-     texto sobre a foto (sem vidro): as outras ficam apagadas e a atual acende. */
+  /* Nos stories, as categorias ficam no alto, entre os botões, só o texto sobre a
+     foto (sem vidro), em letra grande: as outras ficam apagadas e a atual acende.
+     As que não cabem aparecem deslizando a faixa para o lado. */
   & .vtabs {
-    order: 3;
-    flex: 1 0 100%;
+    flex: 1;
     min-width: 0;
     gap: 0;
     padding: 0;
@@ -607,8 +605,8 @@ html:has(.cm .viewer:not([hidden])) body {
     margin-right: auto;
   }
   & .vtabs button {
-    padding: 6px calc(10px * var(--fit, 1));
-    font-size: calc(14px * var(--fit, 1));
+    padding: 8px 11px;
+    font-size: 17px;
     color: #fff;
     opacity: 0.5;
     text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
