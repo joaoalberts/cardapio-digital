@@ -541,19 +541,6 @@ html:has(.cm .viewer:not([hidden])) body {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
-  & .kind {
-    position: absolute;
-    z-index: 3;
-    right: 16px;
-    bottom: calc(var(--safe-bottom) + 180px);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 4px 8px;
-    border-radius: 6px;
-    background: var(--scrim);
-  }
   /* Topo dos stories: progresso colado em cima e, logo abaixo, voltar, categorias e lista
      numa linha só, em vidro translúcido para não brigar com a foto. */
   & .chrome {
