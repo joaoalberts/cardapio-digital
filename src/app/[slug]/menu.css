@@ -199,11 +199,11 @@ html:has(.cm .viewer:not([hidden])) body {
   & .status.is-open i {
     background: #6fd08c;
   }
+  /* As abas quebram linha quando não cabem: nenhum nome fica cortado, com quantas categorias houver. */
   & .tabs {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
-    overflow-x: auto;
-    scrollbar-width: none;
     padding: 5px;
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.06);
@@ -211,19 +211,6 @@ html:has(.cm .viewer:not([hidden])) body {
   }
   & .tabs::-webkit-scrollbar {
     display: none;
-  }
-  /* Quando não cabe tudo, esmaece a borda onde há mais categorias (em vez de um nome cortado seco). */
-  & .tabs[data-more-r] {
-    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent);
-    mask-image: linear-gradient(90deg, #000 calc(100% - 44px), transparent);
-  }
-  & .tabs[data-more-l] {
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 44px);
-    mask-image: linear-gradient(90deg, transparent, #000 44px);
-  }
-  & .tabs[data-more-l][data-more-r] {
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent);
-    mask-image: linear-gradient(90deg, transparent, #000 44px, #000 calc(100% - 44px), transparent);
   }
   & .tabs button {
     flex: none;
@@ -563,7 +550,7 @@ html:has(.cm .viewer:not([hidden])) body {
     top: 0;
     padding: calc(var(--safe-top) + 24px) 12px 0;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
     pointer-events: none;
   }
@@ -585,24 +572,41 @@ html:has(.cm .viewer:not([hidden])) body {
     place-items: center;
     color: #fff;
   }
+  /* Nos stories, só o texto sobre a foto (sem fundo de vidro); a atual ganha um traço embaixo. */
   & .vtabs {
     flex: 1;
     min-width: 0;
-    padding: 3px;
-    border-radius: 12px;
-    background: rgba(0, 0, 0, 0.22);
-    border-color: rgba(255, 255, 255, 0.16);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+    min-height: 40px;
+    align-content: center;
+    justify-content: center;
+    gap: 0 2px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
   }
   & .vtabs button {
-    padding: 7px calc(12px * var(--fit, 1));
+    position: relative;
+    padding: 6px calc(9px * var(--fit, 1));
     font-size: calc(14px * var(--fit, 1));
-    color: rgba(255, 255, 255, 0.7);
+    color: rgba(255, 255, 255, 0.72);
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
   }
   & .vtabs button[aria-selected="true"] {
     color: #fff;
-    background: rgba(255, 255, 255, 0.18);
+    background: none;
+  }
+  & .vtabs button[aria-selected="true"]::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 1px;
+    width: 18px;
+    height: 2px;
+    margin-left: -9px;
+    border-radius: 2px;
+    background: #fff;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
   }
   & .listbtn {
     flex: none;
@@ -713,16 +717,18 @@ html:has(.cm .viewer:not([hidden])) body {
   & .ltabs {
     flex: none;
     margin: 0 16px;
-    padding: 4px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.12);
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
   }
   & .ltabs button {
     padding: 8px calc(15px * var(--fit, 1));
     font-size: calc(14px * var(--fit, 1));
     border-radius: 999px;
     color: rgba(255, 255, 255, 0.72);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
   }
   & .ltabs button[aria-selected="true"] {
     color: #1b1310;
