@@ -230,11 +230,13 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
         o.dataset.want = "";
         o.pause();
       });
-      const vis = holdCards ? undefined : [...cards].reverse().find((o) => o.dataset.vis === "1");
-      if (vis) {
-        vis.dataset.want = "1";
-        vis.play().catch(() => {});
-      }
+      if (!holdCards)
+        cards
+          .filter((o) => o.dataset.vis === "1")
+          .forEach((o) => {
+            o.dataset.want = "1";
+            o.play().catch(() => {});
+          });
     }
   }, [playing]);
 
@@ -1230,29 +1232,22 @@ function LoopVideo({
       },
       { rootMargin: "100% 0px" },
     );
-    // Toca só um vídeo de categoria por vez, e só o que está de fato na tela: no celular,
-    // dois vídeos decodificando juntos já travam a rolagem. O último a aparecer assume.
+    // Todos os vídeos de categoria que aparecem na tela tocam juntos, em loop. Só pausa
+    // o que saiu da tela (ninguém vê) e ele volta a tocar na hora em que reaparece: assim
+    // o celular decodifica só os 2 ou 3 visíveis, nunca a página inteira.
     const play = new IntersectionObserver(
       ([e]) => {
-        const vis = e.isIntersecting && e.intersectionRatio >= 0.5;
+        const vis = e.isIntersecting;
         v.dataset.vis = vis ? "1" : "";
-        if (vis) {
-          if (!v.dataset.hold) {
-            document.querySelectorAll<HTMLVideoElement>("video[data-loop]").forEach((o) => {
-              if (o !== v && o.dataset.want) {
-                o.dataset.want = "";
-                o.pause();
-              }
-            });
-            v.dataset.want = "1";
-            v.play().catch(() => {});
-          }
-        } else {
+        if (vis && !v.dataset.hold) {
+          v.dataset.want = "1";
+          v.play().catch(() => {});
+        } else if (!vis) {
           v.dataset.want = "";
           v.pause();
         }
       },
-      { threshold: [0, 0.5] },
+      { threshold: 0 },
     );
     load.observe(v);
     play.observe(v);
@@ -1270,7 +1265,8 @@ function LoopVideo({
       muted
       playsInline
       loop
-      preload={eager ? "auto" : "metadata"}
+      // Já carregado antes de aparecer (uma tela de folga), para começar sem esperar.
+      preload={active ? "auto" : "none"}
       autoPlay={eager}
       data-loop={eager ? undefined : ""}
     />
