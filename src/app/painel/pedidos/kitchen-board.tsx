@@ -57,10 +57,12 @@ export function KitchenBoard({ restaurantId, initial, enabled: enabled0 }: { res
   // 5 s com a aba visível; 30 s escondida. Ao voltar à aba, consulta na hora.
   useEffect(() => {
     let cancelled = false;
+    let gen = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const loop = async () => {
+      const my = ++gen;
       await load().catch(() => setErr("Não foi possível atualizar."));
-      if (cancelled) return;
+      if (cancelled || my !== gen) return;
       timer = setTimeout(loop, document.visibilityState === "visible" ? 5000 : 30000);
     };
     const onVisible = () => {
@@ -85,7 +87,10 @@ export function KitchenBoard({ restaurantId, initial, enabled: enabled0 }: { res
   // Tenta manter a tela acesa; se o navegador recusar, segue sem isso.
   useEffect(() => {
     let lock: { release: () => Promise<void> } | null = null;
+    let busy = false;
     const ask = async () => {
+      if (busy) return;
+      busy = true;
       try {
         const wl = (navigator as Navigator & { wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> } }).wakeLock;
         if (wl && document.visibilityState === "visible") {
@@ -94,6 +99,8 @@ export function KitchenBoard({ restaurantId, initial, enabled: enabled0 }: { res
         }
       } catch {
         lock = null;
+      } finally {
+        busy = false;
       }
     };
     void ask();
