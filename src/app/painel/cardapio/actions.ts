@@ -25,7 +25,7 @@ const okId = (id: unknown): id is string => typeof id === "string" && UUIDS.test
 const clean = (s: unknown, max: number) => String(s ?? "").trim().slice(0, max);
 
 
-type CatRow = { Id: number; id: string; name: string; description: string | null };
+type CatRow = { Id: number; id: string; name: string; description: string | null; half_half?: boolean };
 type ItemRow = {
   Id: number;
   id: string;
@@ -94,7 +94,8 @@ export async function updateCategory(restaurantId: string, id: string, input: Ca
   const before = await db.first<CatRow>("categories", { uid: id, restaurant_id: restaurantId });
   if (!before) return { error: FAIL };
   const row: Record<string, unknown> = { name: n, active: !!input.active };
-  if (input.halfHalf !== undefined) row.half_half = !!input.halfHalf;
+  // Só grava quando muda: assim salvar a categoria funciona antes de a coluna half_half existir.
+  if (input.halfHalf !== undefined && !!before.half_half !== !!input.halfHalf) row.half_half = !!input.halfHalf;
   const description = input.description === undefined ? undefined : clean(input.description, 300);
   if (description !== undefined) {
     Object.assign(row, {

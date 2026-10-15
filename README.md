@@ -55,11 +55,11 @@ Não há pagamento: a conta é paga direto no restaurante.
   `created_at`, `status_at`.
 - **Rota** `/api/pedidos/[slug]`: `POST` cria o pedido (o servidor recalcula preço e confere
   prato, horário da categoria e chave; recusa com `disabled`, `invalid`, `unavailable` etc.);
-  `GET ?device=&mesa=` lista só os pedidos daquele aparelho nas últimas 6 h.
+  `GET ?device=` lista só os pedidos daquele aparelho nas últimas 6 h.
 - **Limites:** 20 unidades por linha, 30 linhas por pedido, carrinho guardado 6 h no celular.
 - **Testes:** `npm test` (Vitest, com banco falso em memória).
 - **Antes de publicar:** rode `setup.mjs` na base real, porque salvar categoria grava `half_half`
-  e salvar o restaurante grava `orders_enabled`.
+  e a chave na aba Pedidos grava `orders_enabled`.
 
 ### NocoDB local descartável (teste ponta a ponta)
 
