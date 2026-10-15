@@ -36,6 +36,8 @@ export function thumbSrc(item: MenuItem | undefined): string | null {
   return posterSrc(m) ?? (m.kind === "photo" ? mediaUrl(m.storage_path) : null);
 }
 
+// Valor fechado sem ",00" (R$ 64); com centavos, as duas casas (R$ 57,40).
 export function formatPrice(cents: number, lang: string) {
-  return new Intl.NumberFormat(lang, { style: "currency", currency: "BRL" }).format(cents / 100);
+  const digits = cents % 100 === 0 ? 0 : 2;
+  return new Intl.NumberFormat(lang, { style: "currency", currency: "BRL", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(cents / 100);
 }

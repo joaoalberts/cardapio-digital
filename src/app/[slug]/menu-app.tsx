@@ -16,6 +16,7 @@ import { Flag } from "./flag";
 import { OrderProvider, useOrder } from "./order/order-context";
 import { OrderLayer } from "./order/order-layer";
 import { StoryActions } from "./order/story-actions";
+import { CartButton } from "./order/cart-button";
 
 const AUTO_MS = 6000; // cada foto fica 6 s; vídeo usa a própria duração
 const VIDEO_FALLBACK_MS = AUTO_MS * 2.5; // vídeo que não carrega não trava o cardápio
@@ -84,7 +85,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   const menus = useRef(new Map<string, PublicMenu>([[initialMenu.restaurant.language, initialMenu]]));
   const lang = menu.restaurant.language;
   const order = useOrder();
-  const { syncMenu, setViewerOpen } = order;
+  const { syncMenu, setViewerOpen, setCurrent } = order;
   const sheetOpen = order.sheetOpenRef;
   const sheetNow = useRef(false); // espelho local: o ref do provider só atualiza depois dos efeitos deste componente
   const sheetOpenNow = order.sheet !== null;
@@ -107,6 +108,9 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
     langOpen: false,
   });
   useEffect(() => setViewerOpen(view.open), [view.open, setViewerOpen]);
+  // Prato do story na tela: a barrinha da outra metade da pizza usa para oferecer "½ Sabor".
+  const storyItem = view.open ? (cats[view.cur]?.items[view.idx[view.cur]] ?? null) : null;
+  useEffect(() => setCurrent(storyItem), [storyItem, setCurrent]);
   // O ref é a fonte da verdade para o código imperativo (gestos, animação);
   // o estado só serve para desenhar.
   const viewRef = useRef(view);
@@ -823,6 +827,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
         </div>
         {tableTag}
         {view.langOpen && <div className="langcatch" onClick={() => update({ langOpen: false })} />}
+        <CartButton inViewer={false} className="round hero-cart" />
         {hasInfo(restaurant) && (
           <button className="round hero-info" onClick={() => setInfoOpen(true)} aria-label={t("info")}>
             <svg className="icon" viewBox="0 0 24 24" aria-hidden>
@@ -978,6 +983,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
               </button>
             ))}
           </div>
+          <CartButton inViewer className="vcart glass" />
           <button
             className="listbtn"
             onClick={() => update({ listOpen: true, listCat: viewRef.current.cur })}

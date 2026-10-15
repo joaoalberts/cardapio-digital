@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { t as tr } from "@/lib/menu/i18n";
 import { useOrder } from "./order-context";
-import { Island } from "./island";
+import { CartBar, PickBar } from "./pick-bar";
 import { ItemSheet } from "./item-sheet";
 import { CartSheet } from "./cart-sheet";
 
-// Ilha, folhas e aviso de desfazer. Só existe com mesa válida e pedidos ligados.
+// Folhas de vidro, barrinha da outra metade, pedido comprimido e avisos. Só existe com mesa
+// válida e pedidos ligados. O carrinho do topo fica no menu-app (cart-button.tsx).
 export function OrderLayer() {
   const o = useOrder();
   const s = o.sheet;
@@ -26,8 +27,8 @@ export function OrderLayer() {
     if (s?.kind === "cart") setCartOpenId((n) => n + 1);
     if (s?.kind === "item") setItemOpenId((n) => n + 1);
   }
-  // Foco: ao abrir, vai para o "×" da folha (na do prato aberta para a observação, a própria folha
-  // foca a observação); ao fechar, volta para quem estava focado antes de abrir.
+  // Foco: ao abrir, vai para o título da folha (na do prato aberta para a observação, a própria
+  // folha foca a observação); ao fechar, volta para quem estava focado antes de abrir.
   const itemSec = useRef<HTMLElement>(null);
   const cartSec = useRef<HTMLElement>(null);
   const opener = useRef<Element | null>(null);
@@ -38,7 +39,7 @@ export function OrderLayer() {
     if (kind) {
       if (!wasOpen.current) opener.current = document.activeElement;
       wasOpen.current = true;
-      if (!toNote) (kind === "item" ? itemSec : cartSec).current?.querySelector<HTMLElement>(".o-x")?.focus({ preventScroll: true });
+      if (!toNote) (kind === "item" ? itemSec : cartSec).current?.querySelector<HTMLElement>("[data-autofocus]")?.focus({ preventScroll: true });
     } else if (wasOpen.current) {
       wasOpen.current = false;
       (opener.current as HTMLElement | null)?.focus?.({ preventScroll: true });
@@ -54,7 +55,13 @@ export function OrderLayer() {
   if (!o.enabled) return null;
   return (
     <div className="o-layer">
-      <Island />
+      {o.flash && (
+        <div className="o-flash glass" key={o.flash.id} role="status">
+          <span className={o.flash.tone}>{o.flash.label}</span> {o.flash.text}
+        </div>
+      )}
+      <PickBar />
+      <CartBar />
       <div className={`o-backdrop${s ? " on" : ""}`} onClick={o.closeSheet} aria-hidden />
       <section
         ref={itemSec}
@@ -65,8 +72,7 @@ export function OrderLayer() {
         aria-hidden={s?.kind !== "item"}
         inert={s?.kind !== "item"}
       >
-        <div className="o-grab" />
-        {lastItem && <ItemSheet key={`${itemOpenId}:${lastItem.item.id}:${lastItem.edit?.key ?? ""}`} item={lastItem.item} focusNote={lastItem.focusNote} edit={lastItem.edit} />}
+        {lastItem && <ItemSheet key={`${itemOpenId}:${lastItem.item.id}:${lastItem.edit?.key ?? ""}`} item={lastItem.item} focusNote={lastItem.focusNote} edit={lastItem.edit} draft={lastItem.draft} />}
       </section>
       <section
         ref={cartSec}
@@ -77,7 +83,6 @@ export function OrderLayer() {
         aria-hidden={s?.kind !== "cart"}
         inert={s?.kind !== "cart"}
       >
-        <div className="o-grab" />
         {lastCart && <CartSheet key={cartOpenId} tab={lastCart.tab} />}
       </section>
       <div className={`o-toast${o.toast ? " on" : ""}`} role="status">

@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { MenuItem, PublicMenu } from "@/lib/menu/types";
 import { tf, t as tr } from "@/lib/menu/i18n";
 import { formatPrice, thumbSrc } from "@/lib/menu/media";
-import { buildIndex, resolveLine } from "@/lib/orders/pricing";
+import { buildIndex, itemPrice, resolveLine } from "@/lib/orders/pricing";
 import {
   addLine, cartCount, cartTotal, parseStoredCart, parseStoredRef, removeLine, replaceLine, restoreLine, serializeCart, setQty as setLineQty,
   type CartLine, type NewLine,
@@ -15,11 +15,20 @@ import { flyTo } from "./fly";
 
 export type Table = { code: string; label: string };
 export type SheetState =
-  | { kind: "item"; item: MenuItem; focusNote: boolean; edit: CartLine | null }
+  | { kind: "item"; item: MenuItem; focusNote: boolean; edit: CartLine | null; draft?: { option: string | null; note: string } }
   | { kind: "cart"; tab: "cart" | "orders" }
   | null;
 export type FlashState = { id: number; label: string; text: string; img: string | null; tone: "added" | "ok" } | null;
 export type SendOutcome = { ok: true; order: PublicOrder; number: number; priceChanged: boolean } | { ok: false; message: string };
+// Meio a meio escolhido navegando: a folha se comprime numa barrinha e o cliente vai até o
+// outro sabor. Em uma troca (Editar > trocar), `swap` diz qual linha e qual metade sai.
+export type PickState = {
+  keep: MenuItem; // a metade que fica
+  option: string | null;
+  note: string;
+  swap: { key: string; side: "item" | "half" } | null;
+  fromSheet?: boolean; // troca começada na folha do prato (Editar > Observação): desistir volta a ela
+} | null;
 
 type OrderApi = {
   enabled: boolean;
@@ -48,6 +57,17 @@ type OrderApi = {
   openCart: (tab?: "cart" | "orders") => void;
   closeSheet: () => void;
   send: () => Promise<SendOutcome>;
+  current: MenuItem | null; // prato do story na tela (null fora dos stories)
+  setCurrent: (item: MenuItem | null) => void;
+  pick: PickState;
+  startPick: (p: NonNullable<PickState>) => void;
+  cancelPick: () => void;
+  canPair: (candidate: MenuItem | null) => boolean;
+  pair: (candidate: MenuItem) => void;
+  editing: boolean;
+  setEditing: (on: boolean) => void;
+  cartMin: boolean;
+  minimizeCart: () => void;
 };
 
 const Ctx = createContext<OrderApi | null>(null);
@@ -83,6 +103,10 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [device, setDevice] = useState<string | null>(null);
+  const [current, setCurrent] = useState<MenuItem | null>(null);
+  const [pick, setPick] = useState<PickState>(null);
+  const [editing, setEditing] = useState(false);
+  const [cartMin, setCartMin] = useState(false);
   const islandRef = useRef<HTMLButtonElement | null>(null);
   const sheetOpenRef = useRef(false);
   const refAttempt = useRef<string | null>(null);
@@ -253,6 +277,35 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
     return { ok: false, message: tr("oErrNet", lang) };
   }, [table, device, cartKey, lines, lang, slug, unit, orders, push, showFlash, index]);
 
+  // A outra metade precisa ser da mesma categoria, ter o mesmo tamanho e não ser o próprio sabor que fica.
+  // Numa troca, o sabor que está saindo também não serve (trocar Calabresa por Calabresa não muda nada).
+  const swapOut = (() => {
+    if (!pick?.swap) return null;
+    const l = lines.find((x) => x.key === pick.swap!.key);
+    return l ? (pick.swap.side === "item" ? l.item : l.half) : null;
+  })();
+  const canPair = (c: MenuItem | null) =>
+    !!pick && !!c && c.id !== pick.keep.id && c.id !== swapOut && c.category_id === pick.keep.category_id && !c.hide_price && itemPrice(c, pick.option) != null;
+
+  const pair = (c: MenuItem) => {
+    if (!pick || !canPair(c)) return;
+    const p = pick;
+    setPick(null);
+    setCartMin(false);
+    if (p.swap) {
+      const line = lines.find((l) => l.key === p.swap!.key);
+      if (line) {
+        const next = p.swap.side === "item" ? { item: c.id, half: line.half } : { item: line.item, half: c.id };
+        dirty.current = true;
+        setLines((cart) => replaceLine(cart, line.key, { ...next, option: p.option, qty: line.qty, note: p.note }));
+      }
+      setEditing(true);
+    } else {
+      add({ item: p.keep.id, option: p.option, half: c.id, qty: 1, note: p.note });
+    }
+    setSheet({ kind: "cart", tab: "cart" });
+  };
+
   const api: OrderApi = {
     enabled,
     lang,
@@ -283,9 +336,46 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
     },
     remove,
     openItem: (item, opts) => setSheet({ kind: "item", item, focusNote: !!opts?.focusNote, edit: opts?.edit ?? null }),
-    openCart: (tab = "cart") => setSheet({ kind: "cart", tab }),
-    closeSheet: () => setSheet(null),
+    openCart: (tab = "cart") => {
+      setPick(null);
+      setCartMin(false);
+      setSheet({ kind: "cart", tab });
+    },
+    closeSheet: () => {
+      setSheet(null);
+      setEditing(false);
+    },
     send,
+    current,
+    setCurrent,
+    pick,
+    startPick: (p) => {
+      setPick(p);
+      setCartMin(false);
+      setEditing(false);
+      setSheet(null);
+    },
+    cancelPick: () => {
+      const p = pick;
+      setPick(null);
+      // Desistiu da troca: volta ao pedido, ainda editando. Desistiu da meio a meio: volta à folha do prato.
+      const editLine = p?.swap && p.fromSheet ? lines.find((l) => l.key === p.swap!.key) : undefined;
+      if (editLine) setSheet({ kind: "item", item: p!.keep, focusNote: false, edit: editLine, draft: { option: p!.option, note: p!.note } });
+      else if (p?.swap) {
+        setEditing(true);
+        setSheet({ kind: "cart", tab: "cart" });
+      } else if (p) setSheet({ kind: "item", item: p.keep, focusNote: false, edit: null, draft: { option: p.option, note: p.note } });
+    },
+    canPair,
+    pair,
+    editing,
+    setEditing,
+    cartMin,
+    minimizeCart: () => {
+      setSheet(null);
+      setEditing(false);
+      setCartMin(true);
+    },
   };
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }
