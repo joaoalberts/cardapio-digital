@@ -10,7 +10,7 @@ import { money, useOrder } from "./order-context";
 // Folha de vidro do prato: nome e preço no alto; linhas para tamanho, Inteira ou Metade e
 // observação. Inteira (ou prato sem escolha) vai direto ao pedido. Em Metade, "Escolher"
 // comprime a folha e o cliente navega até o outro sabor (barrinha em pick-bar.tsx).
-export function ItemSheet({ item, focusNote, edit, draft }: { item: MenuItem; focusNote: boolean; edit: CartLine | null; draft?: { option: string | null; note: string } }) {
+export function ItemSheet({ item, focusNote, edit, draft, qty: startQty }: { item: MenuItem; focusNote: boolean; edit: CartLine | null; draft?: { option: string | null; note: string }; qty?: number }) {
   const o = useOrder();
   const L = o.lang;
   const sizes = item.price_options ?? [];
@@ -18,7 +18,7 @@ export function ItemSheet({ item, focusNote, edit, draft }: { item: MenuItem; fo
   const [mode, setMode] = useState<"whole" | "half">(edit?.half || draft ? "half" : "whole");
   const [note, setNote] = useState(draft?.note ?? edit?.note ?? "");
   const [noteOpen, setNoteOpen] = useState(focusNote || !!(draft?.note ?? edit?.note));
-  const noteRef = useRef<HTMLTextAreaElement>(null);
+  const noteRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!focusNote) return;
@@ -40,7 +40,7 @@ export function ItemSheet({ item, focusNote, edit, draft }: { item: MenuItem; fo
 
   const save = (half: string | null) => {
     if (pa == null) return;
-    const line = { item: item.id, option, half, qty: edit?.qty ?? 1, note: note.trim().slice(0, NOTE_MAX) };
+    const line = { item: item.id, option, half, qty: edit?.qty ?? startQty ?? 1, note: note.trim().slice(0, NOTE_MAX) };
     if (edit) o.replace(edit.key, line);
     else o.add(line);
     o.openCart("cart");
@@ -52,6 +52,7 @@ export function ItemSheet({ item, focusNote, edit, draft }: { item: MenuItem; fo
       note: note.trim().slice(0, NOTE_MAX),
       swap: edit ? { key: edit.key, side: "half" } : null,
       fromSheet: !!edit,
+      qty: startQty,
     });
 
   // Editando uma meio a meio, o preço do alto é o da pizza inteira montada.
@@ -85,6 +86,35 @@ export function ItemSheet({ item, focusNote, edit, draft }: { item: MenuItem; fo
             </div>
           </div>
         )}
+        {/* Observação: um toque na palavra abre o campo na própria linha, sem caixa embaixo. */}
+        <div className="g-row g-note">
+          {!noteOpen ? (
+            <button className="g-lbl g-notel" onClick={() => { setNoteOpen(true); setTimeout(() => noteRef.current?.focus(), 30); }}>
+              {tr("oNote", L)}
+            </button>
+          ) : (
+            <>
+              <input
+                id="o-note"
+                ref={noteRef}
+                className="g-note-in"
+                maxLength={NOTE_MAX}
+                value={note}
+                placeholder={tr("oNotePh", L)}
+                aria-label={tr("oNote", L)}
+                onChange={(e) => setNote(e.target.value)}
+                // Extensões de escrita (Grammarly, LanguageTool…) não põem ícone no campo.
+                data-gramm="false"
+                data-gramm_editor="false"
+                data-enable-grammarly="false"
+                data-lt-active="false"
+                autoComplete="off"
+              />
+              {note.length > NOTE_MAX - 40 && <span className={`o-count${note.length > NOTE_MAX - 20 ? " warn" : ""}`}>{NOTE_MAX - note.length}</span>}
+            </>
+          )}
+        </div>
+        {/* Outra metade por último: Pizza, Observação, Outra metade (pedido do João). */}
         {effMode === "half" && (
           <div className="g-row">
             <span className="g-lbl">{tr("oOtherHalf", L)}</span>
@@ -92,19 +122,6 @@ export function ItemSheet({ item, focusNote, edit, draft }: { item: MenuItem; fo
               <b>{other ? other.name : tr("oPick", L)}</b> ›
             </button>
           </div>
-        )}
-        <div className="g-row">
-          <label className="g-lbl" htmlFor="o-note">{tr("oNote", L)}</label>
-          {!noteOpen ? (
-            <button className="g-pick" onClick={() => { setNoteOpen(true); setTimeout(() => noteRef.current?.focus(), 30); }}>
-              <b>{tr("oNoteAdd", L)}</b> ›
-            </button>
-          ) : (
-            <span className={`o-count${note.length > NOTE_MAX - 20 ? " warn" : ""}`}>{note.length}/{NOTE_MAX}</span>
-          )}
-        </div>
-        {noteOpen && (
-          <textarea id="o-note" ref={noteRef} maxLength={NOTE_MAX} rows={2} value={note} placeholder={tr("oNotePh", L)} onChange={(e) => setNote(e.target.value)} />
         )}
       </div>
       {/* Em Metade não há botão embaixo: "Escolher" já leva adiante. Editando uma meio a meio já montada, o botão salva. */}

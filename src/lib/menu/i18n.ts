@@ -113,6 +113,7 @@ const STRINGS = {
   oMoreOne: L6(["Mais um", "One more", "Uno más", "Un de plus", "Uno in più", "Einer mehr"]),
   oClose: L6(["Fechar", "Close", "Cerrar", "Fermer", "Chiudi", "Schließen"]),
   // Folha de vidro (pedido em 15/10/2026)
+  oGo: L6(["Pedir agora", "Order now", "Pedir ahora", "Commander", "Ordina ora", "Jetzt bestellen"]),
   oAsk: L6(["Pedir", "Order", "Pedir", "Commander", "Ordina", "Bestellen"]),
   oHalfBtn: L6(["Metade", "Half", "Mitad", "Moitié", "Metà", "Hälfte"]),
   oPizza: L6(["Pizza", "Pizza", "Pizza", "Pizza", "Pizza", "Pizza"]),

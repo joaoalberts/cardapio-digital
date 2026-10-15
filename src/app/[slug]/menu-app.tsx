@@ -15,7 +15,7 @@ import type { MenuCategory, MenuItem, MenuMedia, PublicMenu } from "@/lib/menu/t
 import { Flag } from "./flag";
 import { OrderProvider, useOrder } from "./order/order-context";
 import { OrderLayer } from "./order/order-layer";
-import { StoryActions } from "./order/story-actions";
+import { StoryBuy } from "./order/story-actions";
 import { CartButton } from "./order/cart-button";
 
 const AUTO_MS = 6000; // cada foto fica 6 s; vídeo usa a própria duração
@@ -536,6 +536,8 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Digitando (observação do pedido etc.): espaço, setas e Esc são do campo, não do story.
+      if ((e.target as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable]")) return;
       const v = viewRef.current;
       if (v.langOpen) {
         if (e.key === "Escape") update({ langOpen: false });
@@ -919,13 +921,16 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
                   ))}
                 </div>
                 <div className="info">
+                  {/* Linha pequena espaçada acima do nome: o primeiro selo do prato ou, sem selo, a categoria. */}
+                  <span className="eyebrow">{item.tags?.length ? tagLabel(item.tags[0], lang) : c.name}</span>
                   <h3 className="fd">{item.name}</h3>
+                  <i className="rule" aria-hidden />
                   {item.description && <p>{item.description}</p>}
-                  {(!!item.tags?.length || item.serves || item.country) && (
+                  {((item.tags?.length ?? 0) > 1 || item.serves || item.country) && (
                     <ul className="tags">
                       {item.serves && <li>{tr("serves", lang).replace("{n}", String(item.serves))}</li>}
                       {item.country && <li>{countryLabel(item.country, lang)}</li>}
-                      {item.tags?.map((tg) => (
+                      {item.tags?.slice(1).map((tg) => (
                         <li key={tg}>{tagLabel(tg, lang)}</li>
                       ))}
                     </ul>
@@ -940,11 +945,8 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
                       ))}
                     </ul>
                   )}
-                  {/* Preço e "Pedir" na mesma linha, no pé do story (o compartilhar saiu a pedido do João, 15/10). */}
-                  <div className="buyrow">
-                    {!item.hide_price && <Price item={item} lang={lang} className="price solo" />}
-                    <StoryActions item={item} />
-                  </div>
+                  {/* Preço e quantidade na mesma linha e, embaixo, "Pedir agora" (layout do João, 15/10). */}
+                  <StoryBuy key={item.id} item={item} kind={c.name} price={!item.hide_price && <Price item={item} lang={lang} className="price solo" />} />
                 </div>
                 <div className="dim" />
               </div>

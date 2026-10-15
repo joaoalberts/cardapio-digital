@@ -72,7 +72,7 @@ export function OrderLayer() {
         aria-hidden={s?.kind !== "item"}
         inert={s?.kind !== "item"}
       >
-        {lastItem && <ItemSheet key={`${itemOpenId}:${lastItem.item.id}:${lastItem.edit?.key ?? ""}`} item={lastItem.item} focusNote={lastItem.focusNote} edit={lastItem.edit} draft={lastItem.draft} />}
+        {lastItem && <ItemSheet key={`${itemOpenId}:${lastItem.item.id}:${lastItem.edit?.key ?? ""}`} item={lastItem.item} focusNote={lastItem.focusNote} edit={lastItem.edit} draft={lastItem.draft} qty={lastItem.qty} />}
       </section>
       <section
         ref={cartSec}

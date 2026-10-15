@@ -1136,3 +1136,6 @@ html:has(.cm .viewer:not([hidden])) body {
 .cm .viewer .buyrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; margin-top: 4px; }
 .cm .viewer .buyrow .price.solo { margin-top: 0; }
 .cm .viewer .buyrow .o-acts { margin: 0 0 0 auto; }
+/* Nome e descrição juntos; o preço desce e ganha fôlego (pedido do João, 15/10). */
+.cm .viewer .info h3 + p { margin-top: -4px; }
+.cm .viewer .buyrow { margin-top: 14px; }

@@ -16,7 +16,7 @@ import { flyTo } from "./fly";
 
 export type Table = { code: string; label: string };
 export type SheetState =
-  | { kind: "item"; item: MenuItem; focusNote: boolean; edit: CartLine | null; draft?: { option: string | null; note: string } }
+  | { kind: "item"; item: MenuItem; focusNote: boolean; edit: CartLine | null; draft?: { option: string | null; note: string }; qty?: number }
   | { kind: "cart"; tab: "cart" | "orders" }
   | null;
 export type FlashState = { id: number; label: string; text: string; img: string | null; tone: "added" | "ok" } | null;
@@ -29,6 +29,7 @@ export type PickState = {
   note: string;
   swap: { key: string; side: "item" | "half" } | null;
   fromSheet?: boolean; // troca começada na folha do prato (Editar > Observação): desistir volta a ela
+  qty?: number; // quantidade escolhida no story
 } | null;
 
 type OrderApi = {
@@ -54,7 +55,7 @@ type OrderApi = {
   replace: (key: string, l: NewLine) => void;
   setQty: (key: string, qty: number) => void;
   remove: (key: string) => void;
-  openItem: (item: MenuItem, opts?: { focusNote?: boolean; edit?: CartLine }) => void;
+  openItem: (item: MenuItem, opts?: { focusNote?: boolean; edit?: CartLine; qty?: number }) => void;
   openCart: (tab?: "cart" | "orders") => void;
   closeSheet: () => void;
   send: () => Promise<SendOutcome>;
@@ -302,7 +303,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       }
       setEditing(true);
     } else {
-      add({ item: p.keep.id, option: p.option, half: c.id, qty: 1, note: p.note });
+      add({ item: p.keep.id, option: p.option, half: c.id, qty: p.qty ?? 1, note: p.note });
     }
     setSheet({ kind: "cart", tab: "cart" });
   };
@@ -336,7 +337,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       setLines((c) => setLineQty(c, key, qty));
     },
     remove,
-    openItem: (item, opts) => setSheet({ kind: "item", item, focusNote: !!opts?.focusNote, edit: opts?.edit ?? null }),
+    openItem: (item, opts) => setSheet({ kind: "item", item, focusNote: !!opts?.focusNote, edit: opts?.edit ?? null, qty: opts?.qty }),
     openCart: (tab = "cart") => {
       setPick(null);
       setCartMin(false);

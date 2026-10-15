@@ -30,7 +30,8 @@ export function PickBar() {
     <div className="o-pbar glass" ref={box} role="group" aria-label={`½ ${p.keep.name}`}>
       <span className="o-pbar-pie" aria-hidden>
         {keepSrc ? <img src={keepSrc} alt="" /> : <i />}
-        <i className="empty" />
+        {/* Com uma pizza que combina na tela, a outra metade já aparece montada. */}
+        {ok && thumbSrc(cur!) ? <img className="r" src={thumbSrc(cur!)!} alt="" /> : <i className="empty" />}
       </span>
       <span className="o-pbar-tx">
         <b>½ {p.keep.name}</b>
