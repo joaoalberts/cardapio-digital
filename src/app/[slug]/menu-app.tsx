@@ -875,7 +875,6 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
                   key={c.id}
                   cat={c}
                   index={i}
-                  lang={lang}
                   refCb={(el) => {
                     cardEls.current[i] = el;
                   }}
@@ -1086,13 +1085,11 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
 function CategoryCard({
   cat,
   index,
-  lang,
   refCb,
   onOpen,
 }: {
   cat: MenuCategory;
   index: number;
-  lang: string;
   refCb: (el: HTMLButtonElement | null) => void;
   onOpen: () => void;
 }) {
@@ -1108,7 +1105,6 @@ function CategoryCard({
       )}
       <div className="card-txt">
         <b className="fd">{cat.name}</b>
-        <span>{cat.description || `${cat.items.length} ${tr("items", lang)}`}</span>
       </div>
     </button>
   );

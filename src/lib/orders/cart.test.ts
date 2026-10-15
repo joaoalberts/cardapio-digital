@@ -19,6 +19,15 @@ describe("carrinho", () => {
     const b = { item: "x", option: "|", half: null, qty: 1, note: "a" };
     expect(addLine(addLine([], a), b)).toHaveLength(2);
   });
+  it("meio a meio com os sabores em ordem invertida é a mesma pizza", () => {
+    const inv: NewLine = { ...pizza, item: "calabresa", half: "margherita" };
+    const c = addLine(addLine([], pizza), inv);
+    expect(c).toHaveLength(1);
+    expect(c[0].qty).toBe(2);
+    expect([c[0].item, c[0].half]).toEqual(["margherita", "calabresa"]); // fica como foi pedida primeiro
+    expect(lineKey(inv)).toBe(lineKey(pizza));
+    expect(lineKey({ ...pizza, half: null })).not.toBe(lineKey({ ...pizza, item: "calabresa", half: null })); // inteiras seguem diferentes
+  });
   it("observação com espaços nas pontas conta como a mesma", () => {
     const c = addLine(addLine([], { ...smash, note: "sem picles" }), { ...smash, note: "  sem picles " });
     expect(c).toHaveLength(1);

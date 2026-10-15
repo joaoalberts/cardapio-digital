@@ -9,8 +9,12 @@ export type Removed = { line: CartLine; index: number };
 export const CART_TTL = 6 * 60 * 60 * 1000;
 
 // JSON e não "join": observação ou opção com "|" não pode fazer duas linhas diferentes virarem a mesma chave.
-export const lineKey = (l: Pick<CartLine, "item" | "option" | "half" | "note">) =>
-  JSON.stringify([l.item, l.half ?? "", l.option ?? "", l.note.trim()]);
+// Meio a meio: os dois sabores entram em ordem fixa, então Calabresa + Margherita e
+// Margherita + Calabresa são a mesma pizza (o preço é a média, igual nos dois sentidos).
+export const lineKey = (l: Pick<CartLine, "item" | "option" | "half" | "note">) => {
+  const flavors = l.half ? [l.item, l.half].sort() : [l.item, ""];
+  return JSON.stringify([...flavors, l.option ?? "", l.note.trim()]);
+};
 
 const cap = (n: number) => Math.max(1, Math.min(MAX_QTY, Math.floor(n)));
 const make = (l: NewLine): CartLine => ({ ...l, note: l.note.trim(), qty: cap(l.qty), key: lineKey(l) });
