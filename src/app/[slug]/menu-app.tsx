@@ -13,6 +13,9 @@ import { formatPrice, mediaUrl, posterSrc, thumbSrc, videoSrc } from "@/lib/menu
 import { useAutoplay, useHls } from "@/lib/menu/use-hls";
 import type { MenuCategory, MenuItem, MenuMedia, PublicMenu } from "@/lib/menu/types";
 import { Flag } from "./flag";
+import { OrderProvider, useOrder } from "./order/order-context";
+import { OrderLayer } from "./order/order-layer";
+import { StoryActions } from "./order/story-actions";
 
 const AUTO_MS = 6000; // cada foto fica 6 s; vídeo usa a própria duração
 const VIDEO_FALLBACK_MS = AUTO_MS * 2.5; // vídeo que não carrega não trava o cardápio
@@ -66,12 +69,24 @@ function visibleCats(menu: PublicMenu, now: number | null): MenuCategory[] {
   ];
 }
 
-export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; tableTag?: ReactNode }) {
+export function MenuApp(props: { initialMenu: PublicMenu; tableTag?: ReactNode }) {
+  return (
+    <OrderProvider slug={props.initialMenu.restaurant.slug}>
+      <MenuAppInner {...props} />
+    </OrderProvider>
+  );
+}
+
+function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tableTag?: ReactNode }) {
   const slug = initialMenu.restaurant.slug;
   const [menu, setMenuState] = useState(initialMenu);
   const menuRef = useRef(initialMenu);
   const menus = useRef(new Map<string, PublicMenu>([[initialMenu.restaurant.language, initialMenu]]));
   const lang = menu.restaurant.language;
+  const order = useOrder();
+  const { syncMenu, setViewerOpen } = order;
+  const sheetOpen = order.sheetOpenRef;
+  useEffect(() => syncMenu(menu), [menu, syncMenu]);
   // Relógio do horário das categorias: começa depois da primeira pintura e anda a cada minuto.
   const [now, setNow] = useState<number | null>(null);
   const cats = useMemo(() => visibleCats(menu, now), [menu, now]);
@@ -89,6 +104,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
     listCat: 0,
     langOpen: false,
   });
+  useEffect(() => setViewerOpen(view.open), [view.open, setViewerOpen]);
   // O ref é a fonte da verdade para o código imperativo (gestos, animação);
   // o estado só serve para desenhar.
   const viewRef = useRef(view);
@@ -167,10 +183,11 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
       !v.held &&
       !v.listOpen &&
       !v.langOpen &&
+      !sheetOpen.current &&
       settled.current &&
       document.visibilityState === "visible"
     );
-  }, []);
+  }, [sheetOpen]);
 
   const resetTimer = useCallback(() => {
     elapsed.current = 0;
@@ -924,13 +941,15 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
                       ))}
                     </ul>
                   )}
+                  {order.enabled && !item.hide_price && <Price item={item} lang={lang} className="price solo" />}
                   <div className="acts">
-                    <button onClick={() => share(item)}>
+                    <button onClick={() => share(item)} aria-label={order.enabled ? t("share") : undefined}>
                       <ShareIcon />
-                      <span>{t("share")}</span>
+                      {!order.enabled && <span>{t("share")}</span>}
                     </button>
-                    <Price item={item} lang={lang} className="price" />
+                    {!(order.enabled && !item.hide_price) && <Price item={item} lang={lang} className="price" />}
                   </div>
+                  <StoryActions item={item} />
                 </div>
                 <div className="dim" />
               </div>
@@ -1049,6 +1068,8 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
           {toast}
         </div>
       )}
+
+      <OrderLayer />
     </div>
   );
 }
