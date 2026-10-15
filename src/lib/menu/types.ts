@@ -21,6 +21,9 @@ export type MenuItem = {
   price_options?: { label: string; price_cents: number }[] | null;
   tags?: string[];
   media: MenuMedia[];
+  // Categoria real do prato (mesmo quando aparece em "Destaques") e se ela aceita meio a meio.
+  category_id: string;
+  half_half: boolean;
 };
 
 export type MenuCategory = {
@@ -57,6 +60,8 @@ export type MenuRestaurant = {
   timezone: string;
   opening_hours: OpeningHours | null;
   language: string;
+  // O restaurante recebe pedidos pelo cardápio (aba Pedidos do painel).
+  orders_enabled: boolean;
 };
 
 // 7 dias (0 = domingo), cada um com faixas "HH:MM"; fechar antes de abrir passa da meia-noite.

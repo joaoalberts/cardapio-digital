@@ -28,8 +28,9 @@ export async function getTableLabel(slug: string, code: string): Promise<string 
 type R = Omit<MenuRestaurant, "cover" | "language"> & {
   show_hours: boolean;
   show_payments: boolean;
+  orders_enabled: boolean;
 };
-type C = { id: string; name: string; description: string | null; available_from: string | null; available_to: string | null; active: boolean };
+type C = { id: string; name: string; description: string | null; available_from: string | null; available_to: string | null; active: boolean; half_half: boolean };
 type I = Omit<MenuItem, "media"> & { category_id: string; active: boolean };
 type M = MenuMedia & { Id: number; item_id: string | null; category_id: string | null; status: string };
 type T = { category_id: string | null; item_id: string | null; language: string; name: string; description: string | null };
@@ -99,6 +100,8 @@ export async function getPublicMenu(slug: string, lang = "pt-BR"): Promise<Publi
               price_options: i.price_options ?? null,
               tags: i.tags ?? [],
               media: ready.filter((m) => m.item_id === i.id).map(media),
+              category_id: c.id,
+              half_half: !!c.half_half,
             };
           }),
       };
@@ -127,6 +130,7 @@ export async function getPublicMenu(slug: string, lang = "pt-BR"): Promise<Publi
     wifi_password: r.wifi_password ?? null,
     payment_methods: r.show_payments ? (r.payment_methods ?? []) : [],
     language,
+    orders_enabled: !!r.orders_enabled,
   };
   return { restaurant, categories };
 }
