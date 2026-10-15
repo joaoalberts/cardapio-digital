@@ -1,0 +1,30 @@
+.kb { display: grid; gap: 16px; }
+.kb-head { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.kb-switch { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.kb-switch input { width: 20px; height: 20px; accent-color: #c99a3c; }
+.kb-live { font-size: 13px; color: #6f665f; display: flex; align-items: center; gap: 6px; }
+.kb-live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #3aa457; }
+.kb-sound { margin-left: auto; border: 1px solid #c99a3c; background: #c99a3c; color: #000; border-radius: 10px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+.kb-sound.on { background: #fff; border-color: #e4dfd8; color: #1b1714; font-weight: 500; }
+.kb-off, .kb-err { margin: 0; padding: 10px 14px; border-radius: 10px; background: #fff3cf; font-size: 14px; }
+.kb-err { background: #fde2e0; }
+.kb-cols { display: grid; grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 14px; align-items: start; }
+.kb-col { display: grid; gap: 10px; align-content: start; }
+.kb-col h3 { margin: 0; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #6f665f; display: flex; gap: 8px; align-items: center; }
+.kb-col h3 span { background: #e4dfd8; color: #1b1714; border-radius: 999px; padding: 1px 8px; font-size: 12px; letter-spacing: 0; }
+.kb-card { background: #fff; border: 1px solid #e4dfd8; border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
+.kb-card.fresh { border-color: #c99a3c; box-shadow: 0 0 0 3px rgba(201, 154, 60, 0.25); animation: kb-in 0.6s ease; }
+@keyframes kb-in { from { transform: translateY(-8px); opacity: 0; } }
+.kb-card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.kb-card header strong { font-size: 24px; font-weight: 800; }
+.kb-card header span { font-size: 12px; color: #6f665f; }
+.kb-card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.kb-card li { font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
+.kb-card li b { font-variant-numeric: tabular-nums; margin-right: 4px; }
+.kb-halves { display: block; font-size: 14px; color: #6f665f; padding-left: 22px; }
+.kb-note { display: block; margin: 4px 0 0 22px; background: #fff3cf; border-radius: 6px; padding: 4px 8px; font-size: 14px; font-weight: 600; }
+.kb-go { height: 42px; border: 0; border-radius: 10px; background: #c99a3c; color: #000; font-weight: 700; font-size: 14px; cursor: pointer; }
+.kb-go.dark { background: #1b1714; color: #fff; }
+.kb-empty { margin: 0; font-size: 13px; color: #6f665f; border: 1px dashed #e4dfd8; border-radius: 14px; padding: 18px; text-align: center; }
+@media (max-width: 760px) { .kb-cols { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .kb-card.fresh { animation: none; } }

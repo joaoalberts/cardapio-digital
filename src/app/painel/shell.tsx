@@ -8,6 +8,7 @@ import { ShellMenu, TopButton, VideoSync } from "./shell-menu";
 const raleway = Raleway({ subsets: ["latin"], display: "swap", variable: "--f-panel" });
 
 const NAV = [
+  { href: "/painel/pedidos", label: "Pedidos", icon: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6" },
   { href: "/painel/cardapio", label: "Adicionar/Editar", icon: "M12 5v14M5 12h14" },
   { href: "/painel/aparencia", label: "Aparência", icon: "M12 3a9 9 0 100 18c1 0 1.5-.7 1.5-1.5 0-1.2-1-1.6-1-2.6 0-.8.7-1.4 1.5-1.4H16a5 5 0 005-5c0-4-4-7.5-9-7.5zM7.5 12a1 1 0 100-2 1 1 0 000 2zM10.5 8a1 1 0 100-2 1 1 0 000 2zM15 8a1 1 0 100-2 1 1 0 000 2z" },
   { href: "/painel/mesas", label: "Mesas", icon: "M3 4h18v4H3zM4 8v12M20 8v12M4 14h16" },
@@ -32,6 +33,7 @@ export async function PanelShell({
   // painel confere até ficarem prontos.
   type Pending = { status: string | null; mux_mp4: string | null; mux_upload_id: string | null };
   const count = (await db.list<Pending>("media", { restaurant_id: restaurant.id })).filter(muxPending).length;
+  const newOrders = await db.count("orders", { restaurant_id: restaurant.id, status: "new" }).catch(() => 0);
   return (
     <div className={`ap-app ${raleway.variable}`}>
       <aside>
@@ -58,6 +60,7 @@ export async function PanelShell({
                 <path d={n.icon} />
               </svg>
               {n.label}
+              {n.href === "/painel/pedidos" && newOrders > 0 && <span className="ap-badge">{newOrders}</span>}
             </Link>
           ))}
           <a href={`/${restaurant.slug}`} target="_blank" rel="noreferrer">
