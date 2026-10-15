@@ -310,7 +310,7 @@ html:has(.cm .viewer:not([hidden])) body {
     z-index: 1;
     left: 16px;
     right: 16px;
-    bottom: 18px;
+    bottom: 14px;
   }
   & .card-txt b {
     display: block;
