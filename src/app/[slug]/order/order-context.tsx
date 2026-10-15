@@ -89,6 +89,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
   const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const loadedKey = useRef<string | null>(null);
+  const dirty = useRef(false); // só grava o carrinho depois de uma mudança do próprio cliente (6 h contam da última mudança)
 
   const lang = menu?.restaurant.language ?? "pt-BR";
   const enabled = !!table && !!menu?.restaurant.orders_enabled;
@@ -109,10 +110,14 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
   useEffect(() => {
     if (!cartKey || loadedKey.current === cartKey) return;
     loadedKey.current = cartKey;
+    dirty.current = false;
     setLines(parseStoredCart(store.get(cartKey), Date.now()));
   }, [cartKey]);
   useEffect(() => {
-    if (cartKey && loadedKey.current === cartKey) store.set(cartKey, serializeCart(lines, Date.now()));
+    if (cartKey && loadedKey.current === cartKey && dirty.current) {
+      store.set(cartKey, serializeCart(lines, Date.now()));
+      dirty.current = false;
+    }
     refAttempt.current = null; // carrinho mudou: o próximo envio é outro pedido
   }, [lines, cartKey]);
 
@@ -158,6 +163,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
 
   const add = useCallback(
     (l: NewLine, from?: HTMLElement | null) => {
+      dirty.current = true;
       setLines((c) => addLine(c, l));
       try {
         navigator.vibrate?.(12);
@@ -175,11 +181,15 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
 
   const remove = useCallback(
     (key: string) => {
+      dirty.current = true;
       setLines((c) => {
         const { cart, removed } = removeLine(c, key);
         if (removed) {
           const name = index?.items.get(removed.line.item)?.item.name ?? "";
-          showToast(tf("oRemoved", lang, { name }), () => setLines((now) => restoreLine(now, removed)));
+          showToast(tf("oRemoved", lang, { name }), () => {
+            dirty.current = true;
+            setLines((now) => restoreLine(now, removed));
+          });
         }
         return cart;
       });
@@ -210,8 +220,10 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
     if (!res) return { ok: false, message: tr("oErrNet", lang) };
     if (res.ok) {
       const created = res.order; // const: o TypeScript não estreita "res" dentro do filter
+      // "Pedido N" conta os pedidos já carregados em `orders` (a API devolve no máximo 20).
       const number = orders.filter((o) => o.id !== created.id).length + 1;
       push(created);
+      dirty.current = true;
       setLines([]);
       refAttempt.current = null;
       showFlash({ label: tr("oSentShort", lang), text: tf("oOrderN", lang, { n: number }), img: null, tone: "ok" }, 2000);
@@ -222,10 +234,12 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
     }
     if (res.code === "lines" && res.errors?.length) {
       // Tira do carrinho o que não pode mais ser pedido e explica qual foi.
-      const bad = new Set(res.errors.map((e) => e.index));
+      // Por chave, não por índice: o cliente pode ter mexido no carrinho durante o envio.
+      const badKeys = new Set(res.errors.map((e) => lines[e.index]?.key).filter(Boolean));
       const first = lines[res.errors[0].index];
       const name = (first && index?.items.get(first.item)?.item.name) || "";
-      setLines((c) => c.filter((_, i) => !bad.has(i)));
+      dirty.current = true;
+      setLines((c) => c.filter((l) => !badKeys.has(l.key)));
       return { ok: false, message: tf("oErrGone", lang, { name }) };
     }
     if (res.code === "table" || res.code === "disabled") return { ok: false, message: tr("oErrTable", lang) };
@@ -252,8 +266,14 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
     itemById,
     inCart: (id) => lines.filter((l) => l.item === id || l.half === id).reduce((s, l) => s + l.qty, 0),
     add,
-    replace: (key, l) => setLines((c) => replaceLine(c, key, l)),
-    setQty: (key, qty) => setLines((c) => setLineQty(c, key, qty)),
+    replace: (key, l) => {
+      dirty.current = true;
+      setLines((c) => replaceLine(c, key, l));
+    },
+    setQty: (key, qty) => {
+      dirty.current = true;
+      setLines((c) => setLineQty(c, key, qty));
+    },
     remove,
     openItem: (item, opts) => setSheet({ kind: "item", item, focusNote: !!opts?.focusNote, edit: opts?.edit ?? null }),
     openCart: (tab = "cart") => setSheet({ kind: "cart", tab }),
