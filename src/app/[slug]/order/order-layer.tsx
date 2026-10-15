@@ -11,9 +11,21 @@ import { CartSheet } from "./cart-sheet";
 export function OrderLayer() {
   const o = useOrder();
   const s = o.sheet;
-  // Última folha aberta: ela desce com o conteúdo visível em vez de esvaziar.
-  const [last, setLast] = useState(s);
-  if (s && s !== last) setLast(s);
+  // Último conteúdo de cada folha: ela desce com o próprio conteúdo visível.
+  const [lastItem, setLastItem] = useState(s?.kind === "item" ? s : null);
+  const [lastCart, setLastCart] = useState(s?.kind === "cart" ? s : null);
+  // Cada abertura do carrinho (vindo de fechado ou da folha do prato) remonta o CartSheet;
+  // trocar só de aba com ele aberto não conta.
+  const [prevKind, setPrevKind] = useState(s?.kind ?? null);
+  const [cartOpenId, setCartOpenId] = useState(0);
+  const [itemOpenId, setItemOpenId] = useState(0);
+  if (s?.kind === "item" && s !== lastItem) setLastItem(s);
+  if (s?.kind === "cart" && s !== lastCart) setLastCart(s);
+  if ((s?.kind ?? null) !== prevKind) {
+    setPrevKind(s?.kind ?? null);
+    if (s?.kind === "cart") setCartOpenId((n) => n + 1);
+    if (s?.kind === "item") setItemOpenId((n) => n + 1);
+  }
   useEffect(() => {
     if (!s) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && o.closeSheet();
@@ -34,7 +46,7 @@ export function OrderLayer() {
         inert={s?.kind !== "item"}
       >
         <div className="o-grab" />
-        {last?.kind === "item" && <ItemSheet key={`${last.item.id}:${last.edit?.key ?? ""}`} item={last.item} focusNote={last.focusNote} edit={last.edit} />}
+        {lastItem && <ItemSheet key={`${itemOpenId}:${lastItem.item.id}:${lastItem.edit?.key ?? ""}`} item={lastItem.item} focusNote={lastItem.focusNote} edit={lastItem.edit} />}
       </section>
       <section
         className={`o-sheet o-cart${s?.kind === "cart" ? " on" : ""}`}
@@ -45,7 +57,7 @@ export function OrderLayer() {
         inert={s?.kind !== "cart"}
       >
         <div className="o-grab" />
-        {last?.kind === "cart" && <CartSheet tab={last.tab} />}
+        {lastCart && <CartSheet key={cartOpenId} tab={lastCart.tab} />}
       </section>
       <div className={`o-toast${o.toast ? " on" : ""}`} role="status">
         <span>{o.toast?.text}</span>
