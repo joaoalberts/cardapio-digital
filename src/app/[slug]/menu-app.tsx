@@ -86,6 +86,8 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   const order = useOrder();
   const { syncMenu, setViewerOpen } = order;
   const sheetOpen = order.sheetOpenRef;
+  const sheetNow = useRef(false); // espelho local: o ref do provider só atualiza depois dos efeitos deste componente
+  const sheetOpenNow = order.sheet !== null;
   useEffect(() => syncMenu(menu), [menu, syncMenu]);
   // Relógio do horário das categorias: começa depois da primeira pintura e anda a cada minuto.
   const [now, setNow] = useState<number | null>(null);
@@ -184,6 +186,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
       !v.listOpen &&
       !v.langOpen &&
       !sheetOpen.current &&
+      !sheetNow.current &&
       settled.current &&
       document.visibilityState === "visible"
     );
@@ -261,6 +264,12 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
           });
     }
   }, [playing]);
+
+  // Folha ou carrinho abriu/fechou: pausa ou retoma o vídeo pelo caminho de sempre.
+  useEffect(() => {
+    sheetNow.current = sheetOpenNow;
+    syncPlayback();
+  }, [sheetOpenNow, syncPlayback]);
 
   const scrollTab = useCallback((c: number) => {
     centerTab(vTabsRef.current, c, !reduce.current);
