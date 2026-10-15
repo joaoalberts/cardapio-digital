@@ -14,13 +14,13 @@ const TABS: { id: Tab; label: string }[] = [
 
 export function FontPicker({
   restaurantId,
-  slug,
+  previewHref,
   sampleText,
   published: initialPublished,
   canPublish,
 }: {
   restaurantId: string;
-  slug: string;
+  previewHref: string; // cardápio com mesa: a prévia mostra "Pedir" e carrinho (menu-link.ts)
   sampleText: string;
   published: FontThemeId;
   canPublish: boolean;
@@ -120,7 +120,7 @@ export function FontPicker({
           <div className="ap-phone" ref={phoneRef}>
             <div className="ap-screen">
               {/* O próprio cardápio, ao vivo: a prévia é sempre igual ao que o cliente vê. */}
-              <iframe ref={frameRef} className="ap-frame" src={`/${slug}`} title="Prévia do cardápio" />
+              <iframe ref={frameRef} className="ap-frame" src={previewHref} title="Prévia do cardápio" />
             </div>
           </div>
           <span className="ap-plabel">Prévia: {fontThemeLabel(selected)}</span>

@@ -6,6 +6,7 @@ import { DEFAULT_FONT_THEME, isFontTheme } from "@/lib/menu/font-themes";
 import { mediaUrl } from "@/lib/menu/media";
 import { currentRestaurant } from "../current";
 import { PanelShell } from "../shell";
+import { ownerMenuHref } from "../menu-link";
 import { FontPicker } from "./font-picker";
 import "@/styles/font-themes.css";
 import "../panel.css";
@@ -48,7 +49,7 @@ async function Aparencia() {
           restaurantId={r.id}
           published={isFontTheme(r.font_theme) ? r.font_theme : DEFAULT_FONT_THEME}
           canPublish={isOwner}
-          slug={r.slug}
+          previewHref={await ownerMenuHref(r.id, r.slug)}
           sampleText={sampleText}
         />
       </section>

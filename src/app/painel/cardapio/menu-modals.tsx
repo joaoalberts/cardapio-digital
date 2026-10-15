@@ -24,7 +24,7 @@ export function useQr(text: string | null, size = 480) {
 }
 
 // "Acesse seu cardápio": link para copiar e o QR Code para baixar ou imprimir.
-export function LinkModal({ slug, onClose }: { slug: string; onClose: () => void }) {
+export function LinkModal({ slug, previewHref, onClose }: { slug: string; previewHref: string; onClose: () => void }) {
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
@@ -70,7 +70,7 @@ export function LinkModal({ slug, onClose }: { slug: string; onClose: () => void
             </div>
           </div>
         )}
-        <a className="md-link center" href={`/${slug}`} target="_blank" rel="noreferrer">
+        <a className="md-link center" href={previewHref} target="_blank" rel="noreferrer">
           Abrir o cardápio numa nova aba
         </a>
       </div>

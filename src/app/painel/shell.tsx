@@ -3,6 +3,7 @@ import { Raleway } from "next/font/google";
 import * as db from "@/lib/db/nocodb";
 import { muxPending } from "@/lib/media-store";
 import { ShellMenu, TopButton, VideoSync } from "./shell-menu";
+import { ownerMenuHref } from "./menu-link";
 
 // Fonte do painel (a mesma família leve do DGuests); só o painel baixa.
 const raleway = Raleway({ subsets: ["latin"], display: "swap", variable: "--f-panel" });
@@ -34,6 +35,7 @@ export async function PanelShell({
   type Pending = { status: string | null; mux_mp4: string | null; mux_upload_id: string | null };
   const count = (await db.list<Pending>("media", { restaurant_id: restaurant.id })).filter(muxPending).length;
   const newOrders = await db.count("orders", { restaurant_id: restaurant.id, status: "new" }).catch(() => 0);
+  const menuHref = await ownerMenuHref(restaurant.id, restaurant.slug); // "Abrir cardápio" com "Pedir" e carrinho
   return (
     <div className={`ap-app ${raleway.variable}`}>
       <aside>
@@ -42,7 +44,7 @@ export async function PanelShell({
         </div>
         <ShellMenu
           name={restaurant.name}
-          slug={restaurant.slug}
+          menuHref={menuHref}
           avatar={
             // eslint-disable-next-line @next/next/no-img-element -- logo enviada pelo restaurante
             <i className="ap-avatar">{restaurant.logo ? <img src={restaurant.logo} alt="" /> : initials(restaurant.name)}</i>
@@ -63,7 +65,7 @@ export async function PanelShell({
               {n.href === "/painel/pedidos" && newOrders > 0 && <span className="ap-badge">{newOrders}</span>}
             </Link>
           ))}
-          <a href={`/${restaurant.slug}`} target="_blank" rel="noreferrer">
+          <a href={menuHref} target="_blank" rel="noreferrer">
             <svg className="icon" viewBox="0 0 24 24" aria-hidden>
               <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5" />
             </svg>

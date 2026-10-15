@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { uuid } from "@/lib/uuid";
 import type { MenuItem, PublicMenu } from "@/lib/menu/types";
 import { tf, t as tr } from "@/lib/menu/i18n";
 import { formatPrice, thumbSrc } from "@/lib/menu/media";
@@ -124,7 +125,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
   useEffect(() => {
     let d = store.get(DEVICE_KEY);
     if (!d || !/^[0-9a-f-]{36}$/.test(d)) {
-      d = crypto.randomUUID();
+      d = uuid();
       store.set(DEVICE_KEY, d);
     }
     queueMicrotask(() => setDevice(d)); // lê o localStorage só no cliente; fora do corpo do efeito
@@ -226,7 +227,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
   const send = useCallback(async (): Promise<SendOutcome> => {
     if (!table || !device || !lines.length) return { ok: false, message: tr("oErrNet", lang) };
     if (!refAttempt.current) {
-      refAttempt.current = crypto.randomUUID();
+      refAttempt.current = uuid();
       // Grava já: se a resposta se perder e a página recarregar, o reenvio usa o mesmo ref.
       if (cartKey) store.set(cartKey, serializeCart(lines, Date.now(), refAttempt.current));
     }

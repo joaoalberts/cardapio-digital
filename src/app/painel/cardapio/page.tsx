@@ -6,6 +6,7 @@ import * as db from "@/lib/db/nocodb";
 import { translationEnabled } from "@/lib/translate";
 import { currentRestaurant } from "../current";
 import { PanelShell } from "../shell";
+import { ownerMenuHref } from "../menu-link";
 import { MenuEditor, type EditorCategory, type EditorItem } from "./menu-editor";
 import "../panel.css";
 import "./cardapio.css";
@@ -113,6 +114,7 @@ async function Cardapio() {
           wifiName: r.wifi_name,
           wifiPassword: r.wifi_password,
           isOwner,
+          previewHref: await ownerMenuHref(r.id, r.slug),
         }}
         languages={(r.languages ?? []).filter((l) => l !== "pt-BR")}
         canTranslate={translationEnabled()}

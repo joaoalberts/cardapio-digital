@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- foto e vídeo enviados pelo restaurante */
 
 import { useRef, useState } from "react";
+import { uuid } from "@/lib/uuid";
 import { uploadFile } from "@/lib/upload-client";
 import { extOf, IMAGE_TYPES, shrinkImage } from "@/lib/images/shrink";
 import { capturePoster, VIDEO_TYPES } from "@/lib/images/poster";
@@ -59,7 +60,7 @@ export function useMediaSlot(restaurantId: string, folder: "items" | "categories
       if (!start.mux && file.size > STORAGE_VIDEO_MAX) {
         throw new Error("Vídeo maior que 4 MB. Ligue o Mux para enviar vídeos sem limite de qualidade.");
       }
-      const id = crypto.randomUUID();
+      const id = uuid();
       const poster = await capturePoster(file).catch(() => null);
       if (!poster) throw new Error("Não foi possível ler este vídeo. Tente um MP4 ou MOV.");
       const posterPath = await uploadFile(restaurantId, `${folder}/${id}-p.${extOf(poster)}`, poster);
@@ -109,7 +110,7 @@ export function useMediaSlot(restaurantId: string, folder: "items" | "categories
         // Miniatura: lista e cards (categoria e banner ocupam a largura do celular, então maior).
         shrinkImage(file, folder === "items" ? 640 : 1080, 0.82, "image/jpeg"),
       ]);
-      const id = crypto.randomUUID();
+      const id = uuid();
       const [path, thumbPath] = await Promise.all([
         uploadFile(restaurantId, `${folder}/${id}.${extOf(full)}`, full),
         uploadFile(restaurantId, `${folder}/${id}-t.${extOf(small)}`, small),

@@ -674,20 +674,6 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
     }
   };
 
-  // ---------- Ações ----------
-  const share = async (item: MenuItem) => {
-    const url = location.href.split("#")[0];
-    const text = item.hide_price ? item.name : `${item.name} · ${formatPrice(item.promo_price_cents ?? item.price_cents, lang)}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: menu.restaurant.name, text, url });
-        return;
-      }
-      await navigator.clipboard.writeText(`${text}\n${url}`);
-      showToast(t("copied"));
-    } catch {}
-  };
-
   // Lista: todas as categorias numa rolagem só; as abas acompanham a rolagem.
   const sectionOf = (c: number) => listRef.current?.querySelector<HTMLElement>(`.lsec[data-ci="${c}"]`);
   const openListAt = (c: number) => {
@@ -954,15 +940,11 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
                       ))}
                     </ul>
                   )}
-                  {order.enabled && !item.hide_price && <Price item={item} lang={lang} className="price solo" />}
-                  <div className="acts">
-                    <button onClick={() => share(item)} aria-label={order.enabled ? t("share") : undefined}>
-                      <ShareIcon />
-                      {!order.enabled && <span>{t("share")}</span>}
-                    </button>
-                    {!(order.enabled && !item.hide_price) && <Price item={item} lang={lang} className="price" />}
+                  {/* Preço e "Pedir" na mesma linha, no pé do story (o compartilhar saiu a pedido do João, 15/10). */}
+                  <div className="buyrow">
+                    {!item.hide_price && <Price item={item} lang={lang} className="price solo" />}
+                    <StoryActions item={item} />
                   </div>
-                  <StoryActions item={item} />
                 </div>
                 <div className="dim" />
               </div>
@@ -1451,14 +1433,6 @@ function ListIcon() {
   return (
     <svg className="icon" viewBox="0 0 24 24">
       <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />
-    </svg>
-  );
-}
-
-function ShareIcon() {
-  return (
-    <svg className="icon" viewBox="0 0 24 24">
-      <path d="M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6" />
     </svg>
   );
 }

@@ -182,3 +182,5 @@
 }
 /* Vidro escuro onde há texto sobre a foto (o .glass do cardápio é claro demais para ler). */
 .cm .o-pbar.glass, .cm .o-cbar.glass, .cm .o-flash.glass { background: rgba(26, 20, 16, 0.55); border: 0; box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.28); }
+/* Com uma folha aberta, o "Pedir" do story some (aparecia apagado atrás do vidro). */
+.cm:has(.o-sheet.on) .o-acts { visibility: hidden; }

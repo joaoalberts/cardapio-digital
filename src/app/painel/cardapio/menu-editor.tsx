@@ -50,6 +50,7 @@ export type EditorRestaurant = {
   wifiName: string | null;
   wifiPassword: string | null;
   isOwner: boolean;
+  previewHref: string; // cardápio com mesa, para o dono ver "Pedir" e carrinho (menu-link.ts)
 };
 
 export type EditorContext = {
@@ -331,7 +332,7 @@ export function MenuEditor({
       {modal?.kind === "category" && (
         <CategoryModal key={modal.category.id} ctx={ctx} category={modal.category} onClose={closeModal} />
       )}
-      {modal?.kind === "link" && <LinkModal slug={restaurant.slug} onClose={() => setModal(null)} />}
+      {modal?.kind === "link" && <LinkModal slug={restaurant.slug} previewHref={restaurant.previewHref} onClose={() => setModal(null)} />}
       {modal?.kind === "settings" && (
         <SettingsModal
           restaurant={restaurant}

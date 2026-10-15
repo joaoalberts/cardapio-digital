@@ -7,7 +7,7 @@ import { signOut } from "./actions";
 import { syncVideos } from "./cardapio/actions";
 
 // Restaurante no topo da barra lateral: tocou, abre Editar Perfil, Suporte e Sair.
-export function ShellMenu({ name, slug, avatar }: { name: string; slug: string; avatar: React.ReactNode }) {
+export function ShellMenu({ name, menuHref, avatar }: { name: string; menuHref: string; avatar: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={`ap-rest${open ? " open" : ""}`}>
@@ -21,7 +21,7 @@ export function ShellMenu({ name, slug, avatar }: { name: string; slug: string; 
       {open && (
         <div className="ap-rest-menu">
           <Link href="/painel/perfil">Editar Perfil</Link>
-          <a href={`/${slug}`} target="_blank" rel="noreferrer">
+          <a href={menuHref} target="_blank" rel="noreferrer">
             Ver cardápio
           </a>
           <Link href="/painel/suporte">Suporte</Link>
