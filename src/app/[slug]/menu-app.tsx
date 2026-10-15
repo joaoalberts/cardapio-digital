@@ -28,6 +28,7 @@ type View = {
   listOpen: boolean;
   listCat: number;
   langOpen: boolean;
+  details: string | null; // prato com a descrição aberta (o story fica parado lendo)
 };
 
 type Gesture = {
@@ -88,6 +89,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
     listOpen: false,
     listCat: 0,
     langOpen: false,
+    details: null,
   });
   // O ref é a fonte da verdade para o código imperativo (gestos, animação);
   // o estado só serve para desenhar.
@@ -167,6 +169,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
       !v.held &&
       !v.listOpen &&
       !v.langOpen &&
+      !v.details &&
       settled.current &&
       document.visibilityState === "visible"
     );
@@ -707,6 +710,10 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
   // Pré-carrega os próximos pratos da categoria e o prato atual das vizinhas,
   // para que a troca já encontre a imagem decodificada.
   const idxKey = view.idx.join(",");
+  // Trocou de prato, de categoria ou fechou: a descrição volta fechada e o story segue.
+  useEffect(() => {
+    if (viewRef.current.details) update({ details: null });
+  }, [view.cur, idxKey, view.open, update]);
   useEffect(() => {
     if (!view.open) return;
     const all = catsOf();
@@ -892,7 +899,23 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
                 </div>
                 <div className="info">
                   <h3 className="fd">{item.name}</h3>
-                  {item.description && <p>{item.description}</p>}
+                  {item.description && (
+                    <>
+                      <button
+                        className="more"
+                        aria-expanded={view.details === item.id}
+                        onClick={() => update({ details: viewRef.current.details === item.id ? null : item.id })}
+                      >
+                        <span>{t("details")}</span>
+                        <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                      <div className="desc" data-open={view.details === item.id ? "1" : undefined}>
+                        <p>{item.description}</p>
+                      </div>
+                    </>
+                  )}
                   {(!!item.tags?.length || item.serves || item.country) && (
                     <ul className="tags">
                       {item.serves && <li>{tr("serves", lang).replace("{n}", String(item.serves))}</li>}

@@ -35,6 +35,7 @@ const STRINGS = {
   viewList: L6(["Ver lista", "View list", "Ver lista", "Voir la liste", "Vedi lista", "Liste"]),
   listTitle: L6(["Cardápio em lista", "Full menu", "Carta completa", "Carte complète", "Menù completo", "Speisekarte"]),
   share: L6(["Compartilhar", "Share", "Compartir", "Partager", "Condividi", "Teilen"]),
+  details: L6(["Ver detalhes", "Details", "Ver detalles", "Détails", "Dettagli", "Details"]),
   copied: L6(["Link copiado", "Link copied", "Enlace copiado", "Lien copié", "Link copiato", "Link kopiert"]),
   end: L6(["Fim do cardápio", "End of the menu", "Fin de la carta", "Fin de la carte", "Fine del menù", "Ende der Karte"]),
   lang: L6(["Idioma", "Language", "Idioma", "Langue", "Lingua", "Sprache"]),
