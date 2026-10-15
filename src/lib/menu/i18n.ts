@@ -57,6 +57,60 @@ const STRINGS = {
   opensAt: L6(["abre às {t}", "opens at {t}", "abre a las {t}", "ouvre à {t}", "apre alle {t}", "öffnet um {t}"]),
   opensOn: L6(["abre {d} às {t}", "opens {d} at {t}", "abre el {d} a las {t}", "ouvre {d} à {t}", "apre {d} alle {t}", "öffnet {d} um {t}"]),
   tomorrow: L6(["amanhã", "tomorrow", "mañana", "demain", "domani", "morgen"]),
+  oAdd: L6(["Adicionar", "Add", "Añadir", "Ajouter", "Aggiungi", "Hinzufügen"]),
+  oNote: L6(["Observação", "Note", "Nota", "Remarque", "Nota", "Hinweis"]),
+  oChoose: L6(["Escolher tamanho e sabores", "Choose size and flavors", "Elegir tamaño y sabores", "Choisir taille et saveurs", "Scegli formato e gusti", "Größe und Sorten wählen"]),
+  oInOrder: L6(["{n} no pedido", "{n} in order", "{n} en el pedido", "{n} dans la commande", "{n} nell'ordine", "{n} in der Bestellung"]),
+  oItems: L6(["{n} itens", "{n} items", "{n} artículos", "{n} articles", "{n} articoli", "{n} Artikel"]),
+  oItem1: L6(["1 item", "1 item", "1 artículo", "1 article", "1 articolo", "1 Artikel"]),
+  oAdded: L6(["Adicionado", "Added", "Añadido", "Ajouté", "Aggiunto", "Hinzugefügt"]),
+  oSize: L6(["Tamanho", "Size", "Tamaño", "Taille", "Formato", "Größe"]),
+  oFlavors: L6(["Sabores", "Flavors", "Sabores", "Saveurs", "Gusti", "Sorten"]),
+  oWhole: L6(["Inteira", "Whole", "Entera", "Entière", "Intera", "Ganz"]),
+  oHalf: L6(["Meio a meio", "Half and half", "Mitad y mitad", "Moitié-moitié", "Metà e metà", "Halb und halb"]),
+  oHalfAvg: L6(["Média de {a} e {b} = {c}", "Average of {a} and {b} = {c}", "Promedio de {a} y {b} = {c}", "Moyenne de {a} et {b} = {c}", "Media di {a} e {b} = {c}", "Durchschnitt aus {a} und {b} = {c}"]),
+  oHalfPick: L6(["Escolha a outra metade abaixo.", "Pick the other half below.", "Elige la otra mitad abajo.", "Choisissez l'autre moitié ci-dessous.", "Scegli l'altra metà qui sotto.", "Wähle unten die andere Hälfte."]),
+  oHalfNeed: L6(["Escolha o 2º sabor", "Pick the 2nd flavor", "Elige el 2º sabor", "Choisissez la 2e saveur", "Scegli il 2º gusto", "2. Sorte wählen"]),
+  oNoteHint: L6(["Vai junto com este item para a cozinha.", "Goes to the kitchen with this item.", "Va a la cocina con este artículo.", "Part en cuisine avec cet article.", "Va in cucina con questo articolo.", "Geht mit diesem Artikel an die Küche."]),
+  oNotePh: L6(["Ex.: sem cebola, molho à parte", "E.g. no onion, sauce on the side", "Ej.: sin cebolla, salsa aparte", "Ex. : sans oignon, sauce à part", "Es.: senza cipolla, salsa a parte", "Z. B. ohne Zwiebeln, Soße extra"]),
+  oSave: L6(["Salvar", "Save", "Guardar", "Enregistrer", "Salva", "Speichern"]),
+  oCart: L6(["Carrinho", "Cart", "Carrito", "Panier", "Carrello", "Warenkorb"]),
+  oMine: L6(["Meus pedidos", "My orders", "Mis pedidos", "Mes commandes", "I miei ordini", "Meine Bestellungen"]),
+  oYour: L6(["Seu pedido", "Your order", "Tu pedido", "Votre commande", "Il tuo ordine", "Deine Bestellung"]),
+  oEdit: L6(["Editar", "Edit", "Editar", "Modifier", "Modifica", "Bearbeiten"]),
+  oEditNote: L6(["Editar ou pôr observação", "Edit or add a note", "Editar o añadir nota", "Modifier ou ajouter une remarque", "Modifica o aggiungi nota", "Bearbeiten oder Hinweis hinzufügen"]),
+  oRemove: L6(["Remover", "Remove", "Quitar", "Retirer", "Rimuovi", "Entfernen"]),
+  oRemoved: L6(["{name} removido", "{name} removed", "{name} quitado", "{name} retiré", "{name} rimosso", "{name} entfernt"]),
+  oUndo: L6(["Desfazer", "Undo", "Deshacer", "Annuler", "Annulla", "Rückgängig"]),
+  oMore: L6(["Adicionar mais itens", "Add more items", "Añadir más", "Ajouter d'autres articles", "Aggiungi altro", "Mehr hinzufügen"]),
+  oTotal: L6(["Total", "Total", "Total", "Total", "Totale", "Summe"]),
+  oPayHere: L6(["Você paga a conta direto com o restaurante.", "You pay the bill directly to the restaurant.", "Pagas la cuenta directamente al restaurante.", "Vous réglez l'addition directement au restaurant.", "Il conto si paga direttamente al ristorante.", "Du bezahlst direkt beim Restaurant."]),
+  oSlide: L6(["Deslize para enviar à cozinha", "Slide to send to the kitchen", "Desliza para enviar a la cocina", "Glissez pour envoyer en cuisine", "Scorri per inviare in cucina", "Zum Senden an die Küche schieben"]),
+  oSending: L6(["Enviando…", "Sending…", "Enviando…", "Envoi…", "Invio…", "Wird gesendet…"]),
+  oSent: L6(["Pedido enviado", "Order sent", "Pedido enviado", "Commande envoyée", "Ordine inviato", "Bestellung gesendet"]),
+  oSentShort: L6(["Enviado", "Sent", "Enviado", "Envoyé", "Inviato", "Gesendet"]),
+  oSentBody: L6(["A cozinha já recebeu o pedido {n} da {table}.", "The kitchen got order {n} from {table}.", "La cocina recibió el pedido {n} de {table}.", "La cuisine a reçu la commande {n} de {table}.", "La cucina ha ricevuto l'ordine {n} di {table}.", "Die Küche hat Bestellung {n} von {table} erhalten."]),
+  oProgress: L6(["Ver andamento", "See progress", "Ver progreso", "Voir l'avancement", "Vedi stato", "Status ansehen"]),
+  oBack: L6(["Voltar ao cardápio", "Back to menu", "Volver a la carta", "Retour au menu", "Torna al menù", "Zurück zur Karte"]),
+  oOrderN: L6(["Pedido {n}", "Order {n}", "Pedido {n}", "Commande {n}", "Ordine {n}", "Bestellung {n}"]),
+  oStNew: L6(["Recebido", "Received", "Recibido", "Reçue", "Ricevuto", "Erhalten"]),
+  oStPrep: L6(["Preparando", "Preparing", "Preparando", "En préparation", "In preparazione", "In Zubereitung"]),
+  oStReady: L6(["Pronto", "Ready", "Listo", "Prête", "Pronto", "Fertig"]),
+  oReadyBody: L6(["Pedido {n} saindo", "Order {n} coming out", "Pedido {n} saliendo", "Commande {n} arrive", "Ordine {n} in arrivo", "Bestellung {n} kommt"]),
+  oCallWaiter: L6(["Para mudar algo que já foi enviado, chame o garçom.", "To change something already sent, call the waiter.", "Para cambiar algo ya enviado, llama al camarero.", "Pour modifier une commande envoyée, appelez le serveur.", "Per cambiare qualcosa già inviato, chiama il cameriere.", "Um Gesendetes zu ändern, ruf die Bedienung."]),
+  oEmpty: L6(["Seu carrinho está vazio", "Your cart is empty", "Tu carrito está vacío", "Votre panier est vide", "Il carrello è vuoto", "Dein Warenkorb ist leer"]),
+  oEmptyBody: L6(["Toque em Adicionar em qualquer prato.", "Tap Add on any dish.", "Toca Añadir en cualquier plato.", "Touchez Ajouter sur un plat.", "Tocca Aggiungi su un piatto.", "Tippe bei einem Gericht auf Hinzufügen."]),
+  oNoOrders: L6(["Nenhum pedido enviado", "No orders sent", "Ningún pedido enviado", "Aucune commande envoyée", "Nessun ordine inviato", "Keine Bestellungen gesendet"]),
+  oNoOrdersBody: L6(["Os pedidos que você mandar para a cozinha aparecem aqui.", "Orders you send to the kitchen show up here.", "Los pedidos que envíes aparecen aquí.", "Vos commandes envoyées apparaissent ici.", "Gli ordini inviati appaiono qui.", "Gesendete Bestellungen erscheinen hier."]),
+  oErrNet: L6(["Não foi possível enviar. Confira a internet e deslize de novo.", "Couldn't send. Check your connection and slide again.", "No se pudo enviar. Revisa la conexión y desliza de nuevo.", "Envoi impossible. Vérifiez la connexion et glissez à nouveau.", "Invio non riuscito. Controlla la connessione e riprova.", "Senden fehlgeschlagen. Prüfe die Verbindung und schiebe erneut."]),
+  oErrGone: L6(["O cardápio mudou: {name} não está mais disponível.", "The menu changed: {name} is no longer available.", "La carta cambió: {name} ya no está disponible.", "Le menu a changé : {name} n'est plus disponible.", "Il menù è cambiato: {name} non è più disponibile.", "Die Karte hat sich geändert: {name} ist nicht mehr verfügbar."]),
+  oErrPrice: L6(["Os preços mudaram. Total enviado: {total}.", "Prices changed. Total sent: {total}.", "Los precios cambiaron. Total enviado: {total}.", "Les prix ont changé. Total envoyé : {total}.", "I prezzi sono cambiati. Totale inviato: {total}.", "Preise geändert. Gesendete Summe: {total}."]),
+  oErrClosed: L6(["Fechado agora.", "Closed now.", "Cerrado ahora.", "Fermé maintenant.", "Chiuso ora.", "Jetzt geschlossen."]),
+  oErrClosedAt: L6(["Fechado agora. Abre às {time}.", "Closed now. Opens at {time}.", "Cerrado ahora. Abre a las {time}.", "Fermé. Ouvre à {time}.", "Chiuso ora. Apre alle {time}.", "Jetzt geschlossen. Öffnet um {time}."]),
+  oErrTable: L6(["Esta mesa não está recebendo pedidos. Chame o garçom.", "This table isn't taking orders. Please call the waiter.", "Esta mesa no recibe pedidos. Llama al camarero.", "Cette table ne prend pas de commandes. Appelez le serveur.", "Questo tavolo non accetta ordini. Chiama il cameriere.", "Dieser Tisch nimmt keine Bestellungen an. Ruf die Bedienung."]),
+  oLess: L6(["Menos um", "One less", "Uno menos", "Un de moins", "Uno in meno", "Einer weniger"]),
+  oMoreOne: L6(["Mais um", "One more", "Uno más", "Un de plus", "Uno in più", "Einer mehr"]),
+  oClose: L6(["Fechar", "Close", "Cerrar", "Fermer", "Chiudi", "Schließen"]),
   hint: L6([
     "Toque para avançar · deslize para trocar",
     "Tap to advance · swipe to switch",
@@ -72,6 +126,11 @@ export type StringKey = keyof typeof STRINGS;
 export function t(key: StringKey, lang: string) {
   const row = STRINGS[key];
   return row[lang] ?? row[lang.slice(0, 2)] ?? row["pt-BR"];
+}
+
+// Texto com variáveis: tf("oInOrder", lang, { n: 2 }) -> "2 no pedido".
+export function tf(key: StringKey, lang: string, vars: Record<string, string | number>) {
+  return t(key, lang).replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? ""));
 }
 
 // Idioma inicial: escolha salva, senão o idioma do celular, senão português.
