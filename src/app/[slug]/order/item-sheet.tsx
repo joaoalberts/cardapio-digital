@@ -22,7 +22,9 @@ export function ItemSheet({ item, focusNote, edit }: { item: MenuItem; focusNote
   const addBtn = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (focusNote) setTimeout(() => noteRef.current?.focus(), 380);
+    if (!focusNote) return;
+    const id = setTimeout(() => noteRef.current?.focus(), 380);
+    return () => clearTimeout(id);
   }, [focusNote]);
 
   // Outros sabores da mesma categoria que têm o tamanho escolhido.
@@ -33,14 +35,15 @@ export function ItemSheet({ item, focusNote, edit }: { item: MenuItem; focusNote
   }, [item, option, o.menu]);
   const other = half ? partners.find((p) => p.id === half) ?? null : null;
 
+  const effMode = partners.length ? mode : "whole";
   const pa = itemPrice(item, option);
-  const unit = mode === "half" && other && pa != null ? halfPrice(pa, itemPrice(other, option)!) : pa;
-  const needHalf = mode === "half" && !other;
+  const unit = effMode === "half" && other && pa != null ? halfPrice(pa, itemPrice(other, option)!) : pa;
+  const needHalf = effMode === "half" && !other;
   const img = thumbSrc(item);
 
   const submit = () => {
     if (unit == null || needHalf) return;
-    const line = { item: item.id, option, half: mode === "half" && other ? other.id : null, qty, note: note.trim().slice(0, NOTE_MAX) };
+    const line = { item: item.id, option, half: effMode === "half" && other ? other.id : null, qty, note: note.trim().slice(0, NOTE_MAX) };
     if (edit) {
       o.replace(edit.key, line);
       o.openCart("cart");
@@ -80,12 +83,12 @@ export function ItemSheet({ item, focusNote, edit }: { item: MenuItem; focusNote
           <div>
             <div className="o-label">{tr("oFlavors", L)}</div>
             <div className="o-seg" role="group" aria-label={tr("oFlavors", L)}>
-              <button aria-pressed={mode === "whole"} onClick={() => { setMode("whole"); setHalf(null); }}>{tr("oWhole", L)}</button>
-              <button aria-pressed={mode === "half"} onClick={() => setMode("half")}>{tr("oHalf", L)}</button>
+              <button aria-pressed={effMode === "whole"} onClick={() => { setMode("whole"); setHalf(null); }}>{tr("oWhole", L)}</button>
+              <button aria-pressed={effMode === "half"} onClick={() => setMode("half")}>{tr("oHalf", L)}</button>
             </div>
           </div>
         )}
-        {mode === "half" && (
+        {effMode === "half" && (
           <>
             <div className="o-half">
               <div className="o-pie" aria-hidden>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { t as tr } from "@/lib/menu/i18n";
 import { useOrder } from "./order-context";
 import { Island } from "./island";
@@ -11,6 +11,9 @@ import { CartSheet } from "./cart-sheet";
 export function OrderLayer() {
   const o = useOrder();
   const s = o.sheet;
+  // Última folha aberta: ela desce com o conteúdo visível em vez de esvaziar.
+  const [last, setLast] = useState(s);
+  if (s && s !== last) setLast(s);
   useEffect(() => {
     if (!s) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && o.closeSheet();
@@ -27,20 +30,22 @@ export function OrderLayer() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="o-item-title"
-        hidden={s?.kind !== "item"}
+        aria-hidden={s?.kind !== "item"}
+        inert={s?.kind !== "item"}
       >
         <div className="o-grab" />
-        {s?.kind === "item" && <ItemSheet key={`${s.item.id}:${s.edit?.key ?? ""}`} item={s.item} focusNote={s.focusNote} edit={s.edit} />}
+        {last?.kind === "item" && <ItemSheet key={`${last.item.id}:${last.edit?.key ?? ""}`} item={last.item} focusNote={last.focusNote} edit={last.edit} />}
       </section>
       <section
         className={`o-sheet o-cart${s?.kind === "cart" ? " on" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="o-cart-title"
-        hidden={s?.kind !== "cart"}
+        aria-hidden={s?.kind !== "cart"}
+        inert={s?.kind !== "cart"}
       >
         <div className="o-grab" />
-        {s?.kind === "cart" && <CartSheet tab={s.tab} />}
+        {last?.kind === "cart" && <CartSheet tab={last.tab} />}
       </section>
       <div className={`o-toast${o.toast ? " on" : ""}`} role="status">
         <span>{o.toast?.text}</span>
