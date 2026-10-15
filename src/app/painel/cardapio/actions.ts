@@ -279,7 +279,11 @@ export async function startVideoUpload(
   } catch (e) {
     // Aparece nos logs da Vercel: mostra se é chave errada (401/403) ou limite da conta.
     console.error("mux upload", String(e).slice(0, 300));
-    return { error: "Não foi possível preparar o envio do vídeo. Tente de novo." };
+    // Mostra o motivo curto (código e mensagem do Mux, sem chaves) para dar para
+    // diagnosticar sem abrir os logs da Vercel.
+    const why = String(e).match(/mux (\d{3})(?:.*?"messages":\["([^"]{1,120})")?/s);
+    const detail = why ? ` (Mux ${why[1]}${why[2] ? `: ${why[2]}` : ""})` : "";
+    return { error: `Não foi possível preparar o envio do vídeo${detail}. Tente de novo.` };
   }
 }
 
