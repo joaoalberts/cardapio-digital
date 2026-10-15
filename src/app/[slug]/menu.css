@@ -97,7 +97,6 @@ html:has(.cm .viewer:not([hidden])) body {
     place-items: center;
     background: var(--scrim);
     backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--line);
   }
   & .hero-info {
@@ -121,7 +120,6 @@ html:has(.cm .viewer:not([hidden])) body {
     border-radius: 999px;
     background: var(--scrim);
     backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--line);
     color: var(--fg);
     font-size: 14px;
@@ -190,7 +188,6 @@ html:has(.cm .viewer:not([hidden])) body {
     font-weight: 500;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     color: #fff;
     font-size: 13px;
     white-space: nowrap;
@@ -581,7 +578,6 @@ html:has(.cm .viewer:not([hidden])) body {
     background: rgba(255, 255, 255, 0.14);
     border: 1px solid rgba(255, 255, 255, 0.22);
     backdrop-filter: blur(14px) saturate(140%);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
   }
   & .back {
     flex: none;
@@ -645,7 +641,6 @@ html:has(.cm .viewer:not([hidden])) body {
     border-radius: 999px;
     background: rgba(0, 0, 0, 0.22);
     backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
     color: rgba(255, 255, 255, 0.78);
     font-size: 11.5px;
     letter-spacing: 0.01em;
@@ -924,7 +919,6 @@ html:has(.cm .viewer:not([hidden])) body {
     border-radius: 22px;
     background: var(--scrim);
     backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--line);
     transition: background 0.2s;
   }
@@ -980,7 +974,6 @@ html:has(.cm .viewer:not([hidden])) body {
     border-radius: 22px 22px 0 0;
     background: color-mix(in srgb, var(--bg) 90%, transparent);
     backdrop-filter: blur(22px) saturate(150%);
-    -webkit-backdrop-filter: blur(22px) saturate(150%);
     border-top: 1px solid var(--line);
     animation: cm-rise 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
   }

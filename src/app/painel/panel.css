@@ -1097,7 +1097,6 @@
     padding: 14px clamp(16px, 3vw, 40px) calc(14px + env(safe-area-inset-bottom, 0px));
     background: color-mix(in srgb, var(--card) 92%, transparent);
     backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
     border-top: 1px solid var(--line);
   }
   & .ap-bar .msg {
@@ -1244,7 +1243,6 @@
       padding: 10px 16px;
       background: color-mix(in srgb, var(--bg) 94%, transparent);
       backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
       border-top: 1px solid var(--line);
       scrollbar-width: none;
     }
