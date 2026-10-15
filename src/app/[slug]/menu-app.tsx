@@ -10,7 +10,7 @@ import { countryLabel, tagLabel } from "@/lib/menu/tags";
 import { paymentLabel } from "@/lib/menu/payments";
 import { LANG_FLAG, LANG_NAME, pickLanguage, t as tr, type StringKey } from "@/lib/menu/i18n";
 import { formatPrice, mediaUrl, posterSrc, thumbSrc, videoSrc } from "@/lib/menu/media";
-import { useAutoplay, useHls } from "@/lib/menu/use-hls";
+import { mute, useAutoplay, useHls } from "@/lib/menu/use-hls";
 import type { MenuCategory, MenuItem, MenuMedia, PublicMenu } from "@/lib/menu/types";
 import { Flag } from "./flag";
 
@@ -106,6 +106,8 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
   const [homeTab, setHomeTab] = useState(0);
   const [infoOpen, setInfoOpen] = useState(false);
   const [status, setStatus] = useState<StatusLabel | null>(null);
+  // Story ("categoria:prato") cujo próximo vídeo já pode ir sendo baixado; ver `upcoming`.
+  const [aheadOf, setAheadOf] = useState("");
   // Lista do cliente (botão de incluir): fica só neste celular, por restaurante.
   const [order, setOrder] = useState<Record<string, number>>({});
   const [orderOpen, setOrderOpen] = useState(false);
@@ -201,7 +203,8 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
     toastTimer.current = setTimeout(() => setToast(null), 1800);
   }, []);
 
-  const playing = useCallback(() => {
+  // `moving`: vale também durante o giro entre categorias (só para o vídeo que entra).
+  const playing = useCallback((moving = false) => {
     const v = viewRef.current;
     return (
       v.open &&
@@ -210,7 +213,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
       !v.listOpen &&
       !v.langOpen &&
       !v.details &&
-      settled.current &&
+      (moving || settled.current) &&
       document.visibilityState === "visible"
     );
   }, []);
@@ -245,13 +248,18 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
 
   const syncPlayback = useCallback(() => {
     const v = viewRef.current;
+    // Na troca de categoria, o vídeo da categoria que entra já começa a tocar durante o
+    // giro, em vez de esperar o giro acabar parado na capa. Arrastando (sem destino),
+    // nenhum toca.
+    const at = settled.current ? v.cur : v.target !== v.cur ? v.target : -1;
+    const go = playing(true);
     panelEls.current.forEach((p, i) => {
-      const vid = p?.querySelector("video");
+      const vid = p?.querySelector<HTMLVideoElement>("video[data-shown]");
       if (!vid) return;
-      const want = i === v.cur && playing();
+      const want = i === at && go;
       vid.dataset.want = want ? "1" : "";
       if (want) vid.play().catch(() => {});
-      else vid.pause();
+      else if (!vid.dataset.warming) vid.pause();
     });
     // Story aberto cobre a capa. Ao fechar, a capa já volta a tocar no próprio toque de
     // fechar (`closing`): o navegador do WhatsApp/Instagram só aceita dar play em vídeo
@@ -368,7 +376,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
       const p = panelEls.current[v.cur];
       if (!cat || !p) return;
       const item = cat.items[v.idx[v.cur]];
-      const vid = p.querySelector("video");
+      const vid = p.querySelector<HTMLVideoElement>("video[data-shown]");
       let frac: number;
       if (isVideo(item) && vid && vid.duration) {
         frac = vid.currentTime / vid.duration;
@@ -430,6 +438,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
         el.style.opacity = "";
         el.style.borderRadius = "";
       }
+      setAheadOf("");
       update({ open: false, listOpen: false, held: false });
     };
     if (!el || reduce.current) return done();
@@ -754,6 +763,25 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
   useEffect(() => {
     if (viewRef.current.details) update({ details: null });
   }, [view.cur, idxKey, view.open, update]);
+  // Próximo story da fila (o que entra quando este acaba). Se for vídeo, ele começa a
+  // baixar 1,5 s depois que o atual começou, para a troca já encontrar o vídeo pronto
+  // em vez de parar na capa esperando a internet. A espera deixa o vídeo atual largar
+  // na frente; e é só um vídeo adiantado por vez.
+  const storyKey = `${view.cur}:${view.idx[view.cur] ?? 0}`;
+  useEffect(() => {
+    if (!view.open) return;
+    const id = setTimeout(() => setAheadOf(storyKey), 1500);
+    return () => clearTimeout(id);
+  }, [view.open, storyKey]);
+  let upcoming: { c: number; i: number } | null = null;
+  if (view.open && aheadOf === storyKey && cats[view.cur]) {
+    const at = view.idx[view.cur] ?? 0;
+    const u =
+      at < cats[view.cur].items.length - 1
+        ? { c: view.cur, i: at + 1 }
+        : { c: view.cur < cats.length - 1 ? view.cur + 1 : 0, i: 0 };
+    if (isVideo(cats[u.c]?.items[u.i])) upcoming = u;
+  }
   useEffect(() => {
     if (!view.open) return;
     const all = catsOf();
@@ -909,6 +937,13 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
         >
           {cats.map((c, i) => {
             const item = c.items[view.idx[i]] ?? c.items[0];
+            // Vídeo adiantado deste painel: se não é o prato que está nele, fica por baixo,
+            // invisível, e vira o prato da tela sem recarregar quando chegar a vez.
+            const ahead = upcoming?.c === i ? c.items[upcoming.i] : undefined;
+            const extra = ahead && ahead.id !== item.id ? ahead : undefined;
+            const onEnded = () => {
+              if (viewRef.current.cur === i && playing()) next();
+            };
             return (
               <div
                 key={c.id}
@@ -918,14 +953,16 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
                 }}
               >
                 <div className="media">
-                  {near(i) && (
+                  {extra && (
+                    <StoryMedia key={extra.media[0]?.id ?? extra.id} item={extra} load={false} warm shown={false} onEnded={onEnded} />
+                  )}
+                  {(near(i) || ahead === item) && (
                     <StoryMedia
                       key={item.media[0]?.id ?? item.id}
                       item={item}
-                      live={i === view.cur && view.target === view.cur}
-                      onEnded={() => {
-                        if (viewRef.current.cur === i && playing()) next();
-                      }}
+                      load={i === view.cur || i === view.target}
+                      warm={ahead === item}
+                      onEnded={onEnded}
                     />
                   )}
                 </div>
@@ -938,43 +975,45 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
                   ))}
                 </div>
                 <div className="info">
-                  <h3 className="fd">{item.name}</h3>
-                  {item.description && (
-                    <>
-                      <button
-                        className="more"
-                        aria-expanded={view.details === item.id}
-                        onClick={() => update({ details: viewRef.current.details === item.id ? null : item.id })}
-                      >
-                        <span>{t("details")}</span>
-                        <svg className="icon" viewBox="0 0 24 24" aria-hidden>
-                          <path d="M6 9l6 6 6-6" />
-                        </svg>
-                      </button>
-                      <div className="desc" data-open={view.details === item.id ? "1" : undefined}>
-                        <p>{item.description}</p>
-                      </div>
-                    </>
-                  )}
-                  {(!!item.tags?.length || item.serves || item.country) && (
-                    <ul className="tags">
-                      {item.serves && <li>{tr("serves", lang).replace("{n}", String(item.serves))}</li>}
-                      {item.country && <li>{countryLabel(item.country, lang)}</li>}
-                      {item.tags?.map((tg) => (
-                        <li key={tg}>{tagLabel(tg, lang)}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {!item.hide_price && !!item.price_options?.length && (
-                    <ul className="opts">
-                      {item.price_options.map((o) => (
-                        <li key={o.label}>
-                          <span>{o.label}</span>
-                          <b>{formatPrice(o.price_cents, lang)}</b>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <div className="itxt">
+                    <h3 className="fd">{item.name}</h3>
+                    {item.description && (
+                      <>
+                        <button
+                          className="more"
+                          aria-expanded={view.details === item.id}
+                          onClick={() => update({ details: viewRef.current.details === item.id ? null : item.id })}
+                        >
+                          <span>{t("details")}</span>
+                          <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+                            <path d="M6 9l6 6 6-6" />
+                          </svg>
+                        </button>
+                        <div className="desc" data-open={view.details === item.id ? "1" : undefined}>
+                          <p>{item.description}</p>
+                        </div>
+                      </>
+                    )}
+                    {(!!item.tags?.length || item.serves || item.country) && (
+                      <ul className="tags">
+                        {item.serves && <li>{tr("serves", lang).replace("{n}", String(item.serves))}</li>}
+                        {item.country && <li>{countryLabel(item.country, lang)}</li>}
+                        {item.tags?.map((tg) => (
+                          <li key={tg}>{tagLabel(tg, lang)}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {!item.hide_price && !!item.price_options?.length && (
+                      <ul className="opts">
+                        {item.price_options.map((o) => (
+                          <li key={o.label}>
+                            <span>{o.label}</span>
+                            <b>{formatPrice(o.price_cents, lang)}</b>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                   <div className="acts">
                     <Qty
                       n={order[item.id] ?? 0}
@@ -1539,15 +1578,29 @@ function warm(src: string | null) {
 // Duas camadas: a miniatura (já em cache pela capa ou pelo pré-carregamento)
 // aparece na hora e a mídia em qualidade total entra por cima quando está pronta.
 // Assim a troca de prato nunca passa por tela preta.
-// Só o story da categoria atual (parado na tela) carrega e toca o vídeo; os vizinhos
-// mostram a capa. Assim nunca há mais de um vídeo baixando e decodificando ao mesmo
-// tempo, que era o que fazia o vídeo atual engasgar no celular.
-function StoryMedia({ item, live, onEnded }: { item: MenuItem; live: boolean; onEnded: () => void }) {
+// Vídeo só carrega no story da tela (`load`: a categoria atual e, durante o giro, a que
+// entra) e no próximo da fila (`warm`); os outros vizinhos mostram a capa. Assim nunca
+// há mais que dois vídeos baixando ao mesmo tempo, o que fazia o atual engasgar no
+// celular. `shown`: é o prato do painel (o adiantado que ainda não é fica escondido).
+function StoryMedia({
+  item,
+  load,
+  warm = false,
+  shown = true,
+  onEnded,
+}: {
+  item: MenuItem;
+  load: boolean;
+  warm?: boolean;
+  shown?: boolean;
+  onEnded: () => void;
+}) {
   const m = item.media[0];
   const vidRef = useRef<HTMLVideoElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [ready, setReady] = useState(false);
-  const src = m ? (m.kind === "video" ? (live ? videoSrc(m) : null) : mediaUrl(m.storage_path)) : null;
+  const on = load || warm;
+  const src = m ? (m.kind === "video" ? (on ? videoSrc(m) : null) : mediaUrl(m.storage_path)) : null;
   const hls = !!src && src.includes(".m3u8");
   useAutoplay(vidRef);
   useLayoutEffect(() => {
@@ -1559,14 +1612,39 @@ function StoryMedia({ item, live, onEnded }: { item: MenuItem; live: boolean; on
   // Saiu de cena: volta a mostrar a capa (o vídeo é descarregado e ficaria preto).
   const isVid = m?.kind === "video";
   useEffect(() => {
-    if (!live && isVid) setReady(false);
-  }, [live, isVid]);
+    if (!on && isVid) setReady(false);
+  }, [on, isVid]);
+  // Adiantado: dá play mudo até sair o primeiro quadro e pausa. Só o atributo "preload"
+  // não basta, porque o iPhone o ignora e não baixa nada antes do play. Assim, quando
+  // chega a vez, o vídeo já tem o começo baixado e sai tocando na hora.
+  const prime = isVid && warm && !load && !!src;
+  useEffect(() => {
+    const v = vidRef.current;
+    if (!v || !prime) return;
+    v.dataset.want = "";
+    if (v.readyState >= 3) {
+      v.pause();
+      return;
+    }
+    v.dataset.warming = "1";
+    const stop = () => {
+      delete v.dataset.warming;
+      if (!v.dataset.want) v.pause();
+    };
+    v.addEventListener("playing", stop);
+    mute(v);
+    v.play().catch(stop);
+    return () => {
+      v.removeEventListener("playing", stop);
+      delete v.dataset.warming;
+    };
+  }, [prime]);
   if (!m) return null;
   const low = posterSrc(m);
-  const hi = `hi${ready ? " on" : ""}`;
+  const hi = `hi${ready ? " on" : ""}${shown ? "" : " ahead"}`;
   return (
     <>
-      {low && <img className="lo" src={low} alt="" aria-hidden />}
+      {low && <img className={shown ? "lo" : "lo ahead"} src={low} alt="" aria-hidden />}
       {m.kind === "video" ? (
         <video
           ref={vidRef}
@@ -1575,7 +1653,8 @@ function StoryMedia({ item, live, onEnded }: { item: MenuItem; live: boolean; on
           poster={low ?? undefined}
           muted
           playsInline
-          preload={live ? "auto" : "none"}
+          preload={on ? "auto" : "none"}
+          data-shown={shown ? "1" : undefined}
           onPlaying={() => setReady(true)}
           onEnded={onEnded}
         />

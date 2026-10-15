@@ -426,6 +426,11 @@ html:has(.cm .viewer:not([hidden])) body {
   & .media .hi.on {
     opacity: 1;
   }
+  /* Próximo vídeo da fila, baixando por baixo do prato atual: nunca aparece. Quando
+     chega a vez, aparece de uma vez, já no primeiro quadro (sem passar pela capa). */
+  & .media .ahead {
+    visibility: hidden;
+  }
   & .shade {
     position: absolute;
     inset: 0;
@@ -455,13 +460,22 @@ html:has(.cm .viewer:not([hidden])) body {
     background: #fff;
     border-radius: 3px;
   }
+  /* Rodapé do prato em duas colunas: nome e detalhes à esquerda, descendo até a linha do
+     preço; o "+" e o preço à direita. Assim o nome fica perto da borda de baixo. */
   & .info {
     position: absolute;
     left: 0;
     right: 0;
     bottom: 0;
     z-index: 3;
-    padding: 0 20px calc(18px + var(--safe-bottom) + var(--under-bar));
+    padding: 0 16px calc(14px + var(--safe-bottom) + var(--under-bar)) 28px;
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+  }
+  & .itxt {
+    flex: 1;
+    min-width: 0;
     display: grid;
     gap: 8px;
   }
@@ -526,13 +540,15 @@ html:has(.cm .viewer:not([hidden])) body {
       transition: none;
     }
   }
-  /* Rodapé do prato: o "+" de vidro em cima do preço, os dois à direita. */
+  /* O "+" de vidro em cima do preço. A coluna já tem a largura do contador aberto, para
+     o nome não mudar de linha quando o cliente toca no "+". */
   & .acts {
+    flex: none;
+    min-width: 128px;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 10px;
-    margin-top: 10px;
   }
   & .acts button {
     display: flex;
