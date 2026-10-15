@@ -9,6 +9,7 @@ import { MenuApp } from "./menu-app";
 import { MesaTag } from "./mesa-tag";
 import "@/styles/font-themes.css";
 import "./menu.css";
+import "./order/order.css";
 
 export const viewport: Viewport = {
   themeColor: "#0b0a09",
