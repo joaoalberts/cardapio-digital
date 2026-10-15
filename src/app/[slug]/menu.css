@@ -312,12 +312,12 @@ html:has(.cm .viewer:not([hidden])) body {
     right: 16px;
     bottom: 14px;
   }
-  /* Nome da categoria em branco gelo (um branco com um fio de azul). */
+  /* Nome da categoria em branco puro. */
   & .card-txt b {
     display: block;
     font-size: calc(28px * var(--display-scale));
     line-height: 1.1;
-    color: #eaf3fa;
+    color: #fff;
   }
   & .card-txt span {
     display: -webkit-box;
