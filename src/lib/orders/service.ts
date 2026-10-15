@@ -90,6 +90,12 @@ export async function createOrder(deps: Deps, slug: string, body: unknown): Prom
   const menu = await deps.getMenu(slug);
   if (!menu) return { ok: false, code: "not_found" };
   const r = menu.restaurant;
+
+  // Nova tentativa de um pedido já gravado devolve o pedido, mesmo que o restaurante
+  // tenha fechado ou desligado os pedidos no intervalo.
+  const again = await deps.db.first<OrderRow>("orders", { restaurant_id: r.id, client_ref: input.ref });
+  if (again) return again.device_id === input.device ? { ok: true, order: toPublic(again) } : { ok: false, code: "invalid" };
+
   if (!r.orders_enabled) return { ok: false, code: "disabled" };
 
   const table = await deps.db.first<{ id: string; label: string; active: boolean }>("dining_tables", {
@@ -103,9 +109,6 @@ export async function createOrder(deps: Deps, slug: string, body: unknown): Prom
     const st = openStatus(r.opening_hours, r.timezone, now);
     if (!st.open) return { ok: false, code: "closed", opensAt: st.opensAt };
   }
-
-  const again = await deps.db.first<OrderRow>("orders", { restaurant_id: r.id, client_ref: input.ref });
-  if (again) return again.device_id === input.device ? { ok: true, order: toPublic(again) } : { ok: false, code: "invalid" };
 
   const priced = priceCart(menu, input.lines, now);
   if (!priced.ok) return { ok: false, code: "lines", errors: priced.errors };
@@ -122,7 +125,21 @@ export async function createOrder(deps: Deps, slug: string, body: unknown): Prom
     client_ref: input.ref,
     status_at: now.toISOString(),
   });
-  return { ok: true, order: toPublic(row as unknown as OrderRow) };
+  const mine = row as unknown as OrderRow;
+
+  // Procurar e gravar não é atômico: dois envios simultâneos com o mesmo ref gravam dois
+  // pedidos. O primeiro da lista vence; o outro é fechado e some da cozinha.
+  const same = await deps.db.list<OrderRow>("orders", { restaurant_id: r.id, client_ref: input.ref }, { sort: "Id" });
+  const winner = same[0];
+  if (winner && winner.id !== mine.id) {
+    await deps.db.update("orders", { uid: mine.id, restaurant_id: r.id }, {
+      open: false,
+      status: "delivered",
+      status_at: now.toISOString(),
+    });
+    return winner.device_id === input.device ? { ok: true, order: toPublic(winner) } : { ok: false, code: "invalid" };
+  }
+  return { ok: true, order: toPublic(mine) };
 }
 
 export async function listDeviceOrders(deps: Deps, slug: string, device: string): Promise<PublicOrder[]> {
@@ -131,7 +148,13 @@ export async function listDeviceOrders(deps: Deps, slug: string, device: string)
   if (!menu) return [];
   const now = (deps.now?.() ?? new Date()).getTime();
   const rows = await deps.db.list<OrderRow>("orders", { restaurant_id: menu.restaurant.id, device_id: device }, { sort: "-Id", limit: 20 });
-  return rows.filter((o) => now - new Date(o.created_at).getTime() < RECENT_MS).map(toPublic);
+  // created_at ilegível não pode esconder o pedido do cliente.
+  return rows
+    .filter((o) => {
+      const t = Date.parse(o.created_at);
+      return Number.isNaN(t) || now - t < RECENT_MS;
+    })
+    .map(toPublic);
 }
 
 export async function listOpenOrders(deps: Pick<Deps, "db">, restaurantId: string): Promise<OrderRow[]> {

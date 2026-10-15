@@ -111,6 +111,22 @@ describe("createOrder", () => {
   });
 });
 
+describe("reenvio e corrida", () => {
+  it("dois envios simultâneos com o mesmo ref ficam em um pedido só", async () => {
+    const s = setup();
+    const [a, b] = await Promise.all([createOrder(s.deps, "forno", body()), createOrder(s.deps, "forno", body())]);
+    expect(a.ok && b.ok && a.order.id === b.order.id).toBe(true);
+    expect(await listOpenOrders({ db: s.db }, "r1")).toHaveLength(1);
+  });
+  it("reenvio de pedido já gravado volta o pedido mesmo com pedidos desligados", async () => {
+    const s = setup();
+    const a = await createOrder(s.deps, "forno", body());
+    s.swapMenu(makeMenu({ orders_enabled: false }));
+    const b = await createOrder(s.deps, "forno", body());
+    expect(a.ok && b.ok && a.order.id === b.order.id).toBe(true);
+  });
+});
+
 describe("pedidos do aparelho e da cozinha", () => {
   it("cada celular vê só os próprios pedidos", async () => {
     const s = setup();
@@ -120,6 +136,17 @@ describe("pedidos do aparelho e da cozinha", () => {
     expect(mine).toHaveLength(1);
     expect(Object.keys(mine[0]).sort()).toEqual(["created_at", "id", "lines", "status", "table_label", "total_cents"]);
     expect(await listDeviceOrders(s.deps, "forno", "nao-e-uuid")).toEqual([]);
+  });
+  it("Meus pedidos mostra só as últimas 6 h; created_at ilegível aparece", async () => {
+    const s = setup();
+    const at = (min: number) => new Date(NOON.getTime() - min * 60_000).toISOString();
+    const mk = (id: string, created_at: string) =>
+      s.tables.orders.push({ uid: id, id, restaurant_id: "r1", device_id: DEV, status: "new", total_cents: 1, lines: [], table_label: "Mesa 7", created_at });
+    mk("a", at(359));
+    mk("b", at(361));
+    mk("c", "lixo");
+    const ids = (await listDeviceOrders(s.deps, "forno", DEV)).map((o) => o.id).sort();
+    expect(ids).toEqual(["a", "c"]);
   });
   it("a cozinha vê os abertos; o status só anda um passo e para em entregue", async () => {
     const s = setup();
