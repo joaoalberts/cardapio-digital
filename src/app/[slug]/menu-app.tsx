@@ -379,6 +379,9 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
     const el = viewerRef.current;
     const done = () => {
       if (el) {
+        // Esconde antes de desfazer a animação: senão, até o React esconder, o story
+        // volta inteiro à tela por um quadro e a capa "treme".
+        el.hidden = true;
         el.classList.remove("animating");
         el.style.transform = "";
         el.style.opacity = "";
