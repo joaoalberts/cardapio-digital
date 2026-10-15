@@ -38,9 +38,45 @@ confere se quem chamou é membro do restaurante (`src/lib/auth`). O NocoDB na nu
 2. "Esqueci minha senha" ainda não manda e-mail (não há serviço de e-mail ligado); a
    página orienta a chamar o suporte.
 
+## Pedidos (carrinho)
+
+O cliente que lê o QR de uma mesa pode montar o pedido no próprio cardápio (Adicionar, meio a
+meio nas categorias que aceitam, observação de até 140 caracteres) e enviar deslizando. O pedido
+cai no painel (aba **Pedidos**), que consulta a cada 5 s. O cliente acompanha em "Meus pedidos".
+Não há pagamento: a conta é paga direto no restaurante.
+
+- **Chave:** painel > Pedidos > "Receber pedidos pelo cardápio" (`restaurants.orders_enabled`).
+  Desligada, ou sem `?mesa=<código>` válido, o cardápio fica exatamente como era.
+- **Categorias:** "Aceita meio a meio" (`categories.half_half`). O preço da metade-metade é a
+  média dos dois sabores, arredondada para cima no centavo.
+- **Tabela `orders`** (criada por `scripts/nocodb/setup.mjs`): `uid`, `restaurant_id`, `table_id`,
+  `table_label`, `status` (`new` > `preparing` > `ready` > `delivered`), `open`, `lines` (JSON),
+  `total_cents`, `device_id`, `client_ref` (idempotência: o mesmo `ref` nunca gera dois pedidos),
+  `created_at`, `status_at`.
+- **Rota** `/api/pedidos/[slug]`: `POST` cria o pedido (o servidor recalcula preço e confere
+  prato, horário da categoria e chave; recusa com `disabled`, `invalid`, `unavailable` etc.);
+  `GET ?device=&mesa=` lista só os pedidos daquele aparelho nas últimas 6 h.
+- **Limites:** 20 unidades por linha, 30 linhas por pedido, carrinho guardado 6 h no celular.
+- **Testes:** `npm test` (Vitest, com banco falso em memória).
+- **Antes de publicar:** rode `setup.mjs` na base real, porque salvar categoria grava `half_half`
+  e salvar o restaurante grava `orders_enabled`.
+
+### NocoDB local descartável (teste ponta a ponta)
+
+```bash
+docker run -d --name cardapio-nocodb -p 8080:8080 nocodb/nocodb:latest
+# abra http://localhost:8080, crie a conta de administrador (só deste contêiner)
+# e gere um token em Team & Settings > Tokens
+NOCODB_SELF_HOSTED=1 NOCODB_URL=http://localhost:8080 NOCODB_API_TOKEN=<token> node scripts/nocodb/setup.mjs
+```
+
+Grave no `.env.local` (ignorado pelo git) `NOCODB_URL=http://localhost:8080`, `NOCODB_API_TOKEN`,
+`NOCODB_BASE_ID` (id que o setup imprime) e `AUTH_SECRET`; depois `npm run dev`. Para parar:
+`docker stop cardapio-nocodb`. Nunca aponte o teste para a NocoDB da nuvem.
+
 ## Verificações
 
-- `npm run lint` e `npm run typecheck`
+- `npm test`, `npm run lint` e `npm run typecheck`
 - `npm run build`
 
 ## Estrutura
