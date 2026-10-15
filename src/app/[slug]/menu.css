@@ -308,7 +308,7 @@ html:has(.cm .viewer:not([hidden])) body {
   & .card-txt {
     position: absolute;
     z-index: 1;
-    left: 16px;
+    left: 28px;
     right: 16px;
     bottom: 14px;
   }
