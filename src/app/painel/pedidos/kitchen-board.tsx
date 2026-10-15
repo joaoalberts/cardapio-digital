@@ -54,15 +54,27 @@ export function KitchenBoard({ restaurantId, initial, enabled: enabled0 }: { res
     setNow(Date.now());
   }, [restaurantId]);
 
-  // 5 s com a aba visível; 30 s escondida.
+  // 5 s com a aba visível; 30 s escondida. Ao voltar à aba, consulta na hora.
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const loop = async () => {
       await load().catch(() => setErr("Não foi possível atualizar."));
+      if (cancelled) return;
       timer = setTimeout(loop, document.visibilityState === "visible" ? 5000 : 30000);
     };
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      clearTimeout(timer);
+      void loop();
+    };
     timer = setTimeout(loop, 5000);
-    return () => clearTimeout(timer);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [load]);
 
   const newCount = orders.filter((o) => o.status === "new").length;
@@ -76,7 +88,10 @@ export function KitchenBoard({ restaurantId, initial, enabled: enabled0 }: { res
     const ask = async () => {
       try {
         const wl = (navigator as Navigator & { wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> } }).wakeLock;
-        if (wl && document.visibilityState === "visible") lock = await wl.request("screen");
+        if (wl && document.visibilityState === "visible") {
+          await lock?.release().catch(() => {});
+          lock = await wl.request("screen");
+        }
       } catch {
         lock = null;
       }
@@ -105,8 +120,12 @@ export function KitchenBoard({ restaurantId, initial, enabled: enabled0 }: { res
       return n;
     });
     setOrders((list) => (next === "delivered" ? list.filter((x) => x.id !== o.id) : list.map((x) => (x.id === o.id ? { ...x, status: next } : x))));
-    const r = await advanceOrder(restaurantId, o.id, next);
-    if (r.error) setErr(r.error);
+    try {
+      const r = await advanceOrder(restaurantId, o.id, next);
+      if (r.error) setErr(r.error);
+    } catch {
+      setErr("Não foi possível atualizar. Confira a internet.");
+    }
     void load();
   };
 
