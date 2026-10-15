@@ -1,0 +1,80 @@
+// Carrinho do cliente: funções puras sobre a lista de linhas. Linhas iguais (mesmo prato,
+// tamanho, 2º sabor e observação) viram uma só, somando a quantidade.
+import { MAX_QTY } from "./pricing";
+
+export type CartLine = { key: string; item: string; option: string | null; half: string | null; qty: number; note: string };
+export type NewLine = Omit<CartLine, "key">;
+export type Removed = { line: CartLine; index: number };
+
+export const CART_TTL = 6 * 60 * 60 * 1000;
+
+// JSON e não "join": observação ou opção com "|" não pode fazer duas linhas diferentes virarem a mesma chave.
+export const lineKey = (l: Pick<CartLine, "item" | "option" | "half" | "note">) =>
+  JSON.stringify([l.item, l.half ?? "", l.option ?? "", l.note.trim()]);
+
+const cap = (n: number) => Math.max(1, Math.min(MAX_QTY, Math.floor(n)));
+const make = (l: NewLine): CartLine => ({ ...l, note: l.note.trim(), qty: cap(l.qty), key: lineKey(l) });
+
+export function addLine(cart: CartLine[], l: NewLine): CartLine[] {
+  const key = lineKey(l);
+  const i = cart.findIndex((c) => c.key === key);
+  if (i >= 0) return cart.map((c, k) => (k === i ? { ...c, qty: cap(c.qty + l.qty) } : c));
+  return [...cart, make(l)];
+}
+
+export function replaceLine(cart: CartLine[], key: string, next: NewLine): CartLine[] {
+  const i = cart.findIndex((c) => c.key === key);
+  if (i < 0) return cart;
+  const nk = lineKey(next);
+  const j = cart.findIndex((c, k) => k !== i && c.key === nk);
+  if (j >= 0) return cart.map((c, k) => (k === j ? { ...c, qty: cap(c.qty + next.qty) } : c)).filter((_, k) => k !== i);
+  return cart.map((c, k) => (k === i ? make(next) : c));
+}
+
+export function setQty(cart: CartLine[], key: string, qty: number): CartLine[] {
+  if (qty < 1) return cart.filter((c) => c.key !== key);
+  return cart.map((c) => (c.key === key ? { ...c, qty: cap(qty) } : c));
+}
+
+export function removeLine(cart: CartLine[], key: string): { cart: CartLine[]; removed: Removed | null } {
+  const index = cart.findIndex((c) => c.key === key);
+  if (index < 0) return { cart, removed: null };
+  return { cart: cart.filter((_, k) => k !== index), removed: { line: cart[index], index } };
+}
+
+export function restoreLine(cart: CartLine[], removed: Removed): CartLine[] {
+  if (cart.some((c) => c.key === removed.line.key)) return addLine(cart, removed.line);
+  const out = [...cart];
+  out.splice(Math.min(removed.index, out.length), 0, removed.line);
+  return out;
+}
+
+export const cartCount = (cart: CartLine[]) => cart.reduce((s, l) => s + l.qty, 0);
+
+export function cartTotal(cart: CartLine[], unit: (l: CartLine) => number | null) {
+  return cart.reduce((s, l) => s + (unit(l) ?? 0) * l.qty, 0);
+}
+
+export function serializeCart(cart: CartLine[], now: number) {
+  return JSON.stringify({ v: 1, savedAt: now, lines: cart });
+}
+
+const str = (v: unknown): v is string => typeof v === "string";
+const optStr = (v: unknown): v is string | null => v === null || typeof v === "string";
+
+// O que estiver malformado é descartado em silêncio: o carrinho só ajuda, não pode quebrar o cardápio.
+export function parseStoredCart(raw: string | null, now: number): CartLine[] {
+  if (!raw) return [];
+  try {
+    const data = JSON.parse(raw) as { v?: number; savedAt?: number; lines?: unknown[] };
+    if (data.v !== 1 || typeof data.savedAt !== "number" || now - data.savedAt > CART_TTL || !Array.isArray(data.lines)) return [];
+    let cart: CartLine[] = [];
+    for (const l of data.lines as Record<string, unknown>[]) {
+      if (!l || !str(l.item) || !optStr(l.option) || !optStr(l.half) || !str(l.note) || typeof l.qty !== "number") continue;
+      cart = addLine(cart, { item: l.item, option: l.option, half: l.half, note: l.note, qty: l.qty });
+    }
+    return cart;
+  } catch {
+    return [];
+  }
+}
