@@ -36,6 +36,7 @@ export type EditorCategory = {
   description: string;
   availableFrom: string | null;
   availableTo: string | null;
+  halfHalf: boolean;
   media: EditorMedia;
   translations: EditorTranslation[];
   items: EditorItem[];

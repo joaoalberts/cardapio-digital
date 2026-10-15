@@ -73,6 +73,8 @@ export type CategoryInput = {
   // "HH:MM"; os dois vazios = a categoria aparece o dia todo.
   availableFrom?: string | null;
   availableTo?: string | null;
+  // Pizza meio a meio: o cliente escolhe 2 sabores desta categoria (preço = média).
+  halfHalf?: boolean;
   // undefined = não mexe; null = remove; objeto = foto ou vídeo novo já enviado
   media?: MediaInput | null;
 };
@@ -92,6 +94,7 @@ export async function updateCategory(restaurantId: string, id: string, input: Ca
   const before = await db.first<CatRow>("categories", { uid: id, restaurant_id: restaurantId });
   if (!before) return { error: FAIL };
   const row: Record<string, unknown> = { name: n, active: !!input.active };
+  if (input.halfHalf !== undefined) row.half_half = !!input.halfHalf;
   const description = input.description === undefined ? undefined : clean(input.description, 300);
   if (description !== undefined) {
     Object.assign(row, {

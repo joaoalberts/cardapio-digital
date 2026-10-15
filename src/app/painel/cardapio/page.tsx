@@ -33,7 +33,7 @@ async function Cardapio() {
     wifi_name: string | null;
     wifi_password: string | null;
   };
-  type Cat = { id: string; name: string; active: boolean; description: string | null; available_from: string | null; available_to: string | null };
+  type Cat = { id: string; name: string; active: boolean; description: string | null; available_from: string | null; available_to: string | null; half_half: boolean };
   type It = {
     id: string; category_id: string; name: string; description: string | null; price_cents: number;
     promo_price_cents: number | null; tags: string[] | null; active: boolean; featured: boolean; hide_price: boolean;
@@ -74,6 +74,7 @@ async function Cardapio() {
     description: c.description ?? "",
     availableFrom: hhmm(c.available_from),
     availableTo: hhmm(c.available_to),
+    halfHalf: !!c.half_half,
     media: toMedia(media.findLast((x) => x.category_id === c.id)),
     translations: translations.filter((t) => t.category_id === c.id).map(pick),
     items: items

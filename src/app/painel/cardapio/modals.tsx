@@ -504,6 +504,7 @@ export function CategoryModal({
   const [timed, setTimed] = useState(!!category.availableFrom);
   const [from, setFrom] = useState(category.availableFrom ?? "11:00");
   const [to, setTo] = useState(category.availableTo ?? "15:00");
+  const [halfHalf, setHalfHalf] = useState(category.halfHalf);
   const [rows, setRows] = useState<Record<string, EditorTranslation>>(() => seedIfOpen(category.translations));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -523,6 +524,7 @@ export function CategoryModal({
       description,
       availableFrom: timed ? from : null,
       availableTo: timed ? to : null,
+      halfHalf,
       media: slot.value,
     });
     if (!res.error && Object.keys(rows).length) {
@@ -568,6 +570,9 @@ export function CategoryModal({
       </label>
       <Check checked={!active} onChange={(v) => setActive(!v)}>
         Ocultar Categoria?
+      </Check>
+      <Check checked={halfHalf} onChange={setHalfHalf}>
+        Aceita meio a meio (o cliente escolhe 2 sabores desta categoria; cobra a média)
       </Check>
       <label className="md-field">
         <span>Observação</span>
