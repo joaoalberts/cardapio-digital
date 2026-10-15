@@ -470,7 +470,7 @@ html:has(.cm .viewer:not([hidden])) body {
     z-index: 3;
     padding: 0 16px calc(14px + var(--safe-bottom) + var(--under-bar)) 28px;
     display: flex;
-    align-items: flex-end;
+    align-items: flex-start;
     gap: 12px;
   }
   & .itxt {
@@ -545,6 +545,7 @@ html:has(.cm .viewer:not([hidden])) body {
   & .acts {
     flex: none;
     min-width: 128px;
+    margin-top: -4px;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
