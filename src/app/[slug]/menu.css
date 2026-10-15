@@ -561,7 +561,7 @@ html:has(.cm .viewer:not([hidden])) body {
     left: 0;
     right: 0;
     top: 0;
-    padding: calc(var(--safe-top) + 20px) 12px 0;
+    padding: calc(var(--safe-top) + 34px) 12px 0;
     display: flex;
     align-items: center;
     gap: 6px;

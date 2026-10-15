@@ -647,20 +647,6 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
     }
   };
 
-  // ---------- Ações ----------
-  const share = async (item: MenuItem) => {
-    const url = location.href.split("#")[0];
-    const text = item.hide_price ? item.name : `${item.name} · ${formatPrice(item.promo_price_cents ?? item.price_cents, lang)}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: menu.restaurant.name, text, url });
-        return;
-      }
-      await navigator.clipboard.writeText(`${text}\n${url}`);
-      showToast(t("copied"));
-    } catch {}
-  };
-
   // Lista: todas as categorias numa rolagem só; as abas acompanham a rolagem.
   const sectionOf = (c: number) => listRef.current?.querySelector<HTMLElement>(`.lsec[data-ci="${c}"]`);
   const openListAt = (c: number) => {
@@ -927,10 +913,6 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
                     </ul>
                   )}
                   <div className="acts">
-                    <button onClick={() => share(item)}>
-                      <ShareIcon />
-                      <span>{t("share")}</span>
-                    </button>
                     <Price item={item} lang={lang} className="price" />
                   </div>
                 </div>
@@ -1419,14 +1401,6 @@ function ListIcon() {
   return (
     <svg className="icon" viewBox="0 0 24 24">
       <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />
-    </svg>
-  );
-}
-
-function ShareIcon() {
-  return (
-    <svg className="icon" viewBox="0 0 24 24">
-      <path d="M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6" />
     </svg>
   );
 }
