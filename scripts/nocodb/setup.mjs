@@ -2,6 +2,8 @@
 // Supabase. Pode rodar de novo: só cria o que ainda não existe.
 //
 //   NOCODB_API_TOKEN=... node scripts/nocodb/setup.mjs
+//   NocoDB local (Docker, sem workspace):
+//   NOCODB_SELF_HOSTED=1 NOCODB_URL=http://localhost:8080 NOCODB_API_TOKEN=... node scripts/nocodb/setup.mjs
 //
 // Ids continuam sendo uuids em texto (coluna "uid"), e as ligações entre tabelas são
 // colunas de texto com o uid do pai (restaurant_id, category_id...). Assim os dados do
@@ -36,12 +38,12 @@ export const TABLES = {
     text("font_theme"), text("timezone"), json("opening_hours"), long("description"),
     text("phone"), text("address"), text("instagram"), text("facebook"), text("wifi_name"),
     text("wifi_password"), json("payment_methods"), bool("show_hours"),
-    bool("show_payments"), created,
+    bool("show_payments"), bool("orders_enabled"), created,
   ],
   members: [text("restaurant_id"), text("user_id"), text("role"), created],
   categories: [
     id, text("restaurant_id"), text("name"), long("description"), num("position"),
-    bool("active"), text("available_from"), text("available_to"), created,
+    bool("active"), text("available_from"), text("available_to"), bool("half_half"), created,
   ],
   items: [
     id, text("restaurant_id"), text("category_id"), text("name"), long("description"),
@@ -59,6 +61,10 @@ export const TABLES = {
     text("name"), long("description"), bool("auto"),
   ],
   dining_tables: [id, text("restaurant_id"), text("label"), text("code"), bool("active"), created],
+  orders: [
+    id, text("restaurant_id"), text("table_id"), text("table_label"), text("status"), bool("open"),
+    json("lines"), num("total_cents"), text("device_id"), text("client_ref"), created, date("status_at"),
+  ],
   support_requests: [
     id, text("restaurant_id"), text("user_id"), text("subject"), text("whatsapp"),
     long("message"), created,
@@ -76,13 +82,13 @@ async function api(path, init = {}) {
 }
 
 async function main() {
-  const bases = await api(`/api/v2/meta/workspaces/${WORKSPACE}/bases`);
+  // NOCODB_SELF_HOSTED=1: NocoDB local (Docker), sem workspaces.
+  const selfHosted = process.env.NOCODB_SELF_HOSTED === "1";
+  const basesPath = selfHosted ? "/api/v2/meta/bases/" : `/api/v2/meta/workspaces/${WORKSPACE}/bases`;
+  const bases = await api(basesPath);
   let base = bases.list.find((b) => b.title === BASE_TITLE);
   if (!base) {
-    base = await api(`/api/v2/meta/workspaces/${WORKSPACE}/bases`, {
-      method: "POST",
-      body: JSON.stringify({ title: BASE_TITLE }),
-    });
+    base = await api(basesPath, { method: "POST", body: JSON.stringify({ title: BASE_TITLE }) });
     console.log(`base criada: ${base.id}`);
   } else {
     console.log(`base existente: ${base.id}`);

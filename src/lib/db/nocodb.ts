@@ -19,6 +19,7 @@ export type Table =
   | "media"
   | "translations"
   | "dining_tables"
+  | "orders"
   | "support_requests";
 
 export type Row = Record<string, unknown>;
@@ -120,6 +121,7 @@ function encode(row: Row): Row {
 function whereParam(where: Where) {
   const parts = Object.entries(where).map(([k, v]) => {
     if (v === null) return `(${k},blank)`;
+    if (typeof v === "boolean") return `(${k},${v ? "checked" : "notchecked"})`;
     const s = String(v);
     if (/[,()~]/.test(s)) throw new Error(`nocodb: valor inválido no filtro ${k}`);
     return `(${k},eq,${s})`;
