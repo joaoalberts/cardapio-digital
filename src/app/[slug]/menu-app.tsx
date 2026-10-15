@@ -106,6 +106,46 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
   const [homeTab, setHomeTab] = useState(0);
   const [infoOpen, setInfoOpen] = useState(false);
   const [status, setStatus] = useState<StatusLabel | null>(null);
+  // Lista do cliente (botão de incluir): fica só neste celular, por restaurante.
+  const [order, setOrder] = useState<Record<string, number>>({});
+  const [orderOpen, setOrderOpen] = useState(false);
+  const orderKey = `cd-lista:${slug}`;
+  const saveOrder = useCallback(
+    (o: Record<string, number>) => {
+      try {
+        localStorage.setItem(orderKey, JSON.stringify(o));
+      } catch {}
+    },
+    [orderKey],
+  );
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(orderKey);
+      if (raw) setOrder(JSON.parse(raw) as Record<string, number>);
+    } catch {}
+  }, [orderKey]);
+  const changeQty = useCallback(
+    (id: string, d: number) => {
+      setOrder((o) => {
+        const n = Math.max(0, Math.min(99, (o[id] ?? 0) + d));
+        const next = { ...o };
+        if (n) next[id] = n;
+        else delete next[id];
+        saveOrder(next);
+        return next;
+      });
+    },
+    [saveOrder],
+  );
+  const orderLines = useMemo(() => {
+    const byId = new Map<string, MenuItem>();
+    cats.forEach((c) => c.items.forEach((it) => byId.set(it.id, it)));
+    return Object.entries(order)
+      .map(([id, n]) => ({ item: byId.get(id), n }))
+      .filter((l): l is { item: MenuItem; n: number } => !!l.item);
+  }, [cats, order]);
+  const orderCount = orderLines.reduce((a, l) => a + l.n, 0);
+  const orderTotal = orderLines.reduce((a, l) => a + l.n * unitPrice(l.item), 0);
 
   const viewerRef = useRef<HTMLDivElement>(null);
   const panelEls = useRef<(HTMLDivElement | null)[]>([]);
@@ -556,7 +596,7 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
 
   // ---------- Gestos ----------
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button > 0 || gesture.current || (e.target as HTMLElement).closest("button")) return;
+    if (e.button > 0 || gesture.current || (e.target as HTMLElement).closest("button, .qty")) return;
     cancelAnimationFrame(anim.current);
     const now = performance.now();
     gesture.current = {
@@ -936,6 +976,12 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
                     </ul>
                   )}
                   <div className="acts">
+                    <Qty
+                      n={order[item.id] ?? 0}
+                      onAdd={() => changeQty(item.id, 1)}
+                      onSub={() => changeQty(item.id, -1)}
+                      lang={lang}
+                    />
                     <Price item={item} lang={lang} className="price" />
                   </div>
                 </div>
@@ -1051,11 +1097,138 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
         />
       )}
 
+      {orderCount > 0 && !view.open && !orderOpen && (
+        <button className="orderpill" onClick={() => setOrderOpen(true)}>
+          <BagIcon />
+          <span>{t("yourList")}</span>
+          <b>{orderCount}</b>
+          {orderTotal > 0 && <em>{formatPrice(orderTotal, lang)}</em>}
+        </button>
+      )}
+
+      {orderOpen && (
+        <OrderSheet
+          lines={orderLines}
+          total={orderTotal}
+          lang={lang}
+          onChange={changeQty}
+          onClear={() => {
+            setOrder({});
+            saveOrder({});
+            setOrderOpen(false);
+          }}
+          onClose={() => setOrderOpen(false)}
+        />
+      )}
+
       {toast && (
         <div className="toast" role="status">
           {toast}
         </div>
       )}
+    </div>
+  );
+}
+
+// Preço que entra na soma da lista: promoção, senão o preço; com tamanhos, o menor.
+function unitPrice(item: MenuItem) {
+  if (item.hide_price) return 0;
+  if (item.price_options?.length) return Math.min(...item.price_options.map((o) => o.price_cents));
+  return item.promo_price_cents ?? item.price_cents;
+}
+
+// "+" redondo de vidro; com o prato na lista, abre em "− 2 +".
+function Qty({ n, onAdd, onSub, lang, small }: { n: number; onAdd: () => void; onSub: () => void; lang: string; small?: boolean }) {
+  return (
+    <div className={`qty${n ? " on" : ""}${small ? " sm" : ""}`}>
+      {n > 0 && (
+        <>
+          <button className="sub" onClick={onSub} aria-label={tr("remove", lang)}>
+            <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+              <path d="M5 12h14" />
+            </svg>
+          </button>
+          <span className="n" aria-live="polite">
+            {n}
+          </span>
+        </>
+      )}
+      <button className="plus" onClick={onAdd} aria-label={tr("add", lang)}>
+        <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+function BagIcon() {
+  return (
+    <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+      <path d="M6 8h12l-1 12H7L6 8zM9 8a3 3 0 016 0" />
+    </svg>
+  );
+}
+
+// Lista do cliente para mostrar ao garçom (ainda não manda nada para a cozinha).
+function OrderSheet({
+  lines,
+  total,
+  lang,
+  onChange,
+  onClear,
+  onClose,
+}: {
+  lines: { item: MenuItem; n: number }[];
+  total: number;
+  lang: string;
+  onChange: (id: string, d: number) => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  }, [onClose]);
+  useEffect(() => {
+    if (!lines.length) onClose();
+  }, [lines.length, onClose]);
+  const sizes = lines.some((l) => !l.item.hide_price && l.item.price_options?.length);
+  return (
+    <div className="infowrap" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="infosheet ordersheet" role="dialog" aria-label={tr("yourList", lang)}>
+        <header>
+          <h2 className="fd">{tr("yourList", lang)}</h2>
+          <button className="close glass" onClick={onClose} aria-label={tr("close", lang)}>
+            <svg className="icon" viewBox="0 0 24 24">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </header>
+        <p className="idesc">{tr("showWaiter", lang)}</p>
+        <ul className="olist">
+          {lines.map(({ item, n }) => (
+            <li key={item.id}>
+              <div className="oname">
+                <b>{item.name}</b>
+                <Price item={item} lang={lang} />
+              </div>
+              <Qty n={n} small onAdd={() => onChange(item.id, 1)} onSub={() => onChange(item.id, -1)} lang={lang} />
+            </li>
+          ))}
+        </ul>
+        {total > 0 && (
+          <p className="ototal">
+            <span>{tr("total", lang)}</span>
+            <b>{formatPrice(total, lang)}</b>
+          </p>
+        )}
+        {sizes && <p className="onote">{tr("sizesNote", lang)}</p>}
+        <button className="oclear" onClick={onClear}>
+          {tr("clearList", lang)}
+        </button>
+      </div>
     </div>
   );
 }
