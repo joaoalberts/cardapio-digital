@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-// Deslizar até 85% envia; um toque só balança (dica); Enter/Espaço enviam pelo teclado.
+// Deslizar até 85% envia; um toque só balança (dica); Enter/Espaço e a ativação do leitor de tela enviam direto.
 // onSend devolve false quando falhou: o botão volta ao começo.
 export function SlideToSend({ label, busyLabel, disabled, onSend }: { label: string; busyLabel: string; disabled?: boolean; onSend: () => Promise<boolean> }) {
   const track = useRef<HTMLDivElement>(null);
@@ -52,6 +52,11 @@ export function SlideToSend({ label, busyLabel, disabled, onSend }: { label: str
       }}
       onPointerUp={end}
       onPointerCancel={end}
+      onClick={(e) => {
+        // Leitor de tela (toque duplo) e teclado geram clique sem arrasto: detail 0. Toque/mouse de verdade têm detail >= 1.
+        if (e.detail !== 0 || disabled || busy) return;
+        void fire();
+      }}
       onKeyDown={(e) => {
         if (disabled || busy || (e.key !== "Enter" && e.key !== " ")) return;
         e.preventDefault();

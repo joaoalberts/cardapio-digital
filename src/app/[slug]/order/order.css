@@ -1,4 +1,4 @@
-.cm .o-layer { --o-glass: rgba(28, 20, 16, 0.8); --o-ink: #231a16; --o-ok: #7fd18b; --o-faint: rgba(247, 239, 230, 0.38); }
+.cm .o-layer { --o-glass: rgba(28, 20, 16, 0.8); --o-solid: #1c1410; --o-ink: #231a16; --o-ok: #7fd18b; --o-faint: rgba(247, 239, 230, 0.38); }
 
 /* Ilha: no lugar da etiqueta da mesa na capa; abaixo da barra de categorias nos stories. */
 .cm:has(.o-island) .table-tag { visibility: hidden; }
@@ -31,7 +31,7 @@
 /* Botões no story */
 .cm .o-acts { display: flex; gap: 10px; margin-top: 12px; }
 .cm .o-btn-note { height: 50px; padding: 0 16px; border-radius: 16px; display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.14); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); font-size: 14px; font-weight: 500; }
-.cm .o-btn-add { flex: 1; height: 50px; border-radius: 16px; background: var(--accent); color: var(--o-ink); display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; font-size: 15px; }
+.cm .o-btn-add { flex: 1; min-width: 0; min-height: 50px; padding: 6px 12px; border-radius: 16px; background: var(--accent); color: var(--o-ink); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 8px; font-weight: 600; font-size: 15px; line-height: 1.15; text-align: center; overflow-wrap: anywhere; }
 .cm .o-btn-add:active, .cm .o-btn-note:active { transform: scale(0.97); }
 .cm .o-btn-add .o-qty-in { background: rgba(35, 26, 22, 0.16); border-radius: 999px; padding: 1px 8px; font-size: 12px; }
 
@@ -54,7 +54,7 @@
 .cm .o-x { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; background: rgba(255, 255, 255, 0.1); display: grid; place-items: center; flex: none; }
 .cm .o-body { overflow-y: auto; padding: 4px 18px 12px; display: flex; flex-direction: column; gap: 18px; overscroll-behavior: contain; min-height: 0; }
 .cm .o-body > * { flex: none; }
-.cm .o-body.grow { flex: 1; }
+.cm .o-body.grow { flex: 1; padding-bottom: 14px; }
 .cm .o-label { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; display: flex; justify-content: space-between; }
 .cm .o-seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 4px; gap: 4px; }
 .cm .o-tabs { margin: 0 18px 4px; flex: none; }
@@ -107,7 +107,7 @@
 .cm .o-more { color: var(--accent); font-weight: 500; font-size: 14px; padding: 14px 0 2px; text-align: left; }
 .cm .o-empty { text-align: center; padding: 48px 20px; color: var(--muted); display: grid; gap: 8px; justify-items: center; }
 .cm .o-empty strong { color: var(--fg); font-size: 20px; }
-.cm .o-summary { flex: none; display: grid; gap: 4px; padding: 12px 18px 0; border-top: 1px solid var(--line); }
+.cm .o-summary { flex: none; position: relative; z-index: 1; display: grid; gap: 4px; padding: 12px 18px 0; border-top: 1px solid var(--line); background: var(--o-solid); }
 .cm .o-total { display: flex; justify-content: space-between; align-items: baseline; }
 .cm .o-total strong { font-size: 24px; font-variant-numeric: tabular-nums; }
 .cm .o-summary small { color: var(--o-faint); font-size: 12px; }

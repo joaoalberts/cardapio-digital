@@ -93,7 +93,11 @@ export function ItemSheet({ item, focusNote, edit }: { item: MenuItem; focusNote
             <div className="o-half">
               <div className="o-pie" aria-hidden>
                 {img && <img className="l" src={img} alt="" />}
-                {other ? <img className="r" src={thumbSrc(other) ?? ""} alt="" /> : <span className="q">?</span>}
+                {other ? (
+                  thumbSrc(other) ? <img className="r" src={thumbSrc(other)!} alt="" /> : <span className="q" />
+                ) : (
+                  <span className="q">?</span>
+                )}
               </div>
               <p>
                 {other && pa != null ? (

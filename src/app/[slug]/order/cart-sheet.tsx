@@ -16,6 +16,7 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
   const [error, setError] = useState<string | null>(null);
   const n = cartCount(o.lines);
   const total = cartTotal(o.lines, o.unit);
+  const gone = o.lines.find((l) => o.unit(l) == null);
   const go = (t: "cart" | "orders") => {
     setDone(null);
     setError(null);
@@ -133,7 +134,7 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
                       {det && <span className="o-det">{det}</span>}
                       {l.note && <span className="o-note">{l.note}</span>}
                       {it && (
-                        <button className="o-edit" onClick={() => o.openItem(it, { edit: l })}>
+                        <button className="o-edit" onClick={() => o.openItem(it, { edit: l, focusNote: !l.note })}>
                           {l.note ? tr("oEdit", L) : tr("oEditNote", L)}
                         </button>
                       )}
@@ -170,9 +171,10 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
           <div className="o-summary">
             <div className="o-total"><span>{tr("oTotal", L)}</span><strong className="fd">{money(total, L)}</strong></div>
             <small>{tr("oPayHere", L)}</small>
+            {gone && <p className="o-error">{tf("oErrGone", L, { name: o.itemById(gone.item)?.name ?? "" })}</p>}
             {error && <p className="o-error" role="alert">{error}</p>}
           </div>
-          <SlideToSend label={tr("oSlide", L)} busyLabel={tr("oSending", L)} disabled={o.lines.some((l) => o.unit(l) == null)} onSend={send} />
+          <SlideToSend label={tr("oSlide", L)} busyLabel={tr("oSending", L)} disabled={!!gone} onSend={send} />
         </>
       )}
     </>

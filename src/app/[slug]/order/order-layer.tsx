@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t as tr } from "@/lib/menu/i18n";
 import { useOrder } from "./order-context";
 import { Island } from "./island";
@@ -26,6 +26,25 @@ export function OrderLayer() {
     if (s?.kind === "cart") setCartOpenId((n) => n + 1);
     if (s?.kind === "item") setItemOpenId((n) => n + 1);
   }
+  // Foco: ao abrir, vai para o "×" da folha (na do prato aberta para a observação, a própria folha
+  // foca a observação); ao fechar, volta para quem estava focado antes de abrir.
+  const itemSec = useRef<HTMLElement>(null);
+  const cartSec = useRef<HTMLElement>(null);
+  const opener = useRef<Element | null>(null);
+  const wasOpen = useRef(false);
+  const kind = s?.kind ?? null;
+  const toNote = s?.kind === "item" && s.focusNote;
+  useEffect(() => {
+    if (kind) {
+      if (!wasOpen.current) opener.current = document.activeElement;
+      wasOpen.current = true;
+      if (!toNote) (kind === "item" ? itemSec : cartSec).current?.querySelector<HTMLElement>(".o-x")?.focus({ preventScroll: true });
+    } else if (wasOpen.current) {
+      wasOpen.current = false;
+      (opener.current as HTMLElement | null)?.focus?.({ preventScroll: true });
+      opener.current = null;
+    }
+  }, [kind, toNote]);
   useEffect(() => {
     if (!s) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && o.closeSheet();
@@ -38,6 +57,7 @@ export function OrderLayer() {
       <Island />
       <div className={`o-backdrop${s ? " on" : ""}`} onClick={o.closeSheet} aria-hidden />
       <section
+        ref={itemSec}
         className={`o-sheet${s?.kind === "item" ? " on" : ""}`}
         role="dialog"
         aria-modal="true"
@@ -49,6 +69,7 @@ export function OrderLayer() {
         {lastItem && <ItemSheet key={`${itemOpenId}:${lastItem.item.id}:${lastItem.edit?.key ?? ""}`} item={lastItem.item} focusNote={lastItem.focusNote} edit={lastItem.edit} />}
       </section>
       <section
+        ref={cartSec}
         className={`o-sheet o-cart${s?.kind === "cart" ? " on" : ""}`}
         role="dialog"
         aria-modal="true"
