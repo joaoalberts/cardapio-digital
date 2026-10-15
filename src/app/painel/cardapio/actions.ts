@@ -281,7 +281,7 @@ export async function startVideoUpload(
     console.error("mux upload", String(e).slice(0, 300));
     // Mostra o motivo curto (código e mensagem do Mux, sem chaves) para dar para
     // diagnosticar sem abrir os logs da Vercel.
-    const why = String(e).match(/mux (\d{3})(?:.*?"messages":\["([^"]{1,120})")?/s);
+    const why = String(e).match(/mux (\d{3})(?:[\s\S]*?"messages":\["([^"]{1,120})")?/);
     const detail = why ? ` (Mux ${why[1]}${why[2] ? `: ${why[2]}` : ""})` : "";
     return { error: `Não foi possível preparar o envio do vídeo${detail}. Tente de novo.` };
   }
