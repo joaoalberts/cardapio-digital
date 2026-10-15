@@ -1,4 +1,5 @@
 import { getTableLabel } from "@/lib/menu/data";
+import { TableBridge } from "./order/table-bridge";
 
 // Código do QR de mesa: 6 letras e números, sem os que se confundem (0/O, 1/I/L).
 const CODE = /^[A-Z2-9]{6}$/;
@@ -11,5 +12,10 @@ export async function MesaTag({ slug, search }: { slug: string; search: Promise<
   if (!CODE.test(code)) return null;
   const label = await getTableLabel(slug, code);
   if (!label) return null;
-  return <div className="table-tag">{label}</div>;
+  return (
+    <>
+      <div className="table-tag">{label}</div>
+      <TableBridge code={code} label={label} />
+    </>
+  );
 }
