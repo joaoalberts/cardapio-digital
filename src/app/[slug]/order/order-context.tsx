@@ -6,7 +6,7 @@ import { tf, t as tr } from "@/lib/menu/i18n";
 import { formatPrice, thumbSrc } from "@/lib/menu/media";
 import { buildIndex, resolveLine } from "@/lib/orders/pricing";
 import {
-  addLine, cartCount, cartTotal, parseStoredCart, removeLine, replaceLine, restoreLine, serializeCart, setQty as setLineQty,
+  addLine, cartCount, cartTotal, parseStoredCart, parseStoredRef, removeLine, replaceLine, restoreLine, serializeCart, setQty as setLineQty,
   type CartLine, type NewLine,
 } from "@/lib/orders/cart";
 import type { CreateResult, PublicOrder } from "@/lib/orders/service";
@@ -111,14 +111,16 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
     if (!cartKey || loadedKey.current === cartKey) return;
     loadedKey.current = cartKey;
     dirty.current = false;
-    setLines(parseStoredCart(store.get(cartKey), Date.now()));
+    const raw = store.get(cartKey);
+    refAttempt.current = parseStoredRef(raw, Date.now()); // envio que ficou sem resposta: o mesmo ref evita pedido duplicado
+    setLines(parseStoredCart(raw, Date.now()));
   }, [cartKey]);
   useEffect(() => {
     if (cartKey && loadedKey.current === cartKey && dirty.current) {
+      refAttempt.current = null; // o cliente mudou o carrinho: o próximo envio é outro pedido
       store.set(cartKey, serializeCart(lines, Date.now()));
       dirty.current = false;
     }
-    refAttempt.current = null; // carrinho mudou: o próximo envio é outro pedido
   }, [lines, cartKey]);
 
   useEffect(() => {
@@ -199,7 +201,11 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
 
   const send = useCallback(async (): Promise<SendOutcome> => {
     if (!table || !device || !lines.length) return { ok: false, message: tr("oErrNet", lang) };
-    refAttempt.current ??= crypto.randomUUID();
+    if (!refAttempt.current) {
+      refAttempt.current = crypto.randomUUID();
+      // Grava já: se a resposta se perder e a página recarregar, o reenvio usa o mesmo ref.
+      if (cartKey) store.set(cartKey, serializeCart(lines, Date.now(), refAttempt.current));
+    }
     const shownTotal = cartTotal(lines, unit);
     let res: CreateResult | null = null;
     try {
@@ -242,9 +248,10 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       setLines((c) => c.filter((l) => !badKeys.has(l.key)));
       return { ok: false, message: tf("oErrGone", lang, { name }) };
     }
+    if (res.code === "invalid") return { ok: false, message: tr("oErrInvalid", lang) };
     if (res.code === "table" || res.code === "disabled") return { ok: false, message: tr("oErrTable", lang) };
     return { ok: false, message: tr("oErrNet", lang) };
-  }, [table, device, lines, lang, slug, unit, orders, push, showFlash, index]);
+  }, [table, device, cartKey, lines, lang, slug, unit, orders, push, showFlash, index]);
 
   const api: OrderApi = {
     enabled,

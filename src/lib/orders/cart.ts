@@ -1,6 +1,6 @@
 // Carrinho do cliente: funções puras sobre a lista de linhas. Linhas iguais (mesmo prato,
 // tamanho, 2º sabor e observação) viram uma só, somando a quantidade.
-import { MAX_QTY } from "./pricing";
+import { MAX_LINES, MAX_QTY } from "./pricing";
 
 export type CartLine = { key: string; item: string; option: string | null; half: string | null; qty: number; note: string };
 export type NewLine = Omit<CartLine, "key">;
@@ -19,6 +19,7 @@ export function addLine(cart: CartLine[], l: NewLine): CartLine[] {
   const key = lineKey(l);
   const i = cart.findIndex((c) => c.key === key);
   if (i >= 0) return cart.map((c, k) => (k === i ? { ...c, qty: cap(c.qty + l.qty) } : c));
+  if (cart.length >= MAX_LINES) return cart; // 31ª linha: o servidor recusaria o pedido todo
   return [...cart, make(l)];
 }
 
@@ -55,12 +56,25 @@ export function cartTotal(cart: CartLine[], unit: (l: CartLine) => number | null
   return cart.reduce((s, l) => s + (unit(l) ?? 0) * l.qty, 0);
 }
 
-export function serializeCart(cart: CartLine[], now: number) {
-  return JSON.stringify({ v: 1, savedAt: now, lines: cart });
+// `ref` é o identificador do envio em andamento: guardado junto, um reenvio depois de recarregar
+// (resposta perdida) cai no mesmo pedido em vez de duplicar na cozinha.
+export function serializeCart(cart: CartLine[], now: number, ref?: string | null) {
+  return JSON.stringify(ref ? { v: 1, savedAt: now, lines: cart, ref } : { v: 1, savedAt: now, lines: cart });
 }
 
 const str = (v: unknown): v is string => typeof v === "string";
 const optStr = (v: unknown): v is string | null => v === null || typeof v === "string";
+
+export function parseStoredRef(raw: string | null, now: number): string | null {
+  if (!raw) return null;
+  try {
+    const data = JSON.parse(raw) as { v?: number; savedAt?: number; ref?: unknown };
+    if (data.v !== 1 || typeof data.savedAt !== "number" || now - data.savedAt > CART_TTL) return null;
+    return typeof data.ref === "string" && data.ref ? data.ref : null;
+  } catch {
+    return null;
+  }
+}
 
 // O que estiver malformado é descartado em silêncio: o carrinho só ajuda, não pode quebrar o cardápio.
 export function parseStoredCart(raw: string | null, now: number): CartLine[] {

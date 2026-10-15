@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  CART_TTL, addLine, cartCount, cartTotal, lineKey, parseStoredCart, removeLine, replaceLine, restoreLine, serializeCart, setQty,
+  CART_TTL, addLine, cartCount, cartTotal, lineKey, parseStoredCart, parseStoredRef, removeLine, replaceLine, restoreLine, serializeCart, setQty,
   type NewLine,
 } from "./cart";
 
@@ -62,7 +62,35 @@ describe("carrinho", () => {
   });
 });
 
+describe("limite de linhas", () => {
+  it("não cria a 31ª linha, mas soma em uma linha existente", () => {
+    let c: ReturnType<typeof addLine> = [];
+    for (let i = 0; i < 30; i++) c = addLine(c, { ...smash, item: `p${i}` });
+    expect(c).toHaveLength(30);
+    expect(addLine(c, { ...smash, item: "novo" })).toBe(c);
+    const sum = addLine(c, { ...smash, item: "p0", qty: 2 });
+    expect(sum).toHaveLength(30);
+    expect(sum[0].qty).toBe(3);
+  });
+});
+
 describe("armazenamento", () => {
+  it("guarda e recupera o ref de envio pendente junto do carrinho", () => {
+    const c = addLine([], pizza);
+    const raw = serializeCart(c, 1000, "ref-1");
+    expect(parseStoredRef(raw, 1000 + CART_TTL - 1)).toBe("ref-1");
+    expect(parseStoredCart(raw, 1000)).toEqual(c);
+    expect(parseStoredRef(raw, 1000 + CART_TTL + 1)).toBeNull();
+  });
+  it("carrinho salvo antes (sem ref) continua carregando", () => {
+    const old = JSON.stringify({ v: 1, savedAt: 0, lines: [{ ...smash, key: "x" }] });
+    expect(parseStoredCart(old, 0)).toHaveLength(1);
+    expect(parseStoredRef(old, 0)).toBeNull();
+    expect(parseStoredRef(serializeCart(addLine([], smash), 0), 0)).toBeNull();
+    expect(parseStoredRef("{oi", 0)).toBeNull();
+    expect(parseStoredRef(null, 0)).toBeNull();
+    expect(parseStoredRef(JSON.stringify({ v: 1, savedAt: 0, lines: [], ref: 5 }), 0)).toBeNull();
+  });
   it("volta o que foi salvo dentro de 6 h", () => {
     const c = addLine([], pizza);
     expect(parseStoredCart(serializeCart(c, 1000), 1000 + CART_TTL - 1)).toEqual(c);
