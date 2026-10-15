@@ -312,10 +312,19 @@ html:has(.cm .viewer:not([hidden])) body {
     right: 16px;
     bottom: 14px;
   }
+  /* Nome da categoria transparente: a letra não cobre a foto, só clareia o que está por
+     baixo (plus-lighter). Sem suporte, cai num branco translúcido parecido. */
   & .card-txt b {
     display: block;
     font-size: calc(28px * var(--display-scale));
     line-height: 1.1;
+    color: rgba(255, 255, 255, 0.45);
+  }
+  @supports (mix-blend-mode: plus-lighter) {
+    & .card-txt b {
+      color: rgba(255, 255, 255, 0.2);
+      mix-blend-mode: plus-lighter;
+    }
   }
   & .card-txt span {
     display: -webkit-box;
