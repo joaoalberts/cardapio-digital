@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { getTableLabel } from "@/lib/menu/data";
 import { TableBridge } from "./order/table-bridge";
 
@@ -10,6 +11,10 @@ export async function MesaTag({ slug, search }: { slug: string; search: Promise<
   const mesa = (await search).mesa;
   const code = typeof mesa === "string" ? mesa.trim().toUpperCase() : "";
   if (!CODE.test(code)) return null;
+  // A busca passa pelo limite de pedidos do NocoDB, que usa o relógio (Date.now). Os
+  // searchParams sozinhos ainda deixam o Next pré-renderizar este trecho; connection()
+  // adia para a hora do pedido. Fica dentro do <Suspense>, então o cardápio não espera.
+  await connection();
   const label = await getTableLabel(slug, code);
   if (!label) return null;
   return (
