@@ -312,10 +312,24 @@ html:has(.cm .viewer:not([hidden])) body {
     right: 16px;
     bottom: 14px;
   }
+  /* Nome da categoria em vidro fosco: a própria letra é translúcida, com um fio de luz
+     na borda e uma sombra suave embaixo. Se o navegador não pintar o fundo só dentro da
+     letra, cai no texto claro de antes. */
   & .card-txt b {
     display: block;
     font-size: calc(28px * var(--display-scale));
     line-height: 1.1;
+  }
+  @supports ((-webkit-background-clip: text) or (background-clip: text)) {
+    & .card-txt b {
+      background: linear-gradient(168deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.28) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+      -webkit-text-stroke: 0.7px rgba(255, 255, 255, 0.55);
+      filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+    }
   }
   & .card-txt span {
     display: -webkit-box;
