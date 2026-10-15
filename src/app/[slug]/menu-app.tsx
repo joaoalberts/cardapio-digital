@@ -976,7 +976,15 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
                 </div>
                 <div className="info">
                   <div className="itxt">
-                    <h3 className="fd">{item.name}</h3>
+                    <div className="nrow">
+                      <h3 className="fd">{item.name}</h3>
+                      <Qty
+                        n={order[item.id] ?? 0}
+                        onAdd={() => changeQty(item.id, 1)}
+                        onSub={() => changeQty(item.id, -1)}
+                        lang={lang}
+                      />
+                    </div>
                     {item.description && (
                       <>
                         <button
@@ -1015,12 +1023,6 @@ export function MenuApp({ initialMenu, tableTag }: { initialMenu: PublicMenu; ta
                     )}
                   </div>
                   <div className="acts">
-                    <Qty
-                      n={order[item.id] ?? 0}
-                      onAdd={() => changeQty(item.id, 1)}
-                      onSub={() => changeQty(item.id, -1)}
-                      lang={lang}
-                    />
                     <Price item={item} lang={lang} className="price" />
                   </div>
                 </div>
