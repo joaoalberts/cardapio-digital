@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TABLE_MEMORY_MS, readTableMemory, tableMemoryKey, writeTableMemory } from "./table-memory";
+import { TABLE_MEMORY_MS, forgetTableMemory, readTableMemory, tableMemoryKey, writeTableMemory } from "./table-memory";
 
 const T0 = Date.parse("2026-10-16T22:00:00Z");
 const MIN = 60_000;
@@ -39,5 +39,18 @@ describe("mesa lembrada", () => {
   });
   it("hora gravada no futuro (relógio mexido) não estende a memória", () => {
     expect(readTableMemory(writeTableMemory(mesa, T0 + 10 * MIN), T0)).toBeNull();
+  });
+});
+
+describe("esquecer a mesa lembrada (voto ou pedido recusado com code \"table\")", () => {
+  it("apaga só a chave deste restaurante", () => {
+    const data = new Map([["cardapio-mesa:depot", "x"], ["cardapio-mesa:forno", "y"], ["cardapio-device", "z"]]);
+    forgetTableMemory({ removeItem: (k: string) => void data.delete(k) }, "depot");
+    expect([...data.keys()]).toEqual(["cardapio-mesa:forno", "cardapio-device"]);
+  });
+  it("armazenamento bloqueado (aba anônima) não quebra", () => {
+    const blocked = { removeItem: () => { throw new Error("SecurityError"); } };
+    expect(() => forgetTableMemory(blocked, "depot")).not.toThrow();
+    expect(() => forgetTableMemory(null, "depot")).not.toThrow();
   });
 });

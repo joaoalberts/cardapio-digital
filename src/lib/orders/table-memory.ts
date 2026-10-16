@@ -34,3 +34,11 @@ export function readTableMemory(raw: string | null, now: number): Table | null {
     return null;
   }
 }
+
+// Mesa lembrada que o servidor recusou (voto ou pedido com code "table": desativada ou de
+// outro restaurante): sai da memória, para a próxima abertura não voltar com ela.
+export function forgetTableMemory(storage: Pick<Storage, "removeItem"> | null | undefined, slug: string) {
+  try {
+    storage?.removeItem(tableMemoryKey(slug));
+  } catch {}
+}

@@ -12,7 +12,7 @@ import {
   type CartLine, type NewLine,
 } from "@/lib/orders/cart";
 import type { CreateResult, PublicOrder } from "@/lib/orders/service";
-import { readTableMemory, tableMemoryKey } from "@/lib/orders/table-memory";
+import { forgetTableMemory, readTableMemory, tableMemoryKey } from "@/lib/orders/table-memory";
 import { useDeviceOrders } from "./use-device-orders";
 import { flyTo } from "./fly";
 
@@ -334,6 +334,12 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       return { ok: false, message: tf("oErrGone", lang, { name }) };
     }
     if (res.code === "invalid") return { ok: false, message: tr("oErrInvalid", lang) };
+    if (res.code === "table") {
+      // Mesa lembrada que o servidor não aceita mais (desativada no painel): sai da memória.
+      try {
+        forgetTableMemory(localStorage, slug);
+      } catch {}
+    }
     if (res.code === "table" || res.code === "disabled") return { ok: false, message: tr("oErrTable", lang) };
     return { ok: false, message: tr("oErrNet", lang) };
   }, [table, device, cartKey, lines, lang, slug, unit, orders, push, showFlash, index]);
