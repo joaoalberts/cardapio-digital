@@ -1,0 +1,871 @@
+/* "Apareça na TV!" do cliente: convite na capa do cardápio (.cm .apa-inv) e a página
+   /<slug>/apareca (.apa). Mesma paleta do cardápio (fundo #231a16, texto creme), cor da casa
+   só por var(--accent). Regras do cardápio: só backdrop-filter (sem a linha -webkit-, que o
+   Lightning CSS gera), anima só transform e opacity, nada de caixa alta, e "reduzir movimento"
+   desliga as animações. Sem moldura na prévia da câmera. */
+
+/* ================= Convite na capa ================= */
+/* Na linha dos botões do topo, logo depois do ≡ (16 + 44 + 8 px), acima do balão. */
+.cm .apa-inv {
+  position: absolute;
+  z-index: 6;
+  top: calc(var(--safe-top) + 20px);
+  left: 68px;
+  max-width: calc(100% - 68px - 120px);
+  height: 36px;
+  padding: 0 13px 0 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  color: #fff;
+  text-decoration: none;
+  background: rgba(12, 10, 9, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(14px) saturate(1.3);
+  white-space: nowrap;
+  animation: apa-in 0.5s 0.35s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  -webkit-tap-highlight-color: transparent;
+}
+.cm .apa-inv:active {
+  transform: scale(0.96);
+}
+.cm .apa-inv:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.cm .apa-inv-ic {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: #1b1714;
+}
+/* Um anel que respira em volta do ícone: convida sem piscar. */
+.cm .apa-inv-ic::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  opacity: 0;
+  animation: apa-ring 2.8s 1.2s ease-out infinite;
+}
+.cm .apa-inv-ic .apa-ic {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2;
+}
+.cm .apa-inv-t {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+/* Balão compacto (tela baixa) ocupa a linha do topo: o convite vira só o ícone, na coluna da
+   direita, embaixo do ⓘ (a logo fica no centro, longe). */
+.cm .hero:has(.cmu-bal-c) .apa-inv {
+  top: calc(var(--safe-top) + 70px);
+  left: auto;
+  right: 16px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  justify-content: center;
+}
+.cm .hero:has(.cmu-bal-c) .apa-inv-t {
+  display: none;
+}
+@keyframes apa-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+}
+@keyframes apa-ring {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.85);
+  }
+  60%,
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+
+/* ================= Página ================= */
+html:has(.apa),
+html:has(.apa) body {
+  overscroll-behavior: none;
+  background: #231a16;
+}
+.apa {
+  --bg: #231a16;
+  --surface: #30251f;
+  --surface-2: #3a2e27;
+  --line: rgba(247, 239, 230, 0.12);
+  --fg: #f7efe6;
+  --muted: rgba(247, 239, 230, 0.66);
+  --faint: rgba(247, 239, 230, 0.45);
+  --accent: #e8b04b;
+  --ink: #1b1714;
+  --danger: #ff8a7a;
+  --rec: #ff4d3d;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ease: cubic-bezier(0.2, 0.9, 0.25, 1);
+  color-scheme: dark;
+  min-height: 100dvh;
+  background:
+    radial-gradient(120% 60% at 50% -10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
+    var(--bg);
+  color: var(--fg);
+  font-size: 16px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+
+  & *,
+  & *::before,
+  & *::after {
+    box-sizing: border-box;
+  }
+  /* :where() deixa o reset fraco: as classes abaixo (.apa-btn, .apa-x...) ganham sem !important. */
+  & :where(button) {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+  & :is(a, button, input):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  & :where(h1, h2, p, ol, ul) {
+    margin: 0;
+  }
+}
+.apa-ic {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.apa-ic-dot {
+  fill: currentColor;
+  stroke: none;
+}
+.apa-boot {
+  min-height: 100dvh;
+}
+
+.apa-page {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  padding: calc(var(--safe-top) + 12px) 16px calc(var(--safe-bottom) + 28px);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: apa-up 0.45s var(--ease) both;
+}
+@keyframes apa-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* Topo: voltar, casa e mesa */
+.apa-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.apa-back {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.apa-back:active {
+  transform: scale(0.94);
+}
+.apa-house {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.apa-house img {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 1.5px var(--accent);
+}
+.apa-house span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.apa-mesa {
+  flex: none;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+/* Abertura */
+.apa-hero {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 10px 4px 0;
+}
+.apa-tv {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  border-radius: 24px;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  background: var(--accent);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--accent) 35%, transparent);
+  transform: rotate(-4deg);
+  margin-bottom: 4px;
+}
+.apa-tv .apa-ic {
+  width: 42px;
+  height: 42px;
+  stroke-width: 1.7;
+}
+.apa h1 {
+  font-size: calc(30px * var(--display-scale, 1));
+  line-height: 1.08;
+  text-wrap: balance;
+}
+.apa-lead {
+  color: var(--muted);
+  font-size: 15.5px;
+  text-wrap: pretty;
+}
+.apa-steps {
+  list-style: none;
+  width: 100%;
+  padding: 0;
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.apa-steps li {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 12px 6px 11px;
+  border-radius: 18px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.apa-steps b {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--accent);
+}
+
+/* Cartões e formulário */
+.apa-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  padding: 18px 16px;
+  display: grid;
+  gap: 16px;
+}
+.apa-field {
+  display: grid;
+  gap: 8px;
+}
+.apa-field > span {
+  font-size: 14px;
+  font-weight: 700;
+}
+.apa-field em {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--faint);
+}
+.apa-field input {
+  width: 100%;
+  height: 50px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 16px; /* 16 px: o Safari do iPhone não dá zoom ao tocar */
+}
+.apa-field input::placeholder {
+  color: var(--faint);
+}
+.apa-field input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.apa-field small {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--faint);
+}
+.apa-field small.is-err {
+  color: var(--danger);
+}
+.apa-field small i {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.apa-check {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 12px;
+  align-items: start;
+  font-size: 14px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.apa-check input {
+  position: absolute;
+  opacity: 0;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+}
+.apa-box {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(247, 239, 230, 0.4);
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}
+.apa-box svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 0.15s,
+    transform 0.2s var(--ease);
+}
+.apa-check input:checked + .apa-box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.apa-check input:checked + .apa-box svg {
+  opacity: 1;
+  transform: none;
+}
+.apa-check input:focus-visible + .apa-box {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.apa-check a,
+.apa-link {
+  color: var(--fg);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  text-underline-offset: 3px;
+}
+.apa-link {
+  justify-self: center;
+  font-size: 14px;
+  padding: 8px;
+}
+
+/* Botões */
+.apa-btn {
+  min-height: 52px;
+  padding: 0 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--accent);
+  transition: opacity 0.2s;
+}
+.apa-btn:active {
+  transform: scale(0.97);
+}
+.apa-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.apa-btn:disabled:active {
+  transform: none;
+}
+.apa-btn small {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+.apa-btn-2 {
+  color: var(--fg);
+  background: rgba(247, 239, 230, 0.1);
+  border: 1px solid var(--line);
+}
+.apa-fine {
+  font-size: 12.5px;
+  color: var(--faint);
+  text-align: center;
+  text-wrap: pretty;
+}
+
+/* Aviso (sem mesa, fora do horário, pausado) e problema */
+.apa-notice {
+  justify-content: flex-start;
+}
+.apa-notice-card,
+.apa-problem {
+  margin-top: 12vh;
+  text-align: center;
+  justify-items: center;
+  padding: 28px 20px 20px;
+}
+.apa-notice-card p {
+  color: var(--muted);
+}
+.apa-notice-card .apa-btn {
+  width: 100%;
+}
+.apa-badge {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  background: var(--accent);
+}
+.apa-problem .apa-lead {
+  color: var(--fg);
+}
+.apa-problem .apa-btn {
+  width: 100%;
+}
+
+/* ================= Palco (câmera em tela cheia) ================= */
+.apa-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: #000;
+  display: grid;
+  place-items: center;
+}
+/* 9:16 do tamanho que couber; no celular em pé ocupa a tela. */
+.apa-frame {
+  position: relative;
+  width: min(100vw, calc(100dvh * 9 / 16));
+  height: min(100dvh, calc(100vw * 16 / 9));
+  overflow: hidden;
+  background: #0b0a09;
+}
+.apa-live,
+.apa-rec {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.apa-live[hidden] {
+  display: none;
+}
+/* Prévia espelhada (como um espelho); o vídeo gravado não é espelhado. */
+.apa-live {
+  transform: scaleX(-1);
+}
+.apa-wait {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 15px;
+}
+.apa-stage-top {
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--safe-top) + 14px);
+  left: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.apa-x {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: rgba(12, 10, 9, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(14px) saturate(1.3);
+}
+.apa-x:active {
+  transform: scale(0.94);
+}
+.apa-sound {
+  margin-left: auto;
+}
+.apa-recdot {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(12, 10, 9, 0.5);
+}
+.apa-recdot i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--rec);
+  animation: apa-blink 1s steps(2, jump-none) infinite;
+}
+@keyframes apa-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+/* Barra dos 6 s: cresce por transform (scaleX), no ritmo exato da gravação. */
+.apa-bar {
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--safe-top) + 4px);
+  left: 14px;
+  right: 14px;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.25);
+}
+.apa-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+  animation: apa-fill linear both;
+}
+@keyframes apa-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.apa-count {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.18);
+}
+.apa-count span {
+  font-size: 128px;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.45);
+  animation: apa-pop 0.9s var(--ease) both;
+}
+@keyframes apa-pop {
+  0% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+  25% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+.apa-stage-bottom {
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 60px 16px calc(var(--safe-bottom) + 22px);
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
+}
+.apa-tip {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 14px;
+  text-align: center;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+.apa-shoot {
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 4px solid #fff;
+  transition: opacity 0.2s;
+}
+.apa-shoot i {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--rec);
+  transition: transform 0.2s var(--ease);
+}
+.apa-shoot:active i {
+  transform: scale(0.88);
+}
+.apa-shoot:disabled {
+  opacity: 0.4;
+}
+.apa-row {
+  width: 100%;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 10px;
+}
+.apa-stage .apa-btn-2 {
+  background: rgba(12, 10, 9, 0.45);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  backdrop-filter: blur(14px);
+}
+.apa-err {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  color: #fff;
+  background: rgba(160, 40, 30, 0.85);
+}
+.apa-up {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.apa-upbar {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.25);
+}
+.apa-upbar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+  transition: transform 0.25s linear;
+}
+
+/* ================= Fila ================= */
+.apa-queue {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 12px;
+  padding-top: 6vh;
+}
+.apa-thumb {
+  position: relative;
+  width: 132px;
+  aspect-ratio: 9 / 16;
+  border-radius: 22px;
+  margin-bottom: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 18px 40px rgba(0, 0, 0, 0.45);
+}
+.apa-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 22px;
+}
+.apa-thumb > span .apa-ic {
+  width: 44px;
+  height: 44px;
+}
+.apa-queue.is-wait .apa-thumb {
+  animation: apa-breathe 2.4s ease-in-out infinite;
+}
+@keyframes apa-breathe {
+  50% {
+    transform: scale(0.97);
+    opacity: 0.85;
+  }
+}
+.apa-queue.is-off .apa-thumb {
+  opacity: 0.45;
+  box-shadow: 0 0 0 2px var(--line);
+}
+.apa-pulse {
+  position: absolute;
+  inset: -2px;
+  border-radius: 24px;
+  border: 3px solid var(--accent);
+  animation: apa-tvpulse 1.4s ease-out infinite;
+}
+@keyframes apa-tvpulse {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+.apa-queue.is-tv h1 {
+  color: var(--accent);
+  font-size: calc(34px * var(--display-scale, 1));
+}
+.apa-acts {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+/* ================= Termos ================= */
+.apa-doc {
+  gap: 10px;
+  padding: 22px 18px;
+}
+.apa-doc h1 {
+  font-size: calc(24px * var(--display-scale, 1));
+}
+.apa-doc .apa-fine {
+  text-align: left;
+  margin-bottom: 6px;
+}
+.apa-doc h2 {
+  margin-top: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.apa-doc p,
+.apa-doc li {
+  color: var(--muted);
+  font-size: 15px;
+  text-wrap: pretty;
+}
+.apa-doc ul {
+  list-style: disc;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+}
+
+/* ================= Reduzir movimento ================= */
+@media (prefers-reduced-motion: reduce) {
+  .cm .apa-inv,
+  .cm .apa-inv *,
+  .cm .apa-inv *::before,
+  .cm .apa-inv *::after,
+  .apa *:not(.apa-bar i),
+  .apa *::before,
+  .apa *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  /* A barra dos 6 s continua: é informação (quanto falta), não enfeite. */
+}

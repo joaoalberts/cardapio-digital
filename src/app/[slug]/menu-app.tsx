@@ -23,6 +23,7 @@ import {
 } from "@/lib/menu/special-schedule";
 import { CartButton } from "./order/cart-button";
 import { Balloon } from "./comunidade/balloon";
+import { AparecaInvite } from "./apareca/invite";
 import { ComunidadeLayer } from "./comunidade/layer";
 import { ComunidadeProvider, useComunidadeOpen } from "./comunidade/provider";
 
@@ -974,6 +975,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
             )}
           </div>
           <Balloon />
+          <AparecaInvite />
         </section>
 
         {cats.length === 0 ? (

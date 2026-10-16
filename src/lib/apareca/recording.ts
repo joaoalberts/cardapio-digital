@@ -51,3 +51,66 @@ export const PROBLEM_TEXT: Record<"denied" | "unsupported" | "no_camera" | "busy
   in_app: "Para gravar, abra este link no navegador: toque nos três pontinhos e escolha \"Abrir no navegador\".",
   too_big: "O vídeo ficou grande demais para enviar. Grave de novo.",
 };
+
+// ---------- Fluxo da tela do cliente (puro) ----------
+// intro (nome e aceite) → câmera → contagem 3, 2, 1 → gravando 6 s → revisão → enviando → fila.
+// A revisão permite REDO_MAX regravações; depois disso o botão some (canRedo). Erro no envio volta
+// à revisão com o mesmo vídeo e o aviso (sendError). Um problema (câmera, tamanho) leva à tela de
+// problema; "tentar de novo" reabre a câmera ou, se o vídeo ficou grande, grava de novo sem gastar
+// regravação. "Cancelar" volta ao intro (sem devolver regravações). O que acontece na fila (posição, TV) vem do servidor e não passa por aqui.
+
+export type ProblemKey = keyof typeof PROBLEM_TEXT;
+export type FlowStep = "intro" | "camera" | "countdown" | "recording" | "review" | "sending" | "queue" | "problem";
+export type FlowState = { step: FlowStep; redos: number; count: number; problem?: ProblemKey; sendError?: boolean };
+export type FlowEvent =
+  | { type: "consent_ok" }
+  | { type: "ready" }
+  | { type: "tick" }
+  | { type: "elapsed"; ms: number; bytes: number }
+  | { type: "redo" }
+  | { type: "send" }
+  | { type: "sent" }
+  | { type: "send_failed" }
+  | { type: "problem"; problem: ProblemKey }
+  | { type: "retry" }
+  | { type: "cancel" };
+
+export const COUNTDOWN_FROM = 3;
+export const FLOW_START: FlowState = { step: "intro", redos: 0, count: 0 };
+
+export const canRedo = (s: Pick<FlowState, "redos">) => s.redos < REDO_MAX;
+
+const countdown = (s: FlowState, redos = s.redos): FlowState => ({ step: "countdown", redos, count: COUNTDOWN_FROM });
+
+export function flowNext(s: FlowState, e: FlowEvent): FlowState {
+  switch (e.type) {
+    case "consent_ok":
+      return s.step === "intro" ? { ...s, step: "camera" } : s;
+    case "ready":
+      return s.step === "camera" ? countdown(s) : s;
+    case "tick":
+      if (s.step !== "countdown") return s;
+      return s.count > 1 ? { ...s, count: s.count - 1 } : { ...s, step: "recording", count: 0 };
+    case "elapsed":
+      if (s.step !== "recording" || e.ms < CLIP_MS) return s;
+      if (e.bytes > MAX_BYTES) return { ...s, step: "problem", problem: "too_big" };
+      return { ...s, step: "review", sendError: false };
+    case "redo":
+      return s.step === "review" && canRedo(s) ? countdown(s, s.redos + 1) : s;
+    case "send":
+      return s.step === "review" ? { ...s, step: "sending", sendError: false } : s;
+    case "sent":
+      return s.step === "sending" ? { step: "queue", redos: s.redos, count: 0 } : s;
+    case "send_failed":
+      return s.step === "sending" ? { ...s, step: "review", sendError: true } : s;
+    case "problem":
+      return s.step === "queue" || s.step === "sending" ? s : { ...s, step: "problem", problem: e.problem };
+    case "retry":
+      if (s.step !== "problem") return s;
+      if (s.problem === "too_big") return countdown(s);
+      return { step: "camera", redos: s.redos, count: 0 };
+    case "cancel":
+      // Envio em andamento e fila não voltam: o vídeo já saiu (ou está saindo) do celular.
+      return s.step === "sending" || s.step === "queue" || s.step === "intro" ? s : { step: "intro", redos: s.redos, count: 0 };
+  }
+}

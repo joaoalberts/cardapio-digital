@@ -2,7 +2,8 @@
 // de app e os erros da câmera com texto claro em português.
 import { describe, expect, it } from "vitest";
 import {
-  CAMERA_CONSTRAINTS, CLIP_MS, inAppBrowser, MAX_BYTES, pickMime, PROBLEM_TEXT, recordingProblem, REDO_MAX,
+  CAMERA_CONSTRAINTS, canRedo, CLIP_MS, FLOW_START, flowNext, inAppBrowser, MAX_BYTES, pickMime, PROBLEM_TEXT, recordingProblem, REDO_MAX,
+  type FlowEvent, type FlowState,
 } from "./recording";
 
 describe("constantes", () => {
@@ -100,5 +101,101 @@ describe("PROBLEM_TEXT", () => {
   });
   it("tem os seis casos", () => {
     expect(Object.keys(PROBLEM_TEXT).sort()).toEqual(["busy", "denied", "in_app", "no_camera", "too_big", "unsupported"]);
+  });
+});
+
+describe("flowNext (fluxo da tela do cliente)", () => {
+  const at = (step: FlowState["step"], extra: Partial<FlowState> = {}): FlowState => ({ step, redos: 0, count: 0, ...extra });
+  const run = (s: FlowState, ...events: FlowEvent[]) => events.reduce(flowNext, s);
+
+  it("começa no intro, sem regravação", () => {
+    expect(FLOW_START).toEqual({ step: "intro", redos: 0, count: 0 });
+  });
+
+  it("intro → câmera → contagem 3, 2, 1 → gravando → revisão", () => {
+    let s = flowNext(FLOW_START, { type: "consent_ok" });
+    expect(s.step).toBe("camera");
+    s = flowNext(s, { type: "ready" });
+    expect(s).toMatchObject({ step: "countdown", count: 3 });
+    s = flowNext(s, { type: "tick" });
+    expect(s).toMatchObject({ step: "countdown", count: 2 });
+    s = flowNext(s, { type: "tick" });
+    expect(s).toMatchObject({ step: "countdown", count: 1 });
+    s = flowNext(s, { type: "tick" });
+    expect(s).toMatchObject({ step: "recording", count: 0 });
+    s = flowNext(s, { type: "elapsed", ms: 6_000, bytes: 1_000_000 });
+    expect(s.step).toBe("review");
+  });
+
+  it("antes dos 6 s continua gravando", () => {
+    expect(flowNext(at("recording"), { type: "elapsed", ms: 5_999, bytes: 10 }).step).toBe("recording");
+  });
+
+  it("blob acima de MAX_BYTES → problema too_big", () => {
+    const s = flowNext(at("recording"), { type: "elapsed", ms: CLIP_MS, bytes: MAX_BYTES + 1 });
+    expect(s).toMatchObject({ step: "problem", problem: "too_big" });
+    expect(flowNext(at("recording"), { type: "elapsed", ms: CLIP_MS, bytes: MAX_BYTES }).step).toBe("review");
+  });
+
+  it("regravar volta à contagem só enquanto redos < 3; na 4ª o botão some", () => {
+    let s = at("review");
+    for (let i = 1; i <= REDO_MAX; i++) {
+      expect(canRedo(s)).toBe(true);
+      s = flowNext(s, { type: "redo" });
+      expect(s).toMatchObject({ step: "countdown", count: 3, redos: i });
+      s = run(s, { type: "tick" }, { type: "tick" }, { type: "tick" }, { type: "elapsed", ms: CLIP_MS, bytes: 10 });
+      expect(s.step).toBe("review");
+    }
+    expect(s.redos).toBe(3);
+    expect(canRedo(s)).toBe(false);
+    expect(flowNext(s, { type: "redo" })).toEqual(s);
+  });
+
+  it("enviar → enviando → na fila", () => {
+    let s = flowNext(at("review", { redos: 2 }), { type: "send" });
+    expect(s.step).toBe("sending");
+    s = flowNext(s, { type: "sent" });
+    expect(s).toMatchObject({ step: "queue", redos: 2 });
+  });
+
+  it("erro no envio volta à revisão, com aviso e o mesmo número de regravações", () => {
+    const s = run(at("review", { redos: 1 }), { type: "send" }, { type: "send_failed" });
+    expect(s).toMatchObject({ step: "review", redos: 1, sendError: true });
+    expect(flowNext(s, { type: "send" })).toMatchObject({ step: "sending", sendError: false });
+  });
+
+  it("problema da câmera a partir de qualquer passo; tentar de novo reabre a câmera", () => {
+    const s = flowNext(at("camera"), { type: "problem", problem: "denied" });
+    expect(s).toMatchObject({ step: "problem", problem: "denied" });
+    const back = flowNext(s, { type: "retry" });
+    expect(back.step).toBe("camera");
+    expect(back.problem).toBeUndefined();
+  });
+
+  it("depois de too_big, gravar de novo volta à contagem sem gastar regravação", () => {
+    const s = flowNext(at("recording", { redos: 1 }), { type: "elapsed", ms: CLIP_MS, bytes: MAX_BYTES + 1 });
+    expect(flowNext(s, { type: "retry" })).toMatchObject({ step: "countdown", count: 3, redos: 1 });
+  });
+
+  it("eventos fora de hora não mudam nada", () => {
+    expect(flowNext(FLOW_START, { type: "send" })).toEqual(FLOW_START);
+    expect(flowNext(at("queue"), { type: "redo" })).toEqual(at("queue"));
+    expect(flowNext(at("review"), { type: "tick" })).toEqual(at("review"));
+    expect(flowNext(at("sending"), { type: "redo" })).toEqual(at("sending"));
+  });
+
+  it("cancelar volta ao intro (câmera, contagem, gravação, revisão e problema), sem zerar as regravações", () => {
+    for (const step of ["camera", "countdown", "recording", "review", "problem"] as const) {
+      const s = flowNext(at(step, { redos: 2, count: 2, problem: "denied" }), { type: "cancel" });
+      expect(s.step).toBe("intro");
+      expect(s.redos).toBe(2);
+      expect(s.problem).toBeUndefined();
+    }
+    expect(flowNext(at("sending"), { type: "cancel" })).toEqual(at("sending"));
+    expect(flowNext(at("queue"), { type: "cancel" })).toEqual(at("queue"));
+  });
+
+  it("na fila, um problema não tira o cliente da fila", () => {
+    expect(flowNext(at("queue"), { type: "problem", problem: "busy" })).toEqual(at("queue"));
   });
 });
