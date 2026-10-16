@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { type NextRequest } from "next/server";
-import { imgHostAllowed, isProxiable, parseImgQuery } from "@/lib/images/sized";
+import { imgHostAllowed, parseImgQuery } from "@/lib/images/sized";
 
 // Foto reduzida para o tamanho em que aparece (sizedSrc em src/lib/images/sized.ts).
 // Os arquivos nunca mudam de conteúdo (cada envio ganha nome novo), então a resposta
@@ -35,11 +35,9 @@ export async function GET(request: NextRequest) {
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
     extraHosts: process.env.IMG_HOSTS,
   };
-  if (!imgHostAllowed(q.url, env)) {
-    // Foto de um store que este servidor não conhece (cópia local, prévia sem o Blob):
-    // manda para o original, que é o que o cardápio mostrava antes.
-    return isProxiable(q.url.href) ? Response.redirect(q.url, 302) : new Response("forbidden", { status: 403 });
-  }
+  // Fora da lista (Blob do app, Supabase antigo, IMG_HOSTS): recusa, sem redirecionar
+  // para lugar nenhum. Store novo de fotos entra em IMG_HOSTS.
+  if (!imgHostAllowed(q.url, env)) return new Response("forbidden", { status: 403 });
 
   const key = `${q.w}|${q.url.href}`;
   const hit = mem.get(key);

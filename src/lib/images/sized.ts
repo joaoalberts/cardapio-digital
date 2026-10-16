@@ -46,10 +46,6 @@ export function imgHostAllowed(url: URL, env: { blobToken?: string; supabaseUrl?
   return false;
 }
 
-// Endereço que o sizedSrc mandaria para a rota (Blob ou Supabase): fora da lista, a rota
-// devolve o original em vez de reduzir.
-export const isProxiable = (url: string) => BLOB.test(url) || SUPA.test(url);
-
 export function parseImgQuery(q: URLSearchParams): { w: ImgWidth; url: URL } | null {
   const w = Number(q.get("w"));
   const u = q.get("u");
