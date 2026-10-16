@@ -29,7 +29,8 @@ export type MyStatus = {
 };
 export type SubmitDb = StoreDb & Pick<typeof nocodb, "insertOne" | "updateRows">;
 // Limitadores em memória (por instância). device(max): um por valor de device_per_hour.
-export type SubmitLimits = { ip: Limiter; device: (max: number) => Limiter; download: Limiter };
+// ipGlobal: opcional (padrão: o compartilhado do processo), soma o IP em todos os restaurantes.
+export type SubmitLimits = { ip: Limiter; device: (max: number) => Limiter; download: Limiter; ipGlobal?: Limiter };
 export type SubmitDeps = {
   db: SubmitDb;
   store: Pick<StoreDeps, "mux" | "now" | "defer">;
@@ -55,6 +56,10 @@ const HOUR_MS = 60 * 60_000;
 // 100 vídeos por noite: o limite por IP é por restaurante e largo (60/h, decisão do controlador
 // na correção 1 da T7). O limite principal por pessoa é o device_per_hour (padrão 2).
 const IP_PER_HOUR = 60;
+// Teto do mesmo IP somando todos os restaurantes: sem ele, um IP espalhado por várias casas teria
+// 60 por casa. 120/h cobre um IP de rede móvel (CGNAT) compartilhado por clientes de duas casas
+// cheias (decisão do controlador na correção 2 da T7).
+const IP_PER_HOUR_GLOBAL = 120;
 const DOWNLOADS_PER_HOUR = 5; // minha escolha: o contador de downloads não infla com toques repetidos
 const CONSENT_SKEW_MS = 10 * 60_000;
 const MUX_CHECK_MS = 5_000; // Mux consultado no máximo 1 vez a cada 5 s por vídeo
@@ -67,9 +72,12 @@ const storeDeps = (d: SubmitDeps): StoreDeps => ({ db: d.db, mux: d.store.mux, n
 const later = (d: SubmitDeps, fn: () => Promise<void>) =>
   d.store.defer ? d.store.defer(fn) : void fn().catch(() => {});
 
+const globalIpLimiter = () => sharedLimiter("apareca.envio.ip-global", { max: IP_PER_HOUR_GLOBAL, windowMs: HOUR_MS });
+
 export function defaultLimits(): SubmitLimits {
   return {
     ip: sharedLimiter("apareca.envio.ip", { max: IP_PER_HOUR, windowMs: HOUR_MS }),
+    ipGlobal: globalIpLimiter(),
     device: (max) => sharedLimiter(`apareca.envio.device.${max}`, { max, windowMs: HOUR_MS }),
     download: sharedLimiter("apareca.baixou", { max: DOWNLOADS_PER_HOUR, windowMs: HOUR_MS }),
   };
@@ -137,7 +145,7 @@ export async function startSubmission(d: SubmitDeps, slug: string, body: unknown
   if (!name.ok) return { ok: false, code: "name" };
 
   // Limite por device: as linhas da última hora (vale entre instâncias) e o limitador em memória
-  // (vale entre os 5 s do retrato). Limite por IP: só em memória.
+  // (vale entre os 5 s do retrato). Limites por IP (por restaurante e global): só em memória.
   const cfg = head.config;
   const snap = await readSnapshot(storeDeps(d), head.id);
   const since = now.getTime() - HOUR_MS;
@@ -146,15 +154,23 @@ export async function startSubmission(d: SubmitDeps, slug: string, body: unknown
   const limits = d.limits ?? defaultLimits();
   const devLimiter = limits.device(cfg.device_per_hour);
   const devKey = `${head.id}:${input.device}`;
-  const ipKey = `${d.ip ?? "anon"}|${head.id}`; // molde do telao/codigo: IP por restaurante
+  const ip = d.ip ?? "anon";
+  const ipKey = `${ip}|${head.id}`; // molde do telao/codigo: IP por restaurante
+  const ipGlobal = limits.ipGlobal ?? globalIpLimiter();
   if (!devLimiter.hit(devKey)) return { ok: false, code: "too_many" };
   if (!limits.ip.hit(ipKey)) {
     devLimiter.undo(devKey);
     return { ok: false, code: "too_many" };
   }
+  if (!ipGlobal.hit(ip)) {
+    devLimiter.undo(devKey);
+    limits.ip.undo(ipKey);
+    return { ok: false, code: "too_many" };
+  }
   const giveBack = () => {
     devLimiter.undo(devKey);
     limits.ip.undo(ipKey);
+    ipGlobal.undo(ip);
   };
 
   const uid = crypto.randomUUID();

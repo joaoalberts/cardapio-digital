@@ -83,6 +83,7 @@ function limits(): SubmitLimits {
       return l;
     },
     download: createLimiter({ max: 5, windowMs: HOUR, now: clock }),
+    ipGlobal: createLimiter({ max: 120, windowMs: HOUR, now: clock }), // igual ao IP_PER_HOUR_GLOBAL
   };
 }
 
@@ -111,6 +112,26 @@ function mk(over: Partial<SubmitDeps> = {}) {
     ...over,
   };
   return { d, createUpload, assetInfo, deleteAsset, releaseUpload, onReady, runDeferred: () => Promise.all(deferred.splice(0).map((f) => f())) };
+}
+
+
+// 40 envios do mesmo IP em cada um de 3 restaurantes (abaixo dos 60 por casa) e o 121º barrado.
+const RIDS3 = [RID, "00000000-0000-4000-8000-000000000003", "00000000-0000-4000-8000-000000000004"];
+async function spread3(base: SubmitDeps) {
+  const heads = RIDS3.map((id, k) => mkHead({}, { id, slug: `casa-${k}` }));
+  for (const [k, id] of RIDS3.entries()) {
+    const uid = `00000000-0000-4000-8000-0000000000d${k}`;
+    tables.dining_tables.push({ Id: 10 + k, id: uid, uid, restaurant_id: id, code: `MES${k + 2}AA`, active: true });
+  }
+  const d: SubmitDeps = { ...base, getHead: async (s) => heads.find((h) => h.slug === s) ?? null };
+  let n = 0;
+  const dev = () => `00000000-0000-4000-8000-${String(7000 + n++).padStart(12, "0")}`;
+  for (let i = 0; i < 120; i++) {
+    const k = i % 3;
+    expect((await startSubmission(d, `casa-${k}`, body({ mesa: `MES${k + 2}AA`, device: dev() }))).ok).toBe(true);
+  }
+  expect(await startSubmission(d, "casa-0", body({ mesa: "MES2AA", device: dev() }))).toEqual({ ok: false, code: "too_many" });
+  expect(videos()).toHaveLength(120);
 }
 
 const body = (p: Record<string, unknown> = {}) => ({ mesa: "ABC234", device: DEV, name: "  @Ana ", consent: true, consent_at: "2026-10-16T21:58:00.000Z", ...p });
@@ -235,6 +256,14 @@ describe("startSubmission: recusas", () => {
     const dev = (i: number) => `00000000-0000-4000-8000-${String(5000 + i).padStart(12, "0")}`;
     for (let i = 0; i < 60; i++) expect((await startSubmission(d, SLUG, body({ device: dev(i) }))).ok).toBe(true);
     expect(await startSubmission(d, SLUG, body({ device: dev(60) }))).toEqual({ ok: false, code: "too_many" });
+  });
+
+  it("o mesmo IP espalhado por 3 restaurantes é barrado no 121º envio (teto global por IP)", async () => {
+    await spread3(mk().d);
+  });
+
+  it("limitadores padrão do processo: teto global de 120 por hora por IP (IP_PER_HOUR_GLOBAL)", async () => {
+    await spread3(mk({ limits: undefined, ip: "203.0.113.88" }).d);
   });
 
   it("Mux falhou → mux, sem linha, e a tentativa não gasta o limite", async () => {
