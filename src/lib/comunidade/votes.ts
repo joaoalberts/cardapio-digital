@@ -93,6 +93,7 @@ export function toHead(r: Raw | null): CommunityHead | null {
     instagram: str(r.instagram),
     logo_path: str(r.logo_path),
     brand_color: str(r.brand_color),
+    tv_simple: r.community_tv_simple === true,
   };
 }
 

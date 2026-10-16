@@ -63,6 +63,8 @@ export type CommunityHead = {
   instagram: string | null;
   logo_path: string | null;
   brand_color: string | null;
+  // Modo simples do telão (interruptor do painel). Só a TV pareada recebe, pela rota de estado.
+  tv_simple: boolean;
 };
 export type PublicOption = { id: OptionId; label: string; item_id: string | null; pct: number };
 export type PublicPoll = {

@@ -20,6 +20,7 @@ const HEAD: CommunityHead = {
   instagram: "@forno",
   logo_path: null,
   brand_color: null,
+  tv_simple: false,
 };
 
 const POLL = U(10);

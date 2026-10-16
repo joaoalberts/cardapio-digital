@@ -50,6 +50,7 @@ const h = vi.hoisted(() => {
       instagram: null,
       logo_path: null,
       brand_color: null,
+      tv_simple: false,
     };
   };
   return {

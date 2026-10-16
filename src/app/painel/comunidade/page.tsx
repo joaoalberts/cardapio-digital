@@ -156,6 +156,7 @@ async function Comunidade() {
     dayStart: head.day_start,
     dayStartText: `${localTime(bounds.from.toISOString(), tz, "pt-BR")} de ${day.slice(8, 10)}/${day.slice(5, 7)}`,
     tvUrl: host ? `${proto}://${host}/${r.slug}/telao` : `/${r.slug}/telao`,
+    tvSimple: head.tv_simple,
     categories,
     polls: {
       open: open.map((p) => toEditor(p, "open")),

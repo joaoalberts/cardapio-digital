@@ -47,7 +47,8 @@ export type PairCodeResult =
   | { ok: true; code: string; expires_at: string; created: boolean }
   | { ok: false; code: "invalid" | "not_found" | "disabled" | "too_many" };
 export type ConfirmResult = { ok: true } | { ok: false; error: string };
-export type CheckResult = { ok: true; paired: boolean } | { ok: false; status: 401 | 404 };
+// simple: o modo simples do painel, só para a TV já pareada.
+export type CheckResult = { ok: true; paired: true; simple: boolean } | { ok: true; paired: false } | { ok: false; status: 401 | 404 };
 
 // Mensagens do painel (quem lê é o membro da casa).
 const ERR_OFF = "A Comunidade está desligada no momento.";
@@ -228,5 +229,5 @@ export async function checkTv(d: TvDeps, slug: string, secret: string | null): P
   const tv = mine.filter(isPaired).sort((a, b) => b.paired - a.paired)[0];
   if (!tv) return { ok: true, paired: false };
   await d.db.update("community_tvs", { uid: tv.id, restaurant_id: head.id }, { last_seen_at: iso(nowMs(d)) });
-  return { ok: true, paired: true };
+  return { ok: true, paired: true, simple: head.tv_simple === true };
 }

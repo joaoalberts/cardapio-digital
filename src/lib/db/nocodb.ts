@@ -40,7 +40,7 @@ const JSON_COLS = new Set([
 ]);
 const BOOL_COLS = new Set([
   "active", "featured", "hide_price", "auto", "show_hours", "show_payments", "half_half", "orders_enabled", "open", "special",
-  "community_enabled", "on_tv", "revoked", "discarded",
+  "community_enabled", "community_tv_simple", "on_tv", "revoked", "discarded",
 ]);
 const NUM_COLS = new Set([
   "menu_version", "position", "price_cents", "promo_price_cents", "serves", "total_cents",

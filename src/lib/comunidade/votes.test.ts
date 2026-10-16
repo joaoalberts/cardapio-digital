@@ -33,6 +33,7 @@ const head = (over: Partial<CommunityHead> = {}): CommunityHead => ({
   instagram: "@forno",
   logo_path: null,
   brand_color: null,
+  tv_simple: false,
   ...over,
 });
 const OTHER = head({ id: "r2", slug: "outro", name: "Outro", instagram: null });
@@ -477,7 +478,13 @@ describe("toHead (linha de restaurants do NocoDB)", () => {
       instagram: "@forno",
       logo_path: "/logo.webp",
       brand_color: "#c33",
+      tv_simple: false,
     });
+  });
+
+  it("modo simples do telão: só true liga", () => {
+    expect(toHead(row({ community_tv_simple: true }))?.tv_simple).toBe(true);
+    for (const v of [undefined, null, false, "true", 1]) expect(toHead(row({ community_tv_simple: v }))?.tv_simple).toBe(false);
   });
 
   it("interruptor vazio = desligada; hora do dia vazia ou malformada = 05:00", () => {

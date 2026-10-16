@@ -1,10 +1,14 @@
-/* Telão da Comunidade (TV do salão), fase 1a. Valores da ficha aprovada
-   (docs/prototipos/comunidade/README.md, telas 17 a 20), num palco de 1280×720 escalado
-   para a tela da TV (--tl-k, calculado no cliente).
-   Regras: nenhum backdrop-filter (TV de salão tem pouca GPU); o fundo é a capa já desfocada
-   com filter e os painéis são vidro escuro sem desfoque. Anima só transform, opacity e o
-   ângulo --tl-ring (@property). Cor da marca só por var(--accent); limão (--o-lime) só no
-   anel do tempo. .tl-plain (navegador fraco): fundo sólido, sem capa desfocada nem luzes. */
+/* Telão da Comunidade (TV do salão), fase 1a, versão recomendada v2
+   (docs/prototipos/comunidade-v2/recomendada/README.md, telas 18 a 37).
+   Pôster vivo: a foto da líder grande à direita, o QR embaixo dela, a marca, a pergunta e as
+   barras à esquerda. Tudo sai de uma unidade só, --u = min(1vmin, 0,75vmax): a página ocupa a
+   tela inteira da TV, então é o mesmo que min(1cqmin, 0,75cqmax) da ficha (7,2 px em 720p,
+   10,8 em 1080p e na TV em pé, 21,6 em 4K, 7,68 em 4:3). O arranjo muda com a forma da TV
+   (deitada, quase quadrada e em pé) por media query de proporção, que TV antiga entende.
+   Regras: nenhum backdrop-filter nem filter (o fundo é a foto da líder em 64×36 px esticada);
+   anima só transform, opacity e o ângulo --tl-ring (@property); marca só por --accent (os tons
+   claros vêm prontos do cliente: --accent-9, -16, -56, -70); limão (--o-lime) só em ação.
+   .tl-plain (modo simples): sem nenhuma animação nem transição, o arranjo é o mesmo. */
 
 @property --tl-ring {
   syntax: "<angle>";
@@ -14,26 +18,45 @@
 
 .tl {
   --accent: #e8b04b;
+  --accent-9: rgba(232, 176, 75, 0.09);
+  --accent-16: rgba(232, 176, 75, 0.16);
+  --accent-56: rgba(232, 176, 75, 0.56);
+  --accent-70: rgba(232, 176, 75, 0.7);
   --o-lime: #d8f05a;
-  --tl-fg: #f7efe6;
-  --tl-muted: rgba(247, 239, 230, 0.64);
-  --tl-faint: rgba(247, 239, 230, 0.55);
-  --tl-glass: rgba(26, 20, 16, 0.55);
-  --tl-live: #ff6b5b;
-  --tl-ink: #1b1714;
-  --tl-ease: cubic-bezier(0.2, 0.9, 0.25, 1);
-  --tl-text: var(--f-karla), system-ui, sans-serif;
-  --tl-title: var(--f-fell), Georgia, serif;
-  --tl-name: var(--f-yesteryear), "Brush Script MT", cursive;
+  --ink: #140e0b;
+  --fg: #f7efe6;
+  --muted: rgba(247, 239, 230, 0.68);
+  --faint: rgba(247, 239, 230, 0.5);
+  --champ: #f3e7cf;
+  --live: #ff6b5b;
+  --tl-ui: var(--f-karla), system-ui, sans-serif;
+  --sp-line: linear-gradient(90deg, transparent, #b8a582 22%, #fff8ea 50%, #b8a582 78%, transparent);
+  --tick: linear-gradient(180deg, #000 0 20%, transparent 20% 80%, #000 80%);
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --u: 1vmin;
+  /* sem tema de fonte (tela de parear, desligada): a IM Fell */
+  --display: var(--f-fell), Georgia, serif;
+  --display-scale: 1;
+  --display-weight: 400;
   position: fixed;
   inset: 0;
   z-index: 1;
   overflow: hidden;
-  background: #100c0a;
-  color: var(--tl-fg);
-  font-family: var(--tl-text);
+  background: var(--ink);
+  color: var(--fg);
   line-height: 1.17;
   -webkit-font-smoothing: antialiased;
+}
+@supports (width: min(1px, 2px)) {
+  .tl {
+    --u: min(1vmin, 0.75vmax);
+  }
+}
+/* números e interface em Karla, mesmo com o tema da casa (que troca o --ui do cardápio) */
+.tl,
+.tl[data-font] {
+  font-family: var(--tl-ui);
+  font-variation-settings: normal;
 }
 .tl *,
 .tl *::before,
@@ -53,697 +76,915 @@
   cursor: pointer;
 }
 .tl button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: calc(var(--u) * 0.3) solid var(--accent);
+  outline-offset: calc(var(--u) * 0.3);
 }
-.tl .tl-icon {
-  width: 22px;
-  height: 22px;
+/* palavras na fonte do tema da casa (pergunta, pratos, "Deu X", "Aponte a câmera") */
+.tl .fd {
+  font-family: var(--display);
+  font-weight: var(--display-weight);
+  font-variation-settings: var(--display-vars, normal);
+  text-transform: var(--display-transform, none);
+  letter-spacing: var(--display-spacing, normal);
+}
+.tl-ico {
   stroke: currentColor;
   fill: none;
-  stroke-width: 1.9;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
   flex: none;
 }
 
-/* Palco de 1280×720 no meio da tela, escalado para caber (as sobras ficam no fundo escuro). */
-.tl-stage {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 1280px;
-  height: 720px;
-  overflow: hidden;
-  background: #140e0b;
-  transform: translate(-50%, -50%) scale(var(--tl-k, 1));
-}
-
-/* ================= Fundo ================= */
-.tl-bg {
-  position: absolute;
-  inset: -80px;
-  background-position: center;
-  background-size: cover;
-  filter: blur(44px) saturate(0.6) brightness(0.42);
-}
-.tl-wash {
+/* ================= Pôster ================= */
+.tl-tv {
+  --side: calc(var(--u) * 86);
+  --qr: calc(var(--u) * 42);
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(70% 60% at 30% 40%, rgba(35, 26, 22, 0.1), rgba(20, 14, 11, 0.6) 80%),
-    linear-gradient(180deg, rgba(20, 14, 11, 0.4), rgba(20, 14, 11, 0.75));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--side);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "mast side" "body side";
 }
-/* Luzes de palco: giram de −14° a 10° em 9 s e 11 s. */
-.tl-beam {
+
+/* fundo: a foto da líder em 64×36 px (canvas), esticada; o desfoque sai sem filter */
+.tl-bgb {
   position: absolute;
-  top: -120px;
-  width: 420px;
-  height: 900px;
-  transform-origin: 50% 0;
-  filter: blur(22px);
-  opacity: 0.55;
-  mix-blend-mode: screen;
-  animation: tl-beam 9s ease-in-out infinite alternate;
-  pointer-events: none;
+  inset: 0;
 }
-.tl-beam::before {
+.tl-bgb canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+.tl-bgb canvas.on {
+  opacity: 1;
+}
+.tl-bgb::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 24%, transparent), transparent 72%);
-  clip-path: polygon(44% 0, 56% 0, 100% 100%, 0 100%);
-}
-.tl-beam.b2 {
-  animation-duration: 11s;
-  animation-direction: alternate-reverse;
-}
-@keyframes tl-beam {
-  from {
-    transform: rotate(-14deg);
-  }
-  to {
-    transform: rotate(10deg);
-  }
-}
-.tl-plain .tl-stage {
-  background: #17110e;
-}
-.tl-plain .tl-wash {
-  background: #17110e;
-}
-/* Sem desfoque, o vidro (.55 sobre o fundo liso) quase some: painéis, cartões e pílulas em
-   cor sólida mais clara, trilho das barras um tom acima, e contorno de 2 px com contraste
-   de 3,45:1 sobre #17110e (mínimo de 3:1 para limite de componente). */
-.tl.tl-plain {
-  --tl-glass: #2a201b;
-  --tl-track: #3a2d26;
-  --tl-edge: #7a6658;
-}
-.tl-plain .tl-qr,
-.tl-plain .tl-card,
-.tl-plain .tl-car,
-.tl-plain .tl-bar,
-.tl-plain .tl-vote,
-.tl-plain .tl-rec,
-.tl-plain .tl-code i:not(.tl-gap) {
-  border: 2px solid var(--tl-edge);
-}
-.tl-plain .tl-bar,
-.tl-plain .tl-code i:not(.tl-gap) {
-  background: var(--tl-track);
-}
-.tl-plain .tl-bar .tl-fill {
-  background: #54443a;
-}
-.tl-plain .tl-rec {
-  background: var(--tl-glass);
+  background:
+    radial-gradient(120% 90% at 0% 0%, var(--accent-9), transparent 60%),
+    linear-gradient(90deg, rgba(20, 14, 11, 0.7), rgba(20, 14, 11, 0.45));
 }
 
-/* ================= Marca ================= */
-.tl-brand {
-  position: absolute;
+/* marca: logo com aro da casa, nome e @; relógio ou "reconectando…" na ponta */
+.tl-mast {
+  grid-area: mast;
+  position: relative;
   z-index: 3;
-  left: 56px;
-  top: 42px;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: calc(var(--u) * 2.2);
+  padding: calc(var(--u) * 5) calc(var(--u) * 6) 0;
+  min-width: 0;
 }
-.tl-brand > img,
-.tl-brand .tl-logo-l {
-  width: 78px;
-  height: 78px;
+.tl-logo {
+  width: calc(var(--u) * 9);
+  height: calc(var(--u) * 9);
   border-radius: 50%;
   object-fit: cover;
   object-position: 50% 26%;
-  box-shadow:
-    0 0 0 2.5px var(--accent),
-    0 10px 26px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 calc(var(--u) * 0.35) var(--accent);
   flex: none;
 }
-.tl-brand .tl-logo-l {
+span.tl-logo {
   display: grid;
   place-items: center;
-  font-family: var(--tl-title);
-  font-size: 40px;
-  background: rgba(255, 255, 255, 0.08);
+  background: #231a16;
+  color: var(--accent);
+  font-size: calc(var(--u) * 4.6);
 }
-.tl-brand > div {
-  display: grid;
+.tl-id {
+  min-width: 0;
+}
+.tl-n {
+  display: block;
+  font-size: calc(var(--u) * 4.6 * var(--display-scale));
   line-height: 1.05;
-  max-width: 560px;
-}
-.tl-brand b {
-  font-family: var(--tl-name);
-  font-weight: 400;
-  font-size: 40px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tl-brand span {
-  font-size: 21px;
-  color: var(--tl-muted);
-  margin-top: 4px;
-}
-/* Reconectando: pílula discreta perto da marca. */
-.tl-brand .tl-rec {
-  align-self: center;
-  margin: 0 0 0 60px;
-  height: 40px;
-  padding: 0 18px 0 14px;
-  border-radius: 20px;
+.tl-ig {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-size: 17px;
-  color: rgba(247, 239, 230, 0.85);
-  background: rgba(26, 20, 16, 0.7);
+  gap: calc(var(--u) * 0.8);
+  margin-top: calc(var(--u) * 0.9);
+  font-size: calc(var(--u) * 3.3);
+  font-weight: 700;
   white-space: nowrap;
-  animation: tl-fade-in 0.4s ease both;
+}
+.tl-ig .tl-ico,
+.tl-qc .tl-ico {
+  width: calc(var(--u) * 3.1);
+  height: calc(var(--u) * 3.1);
+  stroke: var(--accent);
+}
+
+/* relógio grande: o número dentro do anel limão */
+.tl-clock {
+  --rw: calc(var(--u) * 0.8);
+  position: relative;
+  flex: none;
+  margin-left: auto;
+  width: calc(var(--u) * 12);
+  height: calc(var(--u) * 12);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  line-height: 1;
+  transition: --tl-ring 1s linear;
+}
+.tl-clock::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(var(--o-lime) var(--tl-ring), rgba(247, 239, 230, 0.16) 0);
+  -webkit-mask-image: radial-gradient(farthest-side, transparent calc(100% - var(--rw) - 0.5px), #000 calc(100% - var(--rw)));
+  mask-image: radial-gradient(farthest-side, transparent calc(100% - var(--rw) - 0.5px), #000 calc(100% - var(--rw)));
+}
+.tl-clock b {
+  display: block;
+  font-size: calc(var(--u) * 4.6);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.tl-clock small {
+  display: block;
+  margin-top: calc(var(--u) * 0.2);
+  font-size: calc(var(--u) * 2.8);
+  font-weight: 600;
+  color: var(--muted);
+}
+.tl-rec {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.2);
+  height: calc(var(--u) * 6);
+  padding: 0 calc(var(--u) * 2.4);
+  border-radius: calc(var(--u) * 3);
+  background: rgba(247, 239, 230, 0.08);
+  font-size: calc(var(--u) * 2.8);
+  font-weight: 600;
+  white-space: nowrap;
 }
 .tl-spin {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: rgba(255, 255, 255, 0.85);
-  animation: tl-spin 0.9s linear infinite;
+  display: inline-block;
   flex: none;
+  width: calc(var(--u) * 2.4);
+  height: calc(var(--u) * 2.4);
+  border-radius: 50%;
+  background: conic-gradient(currentColor 0 90deg, rgba(247, 239, 230, 0.18) 0);
+  -webkit-mask-image: radial-gradient(farthest-side, transparent calc(100% - var(--u) * 0.45), #000 calc(100% - var(--u) * 0.4));
+  mask-image: radial-gradient(farthest-side, transparent calc(100% - var(--u) * 0.45), #000 calc(100% - var(--u) * 0.4));
+  animation: tl-spin 0.9s linear infinite;
 }
 @keyframes tl-spin {
   to {
     transform: rotate(360deg);
   }
 }
-@keyframes tl-fade-in {
-  from {
-    opacity: 0;
-  }
-}
 
-/* ================= Enquete ================= */
-.tl-poll,
-.tl-idle {
-  position: absolute;
-  z-index: 3;
-  left: 56px;
-  top: 156px;
-  width: 768px;
-  transition: opacity 0.4s ease;
-}
-.tl.rec .tl-poll,
-.tl.rec .tl-idle {
-  opacity: 0.8;
-}
-.tl-ph {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-.tl-lb {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 21px;
-  font-weight: 700;
-  color: var(--accent);
-}
-.tl-live {
+/* coluna da direita: a foto em cima, livre; o QR embaixo, sobre a foto já apagada */
+.tl-side {
+  grid-area: side;
   position: relative;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--tl-live);
-  flex: none;
-  display: inline-block;
-}
-.tl-live::after {
-  content: "";
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  background: rgba(255, 107, 91, 0.45);
-  animation: tl-pulse 1.6s ease-out infinite;
-}
-@keyframes tl-pulse {
-  from {
-    transform: scale(0.45);
-    opacity: 1;
-  }
-  to {
-    transform: scale(1.5);
-    opacity: 0;
-  }
-}
-.tl-tm {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  font-size: 20px;
-  color: var(--tl-muted);
-  white-space: nowrap;
-}
-.tl-tm > b {
-  font-size: 26px;
-  color: var(--tl-fg);
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-}
-/* Anel do tempo: o ângulo --tl-ring anda 1 s por segundo. */
-.tl-tmr {
-  position: relative;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.22);
-  box-shadow: 0 0 12px rgba(216, 240, 90, 0.18);
-  flex: none;
-  transition: --tl-ring 1s linear;
-}
-.tl-tmr i {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: conic-gradient(var(--o-lime) var(--tl-ring), rgba(255, 255, 255, 0.16) 0);
-  mask: radial-gradient(farthest-side, transparent calc(100% - 5.5px), #000 calc(100% - 5px));
-}
-.tl-poll h2,
-.tl-poll .tl-qm {
-  font-family: var(--tl-title);
-  font-weight: 400;
-  font-size: 62px;
-  line-height: 1.04;
-  text-wrap: balance;
-}
-.tl-poll h2 {
-  margin: 10px 0 22px;
-}
-/* Fantasma invisível da pergunta, sempre a 62 px e com a largura do h2: o cliente mede a
-   altura dele e liga .long quando passa de uma linha (useLongQuestion). */
-.tl-poll .tl-qm {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  visibility: hidden;
-  pointer-events: none;
-}
-/* Pergunta que passa de uma linha a 62 px: até duas linhas de 46 px, para as barras não
-   descerem sobre o aviso do QR. */
-.tl-poll h2.long {
-  font-size: 46px;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-}
-.tl-bars {
   display: grid;
-  gap: 14px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
 }
-.tl-bar {
-  position: relative;
-  height: 88px;
-  border-radius: 26px;
+.tl-photo {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: calc(100% - var(--u) * 26);
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 0 30px 0 22px;
-  background: var(--tl-glass);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14%), linear-gradient(180deg, #000 60%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, transparent 0, #000 14%), linear-gradient(180deg, #000 60%, transparent 100%);
+  mask-composite: intersect;
 }
-.tl-bar .tl-fill {
+.tl-photo img {
   position: absolute;
   inset: 0;
-  transform-origin: left center;
-  transform: scaleX(0);
-  background: rgba(255, 255, 255, 0.1);
-  transition: transform 1.2s var(--tl-ease);
-}
-.tl-bar.lead .tl-fill {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 66%, transparent), color-mix(in srgb, var(--accent) 36%, transparent));
-}
-.tl-bar > *:not(.tl-fill) {
-  position: relative;
-}
-.tl-bar .tl-em {
-  width: 58px;
-  height: 58px;
-  border-radius: 18px;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  flex: none;
+  object-position: 50% 32%;
+  opacity: 0;
+  transition: opacity 1.2s ease;
 }
-.tl-bar b {
-  flex: 1;
-  min-width: 0;
-  font-size: 33px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
+.tl-photo img.on {
+  opacity: 1;
 }
-.tl-bar .tl-pc {
-  font-size: 48px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
+.tl-photo.zoom img.on {
+  animation: tl-kb 18s ease-in-out infinite alternate;
 }
-.tl-vote {
+@keyframes tl-kb {
+  to {
+    transform: scale(1.07);
+  }
+}
+/* reflexo molhado da oferta relâmpago: 3 passadas de 5 s no "Deu" */
+.tl-streak {
   position: absolute;
-  z-index: 3;
-  left: 56px;
-  bottom: 38px;
-  height: 46px;
-  padding: 0 20px 0 14px;
-  border-radius: 23px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 20px;
-  color: rgba(247, 239, 230, 0.9);
-  background: var(--tl-glass);
-  white-space: nowrap;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 22%,
+    rgba(255, 255, 255, 0.04) 36%,
+    rgba(255, 255, 255, 0.1) 46%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.1) 54%,
+    rgba(255, 255, 255, 0.04) 64%,
+    transparent 78%
+  );
+  mix-blend-mode: overlay;
+  transform: translateX(-140%);
 }
-.tl-vote .tl-icon {
-  width: 26px;
-  height: 26px;
-  margin-right: 4px;
-  color: var(--accent);
+.k-win .tl-streak {
+  animation: tl-wet 5s 0.8s ease-in-out 3;
 }
-.tl-vote b {
-  font-weight: 700;
+@keyframes tl-wet {
+  0% {
+    transform: translateX(-140%);
+  }
+  34%,
+  100% {
+    transform: translateX(140%);
+  }
 }
 
-/* ================= QR ================= */
 .tl-qr {
-  position: absolute;
+  grid-row: 2;
+  position: relative;
   z-index: 3;
-  right: 56px;
-  top: 42px;
-  bottom: 42px;
-  width: 344px;
-  border-radius: 34px;
-  padding: 34px 30px;
-  background: var(--tl-glass);
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.3);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
+  display: grid;
+  grid-template-columns: var(--qr) minmax(0, 1fr);
+  column-gap: calc(var(--u) * 3.4);
+  align-items: end;
+  padding: 0 calc(var(--u) * 5) calc(var(--u) * 5) calc(var(--u) * 2);
 }
-/* Placa creme com os módulos escuros (não é tarja branca). */
-.tl-qrp {
-  width: 278px;
-  height: 278px;
-  padding: 18px;
-  border-radius: 26px;
-  background: var(--tl-fg);
-  flex: none;
+.tl-plate {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: calc(var(--u) * 2.6);
+  background: var(--fg);
+  padding: calc(var(--u) * 3);
+  box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 6) rgba(0, 0, 0, 0.45);
 }
-.tl-qrp svg {
+.tl-plate svg {
   display: block;
   width: 100%;
   height: 100%;
 }
-.tl-qr > b {
-  margin-top: 26px;
-  font-family: var(--tl-title);
-  font-weight: 400;
-  font-size: 39px;
-  line-height: 1;
-  white-space: nowrap;
+.tl-qcap {
+  display: grid;
+  justify-items: start;
+  padding-bottom: calc(var(--u) * 0.6);
+  min-width: 0;
 }
-.tl-qr > span {
-  margin-top: 10px;
-  font-size: 20px;
-  color: var(--tl-muted);
-  line-height: 1.3;
+.tl-qa {
+  font-size: calc(var(--u) * 5.4 * var(--display-scale));
+  line-height: 1;
   text-wrap: balance;
 }
-.tl-qr .tl-steps {
-  margin-top: 22px;
-  padding-top: 18px;
-  width: 100%;
-  border-top: 1px solid rgba(247, 239, 230, 0.1);
-  font-size: 17px;
-  color: var(--tl-faint);
+.tl-qb {
+  margin-top: calc(var(--u) * 1.2);
+  font-size: calc(var(--u) * 2.8);
+  line-height: 1.25;
+  color: var(--muted);
+  text-wrap: balance;
+}
+.tl-qc {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.8);
+  margin-top: calc(var(--u) * 2.4);
+  font-size: calc(var(--u) * 3.2);
+  font-weight: 700;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.tl-qc span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* ================= Sem enquete ================= */
-.tl-car {
+/* ================= Coluna da esquerda ================= */
+.tl-body {
+  grid-area: body;
   position: relative;
-  height: 392px;
-  border-radius: 30px;
-  overflow: hidden;
-  background: #000;
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.35);
+  z-index: 3;
+  align-self: end;
+  padding: 0 calc(var(--u) * 6) calc(var(--u) * 5.2);
+  min-width: 0;
 }
-/* Troca a cada 6 s em 1,2 s, com aproximação lenta de 1 a 1,07 em 8 s. */
-.tl-car > img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  transform: scale(1);
-  transition:
-    opacity 1.2s ease,
-    transform 8s linear;
+.k-feat .tl-body,
+.k-win .tl-body {
+  align-self: center;
+  padding-bottom: calc(var(--u) * 3);
 }
-.tl-car > img.on {
-  opacity: 1;
-  transform: scale(1.07);
+.tl-kick {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.4);
+  font-size: calc(var(--u) * 3);
+  font-weight: 600;
+  color: var(--accent);
 }
-.tl-car::after {
+.tl-dot {
+  position: relative;
+  flex: none;
+  width: calc(var(--u) * 1.2);
+  height: calc(var(--u) * 1.2);
+  border-radius: 50%;
+  background: var(--live);
+}
+.tl-dot::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.25), transparent 30%, transparent 62%, rgba(0, 0, 0, 0.5));
-}
-.tl-ctag {
-  position: absolute;
-  z-index: 2;
-  left: 20px;
-  top: 20px;
-  height: 40px;
-  padding: 0 16px 0 5px;
-  border-radius: 20px;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 18px;
-  font-weight: 600;
-  background: var(--tl-glass);
-}
-.tl-ctag:not(:has(img)) {
-  padding-left: 16px;
-}
-.tl-ctag img {
-  width: 30px;
-  height: 30px;
   border-radius: 50%;
-  object-fit: cover;
-  object-position: 50% 26%;
+  background: var(--live);
+  animation: tl-pulse 1.6s ease-out infinite;
 }
-.tl-cname {
+.tl-dot.off {
+  background: rgba(247, 239, 230, 0.4);
+}
+.tl-dot.off::after {
+  display: none;
+}
+@keyframes tl-pulse {
+  from {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.tl-q {
+  margin-top: calc(var(--u) * 1.6);
+  font-size: calc(var(--u) * 8.4 * var(--display-scale));
+  line-height: 1.02;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.tl-q.long {
+  font-size: calc(var(--u) * 6.6 * var(--display-scale));
+}
+
+/* barras: a líder sempre em primeiro; quando a liderança muda, sobe com FLIP (transform) */
+.tl-bars {
+  position: relative;
+  display: grid;
+  gap: calc(var(--u) * 1.6);
+  margin-top: calc(var(--u) * 3.2);
+}
+.tl-bar {
+  display: grid;
+  grid-template-columns: calc(var(--u) * 12) minmax(0, 1fr);
+  /* a linha é a altura da barra: a foto (qualquer proporção) não pode esticá-la */
+  grid-template-rows: minmax(0, 1fr);
+  gap: calc(var(--u) * 1.4);
+  height: calc(var(--u) * 12);
+  transition: transform 0.7s var(--ease), opacity 0.4s;
+}
+.tl-bar.noimg {
+  grid-template-columns: minmax(0, 1fr);
+}
+.tl-bar > img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+  border-radius: calc(var(--u) * 2.4);
+}
+.tl-track {
+  position: relative;
+  overflow: hidden;
+  border-radius: calc(var(--u) * 2.4);
+  background: rgba(247, 239, 230, 0.06);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 2);
+  padding: 0 calc(var(--u) * 3);
+}
+.tl-fill {
   position: absolute;
-  z-index: 2;
-  left: 24px;
-  right: 24px;
-  bottom: 20px;
-  font-family: var(--tl-title);
-  font-size: 44px;
-  line-height: 1;
+  inset: 0;
+  transform: translateX(calc((var(--p, 0) - 100) * 1%));
+  transition: transform 1.2s var(--ease);
+  background: linear-gradient(90deg, rgba(247, 239, 230, 0.05), rgba(247, 239, 230, 0.18));
+}
+/* ponta champanhe: só nos 20% de cima e de baixo, nunca cruza o nome */
+.tl-fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: calc(var(--u) * 0.3);
+  background: var(--champ);
+  opacity: 0.4;
+  -webkit-mask-image: var(--tick);
+  mask-image: var(--tick);
+}
+.tl-bar.lead .tl-fill {
+  background: linear-gradient(90deg, var(--accent-16), var(--accent-56) calc(100% - var(--u) * 3), var(--accent-70));
+}
+.tl-bar.lead .tl-fill::after {
+  opacity: 1;
+  width: calc(var(--u) * 0.45);
+}
+.tl-nm {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  font-size: calc(var(--u) * 5.6 * var(--display-scale));
+  line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.5);
 }
-.tl-row {
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 16px;
-  margin-top: 18px;
+.tl-pc {
+  position: relative;
+  font-size: calc(var(--u) * 7);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(247, 239, 230, 0.86);
+  white-space: nowrap;
 }
-.tl-row.one {
-  grid-template-columns: 1fr;
+.tl-bar.lead .tl-pc {
+  color: var(--accent);
 }
-.tl-card {
-  height: 104px;
-  border-radius: 26px;
-  padding: 0 22px 0 16px;
+.tl-pc small,
+.tl-big small {
+  font-size: 0.56em;
+  font-weight: 700;
+  margin-left: 0.04em;
+}
+.tl-vote {
   display: flex;
   align-items: center;
-  gap: 16px;
-  min-width: 0;
-  background: var(--tl-glass);
+  gap: calc(var(--u) * 1.2);
+  margin-top: calc(var(--u) * 2.8);
+  font-size: calc(var(--u) * 3.2);
+  font-weight: 700;
+  color: var(--o-lime);
 }
-.tl-card img {
-  width: 74px;
-  height: 74px;
-  border-radius: 18px;
+.tl-vote .tl-ico {
+  width: calc(var(--u) * 3.4);
+  height: calc(var(--u) * 3.4);
+}
+/* reconectando: o resto congela */
+.k-rec .tl-kick {
+  color: var(--muted);
+}
+.k-rec .tl-bars,
+.k-rec .tl-vote {
+  opacity: 0.8;
+}
+
+/* sem enquete (destaque da casa) e "Deu X" */
+.k-feat .tl-q {
+  font-size: calc(var(--u) * 12 * var(--display-scale));
+  margin-top: calc(var(--u) * 1.2);
+  line-height: 0.96;
+}
+.tl-desc {
+  margin-top: calc(var(--u) * 1.8);
+  font-size: calc(var(--u) * 3.3);
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tl-price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 1) calc(var(--u) * 2.6);
+  margin-top: calc(var(--u) * 3.4);
+}
+.tl-price b {
+  font-size: calc(var(--u) * 8.4);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.tl-price span {
+  font-size: calc(var(--u) * 3.6);
+  font-weight: 700;
+  color: var(--o-lime);
+  text-wrap: balance;
+}
+.tl-next {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--u) * 1.4);
+  margin-top: calc(var(--u) * 4.4);
+  padding-top: calc(var(--u) * 2.6);
+  font-size: calc(var(--u) * 2.9);
+  color: var(--muted);
+  background: linear-gradient(90deg, rgba(247, 239, 230, 0.16), transparent) top / 100% 1px no-repeat;
+}
+.tl-next .tl-ico {
+  width: calc(var(--u) * 3.2);
+  height: calc(var(--u) * 3.2);
+  margin-top: calc(var(--u) * 0.1);
+  stroke: var(--accent);
+}
+.tl-next b {
+  display: block;
+  margin-top: calc(var(--u) * 0.4);
+  color: var(--fg);
+  font-weight: 600;
+}
+.tl-pq {
+  margin-top: calc(var(--u) * 1.4);
+  font-style: italic;
+  font-size: calc(var(--u) * 3.6 * var(--display-scale));
+  color: var(--muted);
+}
+.k-win .tl-q {
+  font-size: calc(var(--u) * 10.6 * var(--display-scale));
+  margin-top: calc(var(--u) * 0.6);
+  line-height: 0.98;
+}
+.k-win .tl-price {
+  margin-top: calc(var(--u) * 2.8);
+}
+.k-win .tl-price b {
+  font-size: calc(var(--u) * 7);
+}
+.k-win .tl-price span {
+  flex-basis: 100%;
+}
+.tl-res {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 4);
+  margin-top: calc(var(--u) * 3);
+}
+.tl-big {
+  font-size: calc(var(--u) * 15);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 0.86;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.tl-rest {
+  display: grid;
+  gap: calc(var(--u) * 1.2);
+  font-size: calc(var(--u) * 3.4);
+  color: var(--muted);
+  min-width: 0;
+}
+.tl-rest span {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.4);
+  white-space: nowrap;
+}
+.tl-rest img {
+  width: calc(var(--u) * 5.2);
+  height: calc(var(--u) * 5.2);
+  border-radius: calc(var(--u) * 1.2);
   object-fit: cover;
   flex: none;
 }
-.tl-card .tl-icon {
-  width: 44px;
-  height: 44px;
-  color: var(--accent);
-  stroke-width: 1.6;
-  margin-left: 6px;
-}
-.tl-card div {
-  display: grid;
-  line-height: 1.1;
-  min-width: 0;
-}
-.tl-card small {
-  font-size: 17px;
-  color: var(--tl-muted);
-}
-.tl-card small i {
-  font-style: normal;
-  color: var(--accent);
-}
-.tl-card b {
-  font-family: var(--tl-title);
-  font-weight: 400;
-  font-size: 36px;
-  margin-top: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ================= Som e depuração ================= */
-/* "ligar som": discreto, no vão abaixo do painel do QR, longe da enquete e das fotos. */
-.tl-sound {
-  position: absolute;
-  z-index: 4;
-  right: 56px;
-  bottom: 7px;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 14px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 15px;
-  color: var(--tl-faint);
-}
-.tl-sound .tl-icon {
-  width: 18px;
-  height: 18px;
-}
-.tl-sound.on {
-  color: var(--tl-muted);
-}
-.tl-debug {
-  position: absolute;
-  z-index: 6;
-  right: 60px;
-  top: 14px;
-  font-size: 13px;
-  color: var(--tl-faint);
+.tl-rest b {
+  color: var(--fg);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+.tl-line {
+  height: calc(var(--u) * 0.2);
+  margin-top: calc(var(--u) * 3.4);
+  background: var(--sp-line);
+  opacity: 0.75;
+}
+.tl-enter {
+  animation: tl-in 0.7s var(--ease) both;
+}
+@keyframes tl-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--u) * 1.4)) scale(0.985);
+  }
+}
 
-/* ================= Parear, conectando e desligada ================= */
+/* ================= TV quase quadrada (4:3, 5:4) =================
+   A coluna do QR afina e a legenda desce para baixo do código. */
+@media (min-aspect-ratio: 1/1) and (max-aspect-ratio: 149/100) {
+  .tl-tv {
+    --side: calc(var(--u) * 58);
+    --qr: calc(var(--u) * 38);
+  }
+  .tl-qr {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    text-align: center;
+    row-gap: calc(var(--u) * 2.2);
+    padding: 0 calc(var(--u) * 5) calc(var(--u) * 4.4) calc(var(--u) * 2);
+  }
+  .tl-qr .tl-plate {
+    width: var(--qr);
+  }
+  .tl-qcap {
+    justify-items: center;
+  }
+  .tl-qa {
+    font-size: calc(var(--u) * 5 * var(--display-scale));
+  }
+  .tl-qc {
+    margin-top: calc(var(--u) * 1.6);
+  }
+  .tl-photo {
+    height: calc(100% - var(--u) * 48);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14%), linear-gradient(180deg, #000 55%, transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 14%), linear-gradient(180deg, #000 55%, transparent 100%);
+  }
+  .tl-q {
+    font-size: calc(var(--u) * 7.4 * var(--display-scale));
+  }
+  .tl-q.long {
+    font-size: calc(var(--u) * 6 * var(--display-scale));
+  }
+  .tl-bar {
+    height: calc(var(--u) * 10.6);
+    grid-template-columns: calc(var(--u) * 10.6) minmax(0, 1fr);
+  }
+  .tl-nm {
+    font-size: calc(var(--u) * 5 * var(--display-scale));
+  }
+  .tl-pc {
+    font-size: calc(var(--u) * 6.2);
+  }
+  .k-feat .tl-q,
+  .k-win .tl-q {
+    font-size: calc(var(--u) * 10 * var(--display-scale));
+  }
+  .tl-big {
+    font-size: calc(var(--u) * 12);
+  }
+}
+
+/* ================= TV em pé =================
+   Troca de arranjo, não encolhe: a foto em cima, a pergunta e as barras sobem sobre ela, o QR
+   embaixo. Véu garantido atrás do @ e do texto que sobe na foto. */
+@media (max-aspect-ratio: 99/100) {
+  .tl-tv {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: calc(var(--u) * 66) auto minmax(0, 1fr);
+    grid-template-areas: "photo" "body" "qr";
+  }
+  .tl-tv.k-feat,
+  .tl-tv.k-win {
+    grid-template-rows: calc(var(--u) * 92) auto minmax(0, 1fr);
+  }
+  .tl-bgb::after {
+    background:
+      radial-gradient(120% 60% at 50% 100%, var(--accent-9), transparent 60%),
+      linear-gradient(180deg, rgba(20, 14, 11, 0.5), rgba(20, 14, 11, 0.72));
+  }
+  .tl-side {
+    display: contents;
+  }
+  .tl-mast {
+    grid-area: photo;
+    align-self: start;
+    padding: calc(var(--u) * 6) calc(var(--u) * 6) 0;
+  }
+  .tl-photo {
+    position: relative;
+    inset: auto;
+    height: auto;
+    grid-area: photo;
+    -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+    -webkit-mask-composite: source-over;
+    mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+    mask-composite: add;
+  }
+  .tl-photo::after {
+    content: "";
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    background: linear-gradient(
+      180deg,
+      rgba(20, 14, 11, 0.8) 0,
+      rgba(20, 14, 11, 0.5) 15%,
+      transparent 28%,
+      transparent 40%,
+      rgba(20, 14, 11, 0.78) 66%,
+      rgba(20, 14, 11, 0.94) 100%
+    );
+  }
+  .tl-body {
+    grid-area: body;
+    align-self: start;
+    margin-top: calc(var(--u) * -22);
+    padding: 0 calc(var(--u) * 6);
+  }
+  .k-feat .tl-body,
+  .k-win .tl-body {
+    margin-top: calc(var(--u) * -34);
+    padding-bottom: 0;
+  }
+  .tl-q {
+    font-size: calc(var(--u) * 9 * var(--display-scale));
+    text-shadow: 0 calc(var(--u) * 0.4) calc(var(--u) * 3) rgba(0, 0, 0, 0.5);
+  }
+  .tl-q.long {
+    font-size: calc(var(--u) * 7.2 * var(--display-scale));
+  }
+  .tl-bar {
+    height: calc(var(--u) * 12.5);
+    grid-template-columns: calc(var(--u) * 12.5) minmax(0, 1fr);
+  }
+  .tl-qr {
+    grid-area: qr;
+    grid-row: auto;
+    align-self: center;
+    grid-template-columns: calc(var(--u) * 46) minmax(0, 1fr);
+    column-gap: calc(var(--u) * 5);
+    align-items: center;
+    padding: 0 calc(var(--u) * 6) calc(var(--u) * 3);
+  }
+  .tl-qa {
+    font-size: calc(var(--u) * 6.4 * var(--display-scale));
+  }
+  .tl-qb {
+    font-size: calc(var(--u) * 3.2);
+  }
+  .tl-qc {
+    font-size: calc(var(--u) * 3.6);
+  }
+  .k-feat .tl-q,
+  .k-win .tl-q {
+    font-size: calc(var(--u) * 13 * var(--display-scale));
+  }
+  .k-win .tl-big {
+    font-size: calc(var(--u) * 16);
+  }
+}
+
+/* ================= Parear, conectando e desligada =================
+   A TV ainda não sabe de qual casa é: sem logo, sem @ e sem a cor da casa. */
 .tl-pair {
   position: absolute;
-  z-index: 6;
   inset: 0;
   display: grid;
   place-items: center;
   text-align: center;
   background:
-    radial-gradient(60% 70% at 50% 40%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
+    radial-gradient(60% 70% at 50% 40%, rgba(243, 231, 207, 0.07), transparent 70%),
     #17110e;
-}
-.tl-plain .tl-pair {
-  background: #17110e;
 }
 .tl-in {
   display: grid;
   justify-items: center;
+  padding: 0 calc(var(--u) * 6);
 }
-.tl-pair small {
-  font-size: 22px;
-  color: var(--tl-muted);
+.tl-in small {
+  font-size: calc(var(--u) * 3);
+  color: var(--muted);
 }
-.tl-pair h2 {
-  font-family: var(--tl-title);
+.tl-in h2 {
+  font-family: var(--f-fell), Georgia, serif;
   font-weight: 400;
-  font-size: 70px;
+  font-size: calc(var(--u) * 9.6);
   line-height: 1;
-  margin: 10px 0 40px;
+  margin: calc(var(--u) * 1.4) 0 calc(var(--u) * 5);
 }
 .tl-code {
   display: flex;
-  gap: 14px;
+  gap: calc(var(--u) * 1.8);
 }
 .tl-code i {
-  width: 104px;
-  height: 130px;
-  border-radius: 26px;
+  width: calc(var(--u) * 12.5);
+  height: calc(var(--u) * 16);
+  border-radius: calc(var(--u) * 3);
   display: grid;
   place-items: center;
   font-style: normal;
-  font-size: 76px;
-  font-weight: 700;
-  color: var(--tl-fg);
+  font-size: calc(var(--u) * 9.4);
+  font-weight: 800;
+  color: var(--fg);
   background: rgba(255, 255, 255, 0.07);
   font-variant-numeric: tabular-nums;
 }
 .tl-code i.tl-gap {
-  width: 18px;
+  width: calc(var(--u) * 1.6);
   background: none;
 }
 .tl-code.empty i {
-  color: var(--tl-faint);
+  color: var(--faint);
 }
-.tl-pair p {
-  margin-top: 40px;
-  max-width: 720px;
-  font-size: 24px;
-  color: rgba(247, 239, 230, 0.85);
+.tl-in p {
+  margin-top: calc(var(--u) * 5);
+  font-size: calc(var(--u) * 3.4);
+  color: rgba(247, 239, 230, 0.86);
   line-height: 1.4;
+  max-width: calc(var(--u) * 92);
   text-wrap: balance;
 }
-.tl-pair p b {
-  color: var(--accent);
-  font-weight: 700;
+.tl-in p b {
+  color: var(--champ);
+  font-weight: 800;
 }
-.tl-in > h2 + p {
-  margin-top: 0;
-}
-/* O aviso do 429 quebra em duas linhas: a primeira enche os 600 px, para o bloco (que não
-   encolhe ao quebrar) ficar centrado com o giro ao lado. */
 .tl-wait {
-  margin-top: 18px;
-  max-width: 600px;
+  margin-top: calc(var(--u) * 2.4);
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-size: 18px;
-  line-height: 1.35;
+  gap: calc(var(--u) * 1.2);
+  font-size: calc(var(--u) * 2.8);
+  color: var(--faint);
+  max-width: calc(var(--u) * 92);
   text-align: left;
-  color: var(--tl-faint);
+}
+.tl-wait .tl-spin {
+  color: var(--muted);
 }
 
-/* Reduzir movimento: tudo parado; barras e % direto no valor, carrossel troca sem efeito. */
+/* ================= Som e depuração =================
+   O som precisa de um toque (o navegador exige). O botão só aparece quando alguém mexe no
+   controle, no mouse ou na tela, e some depois de alguns segundos. */
+.tl-sound {
+  position: absolute;
+  z-index: 6;
+  left: calc(var(--u) * 2);
+  bottom: calc(var(--u) * 1.6);
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--u) * 1);
+  height: calc(var(--u) * 5);
+  padding: 0 calc(var(--u) * 2);
+  border-radius: calc(var(--u) * 2.5);
+  background: rgba(20, 14, 11, 0.74);
+  font-size: calc(var(--u) * 2.8);
+  font-weight: 600;
+  color: var(--muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.tl-sound.show,
+.tl-sound:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.tl-sound .tl-ico {
+  width: calc(var(--u) * 3);
+  height: calc(var(--u) * 3);
+}
+.tl-sound.on {
+  color: var(--o-lime);
+}
+.tl-debug {
+  position: absolute;
+  z-index: 6;
+  right: calc(var(--u) * 2);
+  bottom: calc(var(--u) * 0.6);
+  font-size: calc(var(--u) * 2);
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ================= Modo simples e "reduzir movimento" ================= */
+.tl-plain *,
+.tl-plain *::before,
+.tl-plain *::after {
+  animation: none !important;
+  transition: none !important;
+}
+.tl-plain .tl-streak {
+  display: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .tl *,
   .tl *::before,
   .tl *::after {
     animation: none !important;
     transition: none !important;
+  }
+  .tl .tl-streak {
+    display: none;
   }
 }

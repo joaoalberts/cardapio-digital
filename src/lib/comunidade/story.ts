@@ -3,11 +3,11 @@
 // api/comunidade/[slug]/story lê o banco, as imagens e desenha o PNG com o next/og.
 // Regras: o restaurante vem do slug; só o resultado em porcentagem (nunca contagem, device
 // nem mesa) ou uma foto aprovada da casa; Comunidade desligada não gera arte.
-import { mediaUrl } from "@/lib/menu/media";
+import { mediaUrl, thumbSrc } from "@/lib/menu/media";
 import type { MenuItem, PublicMenu } from "@/lib/menu/types";
 import { houseHighlight, leaderOf, questionText } from "./client-logic";
 import { pollPhase } from "./clock";
-import { ct } from "./i18n";
+import { ct, ctf } from "./i18n";
 import { communityOff } from "./off";
 import { publicPoll } from "./public-state";
 import type { CommunityHead, OptionId, PollRow, PostRow, PublicPoll, TvRow, VoteRow } from "./types";
@@ -27,7 +27,7 @@ const DEFAULT_ACCENT = "#e8b04b";
 // post: a foto da casa, o nome do prato e se ele é o destaque da casa agora.
 // lang: o idioma do cardápio em que a arte sai.
 export type StorySource =
-  | { kind: "poll"; head: CommunityHead; poll: PublicPoll; photo: string | null; lang: string }
+  | { kind: "poll"; head: CommunityHead; poll: PublicPoll; photo: string | null; thumbs: Partial<Record<OptionId, string | null>>; lang: string }
   | { kind: "post"; head: CommunityHead; post: PostRow; itemName: string; featured: boolean; lang: string };
 
 export type StoryDeps = {
@@ -105,7 +105,9 @@ export async function resolveStory(
     const lead = storyLead(pub);
     const leadOpt = pub.options.find((o) => o.id === lead);
     const photo = leadOpt?.item_id ? storyPhoto(items.get(leadOpt.item_id)) : null;
-    return { kind: "poll", head, poll: { ...pub, options }, photo, lang };
+    // Miniatura de cada opção (as perdedoras aparecem ao lado do %); opção sem prato, nada.
+    const thumbs = Object.fromEntries(pub.options.map((o) => [o.id, o.item_id ? thumbSrc(items.get(o.item_id)) : null]));
+    return { kind: "poll", head, poll: { ...pub, options }, photo, thumbs, lang };
   }
 
   // Foto da casa: só aprovada e deste restaurante, e o prato ainda no cardápio.
@@ -131,25 +133,44 @@ export function storyCache(src: StorySource, now: Date): string {
   return STORY_CACHE_DONE;
 }
 
-// Textos da arte, no idioma do cardápio.
-export function storyTexts(src: StorySource): { kicker: string; title: string; sub: string | null; foot: string; footSub: string } {
+// Textos da arte (ficha v2, tela 16), no idioma do cardápio. Enquete: rótulo, a pergunta em
+// itálico e "Deu X" (aberta: "X na frente"). Foto da casa: "Saindo agora da cozinha" e o
+// prato. O rodapé fala com quem não está na casa: "Vem pro <nome da casa>" e o convite do QR.
+export type StoryTexts = { kicker: string; question: string | null; title: string; sub: string | null; come: string; point: string };
+export function storyTexts(src: StorySource): StoryTexts {
   const L = src.lang;
+  const come = ctf("artCome", L, { name: src.head.name.trim() || src.head.slug });
+  const point = ct("artPoint", L);
   if (src.kind === "poll") {
+    const lead = storyLead(src.poll);
+    const name = src.poll.options.find((o) => o.id === lead)?.label ?? "";
     return {
       kicker: ct(src.poll.closed ? "artPollClosed" : "artPollLive", L),
-      title: questionText(src.poll, L),
+      question: questionText(src.poll, L),
+      title: ctf(src.poll.closed ? "won" : "artLeads", L, { name }),
       sub: null,
-      foot: ct("artVote", L),
-      footSub: ct("artPoint", L),
+      come,
+      point,
     };
   }
-  return {
-    kicker: ct("artKitchen", L),
-    title: src.itemName,
-    sub: src.featured ? ct("highlightLower", L) : null,
-    foot: ct("artOrder", L),
-    footSub: ct("artPoint", L),
-  };
+  return { kicker: ct("artKitchen", L), question: null, title: src.itemName, sub: src.featured ? ct("highlightLower", L) : null, come, point };
+}
+
+// Tamanho do "Deu X" (ou do nome do prato) na arte: 124 px até 16 letras, 104 até 25, depois 84
+// (em até duas linhas, a coluna tem 912 px).
+export function storyTitleSize(title: string): number {
+  const n = title.trim().length;
+  return n <= 16 ? 124 : n <= 25 ? 104 : 84;
+}
+
+// Tamanho do "Vem pro <casa>" no rodapé (coluna de 680 px ao lado do QR): 72 px numa linha
+// até 16 letras; até 22, 60 px; acima, 52 px em até duas linhas, cortado em 44 letras.
+const COME_MAX = 44;
+export function storyComeSize(text: string): { text: string; size: number } {
+  const t = text.trim();
+  if (t.length <= 16) return { text: t, size: 72 };
+  if (t.length <= 22) return { text: t, size: 60 };
+  return { text: t.length > COME_MAX ? `${t.slice(0, COME_MAX - 1).trimEnd()}…` : t, size: 52 };
 }
 
 // Cor da marca em "#rrggbb"; qualquer outra coisa vira a cor padrão do cardápio (o valor

@@ -22,6 +22,7 @@ import {
   setCommunityEnabled,
   setDayStart,
   setPostTv,
+  setTvSimple,
 } from "./actions";
 import { LABEL_MAX, POLL_MINUTES, QUESTION_MAX, TEMPLATES, suggestOptions, templateQuestion, type PollMinutes } from "./validate";
 
@@ -48,6 +49,7 @@ export type EditorData = {
   dayStart: string;
   dayStartText: string;
   tvUrl: string;
+  tvSimple: boolean;
   categories: { name: string; items: Dish[] }[];
   polls: { open: EditorPoll[]; scheduled: EditorPoll[]; closed: EditorPoll[] };
   posts: { id: string; thumb: string; dish: string; when: string; onTv: boolean; hidden: boolean }[];
@@ -631,6 +633,15 @@ function PostsCard({ data, run, saved }: { data: EditorData; run: Run; saved: Sa
 function TvCard({ data, run }: { data: EditorData; run: Run }) {
   const [code, setCode] = useState("");
   const [busy, startPair] = useTransition();
+  // Mesmo molde do interruptor da Comunidade: valor novo até o refresh; falhou, volta sozinho.
+  const [simple, setSimple] = useOptimistic(data.tvSimple);
+  const [simpleBusy, startSimple] = useTransition();
+  const toggleSimple = () =>
+    startSimple(async () => {
+      const next = !simple;
+      setSimple(next);
+      await run(() => setTvSimple(data.restaurantId, next), next ? "Modo simples ligado." : "Modo simples desligado.");
+    });
   const [ok, setOk] = useState<string | null>(null);
   const labels = new Set(data.tvs.map((t) => t.label));
   let label = "TV do salão";
@@ -701,6 +712,15 @@ function TvCard({ data, run }: { data: EditorData; run: Run }) {
         ) : (
           <b>nenhuma ainda</b>
         )}
+      </div>
+      <div className="cp-sw-row cp-sw-last">
+        <div>
+          <b id="cp-simple-l">Modo simples</b>
+          <small>Para TV mais antiga: sem animação. Liga sozinho se a TV engasgar.</small>
+        </div>
+        <button className="cp-sw" role="switch" aria-checked={simple} aria-labelledby="cp-simple-l" disabled={simpleBusy} onClick={toggleSimple}>
+          <i />
+        </button>
       </div>
     </section>
   );

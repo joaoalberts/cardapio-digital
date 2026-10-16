@@ -5,7 +5,8 @@ import {
   minuteClock, muralLayout, orderableNow, pairCodeDue, pairCodeRecord, pollDelay, pollTiming, questionText, refFrom,
   relativeTime, savedPairCode, shownPcts, POLL_OFF_MS,
   balloonPath, buyFlow, cmuReturnDue, halfPartners, lowerFirst, pollOutcome, priceInfo, ringText, sizeChoices, soleLeader, stageCover,
-  backoff, pollChime, TV_POLL_MS, TV_RELOAD_MS, tvMode, tvQuestionLong, tvReloadDue, storyChoices,
+  backoff, pollChime, TV_POLL_MS, TV_RELOAD_MS, tvReloadDue, storyChoices,
+  TV_WIN_MS, tvAccent, tvClosedAt, tvFeatSlides, tvLongQuestion, tvOrder, tvScreen, tvSlow,
 } from "./client-logic";
 import type { PublicOption, PublicPoll, PublicPost, PublicState } from "./types";
 
@@ -334,20 +335,106 @@ describe("backoff do telão", () => {
   });
 });
 
-describe("tvMode", () => {
+describe("tvScreen: o que o telão mostra", () => {
+  const now = NOW.getTime(); // 23:00Z; a enquete de tvPoll termina às 23:10Z
+  const closedWin = tvPoll({ closed: true, winner: "a", ends_at: "2026-10-16T22:59:30Z" }); // fechou há 30 s
   it("desligada, ou sem estado: nada da Comunidade na tela", () => {
-    expect(tvMode(null)).toBe("off");
-    expect(tvMode(tvState({ enabled: false }))).toBe("off");
+    expect(tvScreen(null, null, now)).toBe("off");
+    expect(tvScreen(tvState({ enabled: false, poll: tvPoll() }), null, now)).toBe("off");
   });
-  it("enquete aberta: barras; encerrada com votos: barras com a vencedora", () => {
-    expect(tvMode(tvState({ poll: tvPoll() }))).toBe("poll");
-    expect(tvMode(tvState({ poll: tvPoll({ has_votes: false }) }))).toBe("poll");
-    expect(tvMode(tvState({ poll: tvPoll({ closed: true, winner: "a" }) }))).toBe("poll");
+  it("enquete aberta: barras, com ou sem votos", () => {
+    expect(tvScreen(tvState({ poll: tvPoll() }), null, now)).toBe("poll");
+    expect(tvScreen(tvState({ poll: tvPoll({ has_votes: false }) }), null, now)).toBe("poll");
   });
-  it("encerrada sem votos, sem enquete ou fora do horário: fotos e destaque", () => {
-    expect(tvMode(tvState({ poll: tvPoll({ closed: true, has_votes: false }) }))).toBe("idle");
-    expect(tvMode(tvState())).toBe("idle");
-    expect(tvMode(tvState({ open: false }))).toBe("idle");
+  it("encerrada com vencedora: \"Deu\" por 45 s contados do fim", () => {
+    expect(TV_WIN_MS).toBe(45_000);
+    expect(tvScreen(tvState({ poll: closedWin }), null, now)).toBe("win");
+    expect(tvScreen(tvState({ poll: closedWin }), null, Date.parse("2026-10-16T22:59:30Z") + TV_WIN_MS - 1)).toBe("win");
+    expect(tvScreen(tvState({ poll: closedWin }), null, Date.parse("2026-10-16T22:59:30Z") + TV_WIN_MS)).toBe("feat");
+  });
+  it("fechada antes da hora pelo painel: conta de quando a TV viu fechada", () => {
+    const early = tvPoll({ closed: true, winner: "a" }); // ends_at 23:10Z ainda no futuro
+    expect(tvScreen(tvState({ poll: early }), now - 10_000, now)).toBe("win");
+    expect(tvScreen(tvState({ poll: early }), now - TV_WIN_MS, now)).toBe("feat");
+    // sem a hora em que viu: não inventa 45 s
+    expect(tvScreen(tvState({ poll: early }), null, now)).toBe("feat");
+  });
+  it("empate, sem votos, sem enquete ou fora do horário: destaque da casa", () => {
+    const tie = tvPoll({ closed: true, winner: "a", ends_at: "2026-10-16T22:59:50Z", options: [
+      { id: "a", label: "A", item_id: null, pct: 50 }, { id: "b", label: "B", item_id: null, pct: 50 }] });
+    expect(tvScreen(tvState({ poll: tie }), null, now)).toBe("feat");
+    expect(tvScreen(tvState({ poll: tvPoll({ closed: true, has_votes: false, ends_at: "2026-10-16T22:59:50Z" }) }), null, now)).toBe("feat");
+    expect(tvScreen(tvState(), null, now)).toBe("feat");
+    expect(tvScreen(tvState({ open: false }), null, now)).toBe("feat");
+  });
+  it("tvClosedAt: o fim marcado ou a hora em que a TV viu fechada, o que vier antes", () => {
+    const p = tvPoll({ closed: true });
+    expect(tvClosedAt(p, null)).toBe(Date.parse("2026-10-16T23:10:00Z"));
+    expect(tvClosedAt(p, now)).toBe(now);
+    expect(tvClosedAt(tvPoll({ closed: true, ends_at: "2026-10-16T22:00:00Z" }), now)).toBe(Date.parse("2026-10-16T22:00:00Z"));
+    expect(Number.isNaN(tvClosedAt(tvPoll({ ends_at: "lixo" }), null))).toBe(true);
+  });
+});
+
+describe("tvAccent: a cor da casa e os tons claros, prontos para o CSS", () => {
+  it("hexadecimal vira os 5 tons; #abc é aceito", () => {
+    expect(tvAccent("#B8862F")).toEqual({
+      "--accent": "#b8862f",
+      "--accent-9": "rgba(184, 134, 47, 0.09)",
+      "--accent-16": "rgba(184, 134, 47, 0.16)",
+      "--accent-56": "rgba(184, 134, 47, 0.56)",
+      "--accent-70": "rgba(184, 134, 47, 0.7)",
+    });
+    expect(tvAccent("#abc")["--accent"]).toBe("#aabbcc");
+  });
+  it("qualquer outra coisa (vazio, nome, injeção) cai no dourado do cardápio", () => {
+    for (const c of [null, undefined, "", "red", "#12345", "red; background:url(x)"]) expect(tvAccent(c)["--accent"]).toBe("#e8b04b");
+  });
+});
+
+describe("tvOrder: a líder sempre em primeiro", () => {
+  const o = (id: "a" | "b" | "c", pct: number): PublicOption => ({ id, label: id, item_id: null, pct });
+  it("da maior para a menor porcentagem", () => {
+    expect(tvOrder([o("a", 19), o("b", 43), o("c", 38)])).toEqual(["b", "c", "a"]);
+  });
+  it("empate e tudo zero: mantém a ordem da casa", () => {
+    expect(tvOrder([o("a", 40), o("b", 40), o("c", 20)])).toEqual(["a", "b", "c"]);
+    expect(tvOrder([o("a", 0), o("b", 0)])).toEqual(["a", "b"]);
+  });
+});
+
+describe("tvLongQuestion e tvSlow", () => {
+  it("pergunta longa (mais de 44 letras) desce um tamanho", () => {
+    expect(tvLongQuestion("Qual prato sai primeiro hoje?")).toBe(false);
+    expect(tvLongQuestion("x".repeat(44))).toBe(false);
+    expect(tvLongQuestion("x".repeat(45))).toBe(true);
+    expect(tvLongQuestion("  " + "x".repeat(44) + "  ")).toBe(false);
+  });
+  it("TV fraca: média acima de 24 ms por quadro nos primeiros 2 s", () => {
+    expect(tvSlow(120, 2000)).toBe(false); // 16,7 ms
+    expect(tvSlow(84, 2000)).toBe(false); // 23,8 ms
+    expect(tvSlow(80, 2000)).toBe(true); // 25 ms
+    expect(tvSlow(0, 2000)).toBe(true); // nenhum quadro: travada
+    expect(tvSlow(10, 0)).toBe(false); // sem medida
+  });
+});
+
+describe("tvFeatSlides: o que roda no telão sem enquete", () => {
+  const post = (id: string, item_id: string, on_tv = true): PublicPost => ({
+    id, item_id, thumb: `/t/${id}`, photo: `/f/${id}`, on_tv, created_at: "2026-10-16T22:00:00Z",
+  });
+  const known = new Set(["burger", "pizza"]);
+  it("destaque da casa primeiro, depois as fotos da casa marcadas para o telão", () => {
+    expect(tvFeatSlides([post("p1", "pizza"), post("p2", "burger", false), post("p3", "sumiu")], known, "burger")).toEqual([
+      { kind: "highlight", item_id: "burger" },
+      { kind: "post", item_id: "pizza", post: post("p1", "pizza") },
+    ]);
+  });
+  it("no máximo 8; sem destaque, só as fotos; sem nada, vazio", () => {
+    const many = Array.from({ length: 12 }, (_, k) => post(`p${k}`, "pizza"));
+    expect(tvFeatSlides(many, known, "burger")).toHaveLength(8);
+    expect(tvFeatSlides([post("p1", "pizza")], known, null)).toEqual([{ kind: "post", item_id: "pizza", post: post("p1", "pizza") }]);
+    expect(tvFeatSlides([], known, null)).toEqual([]);
   });
 });
 
@@ -372,22 +459,6 @@ describe("pollChime", () => {
     expect(pollChime("p1", tvState({ poll: tvPoll({ closed: true }) }))).toEqual({ open: null, chime: false });
     expect(pollChime("p1", tvState())).toEqual({ open: null, chime: false });
     expect(pollChime("p1", null)).toEqual({ open: null, chime: false });
-  });
-});
-
-describe("tvQuestionLong", () => {
-  // Medidas do Chromium a 62 px (line-height 1,04): uma linha 64,5 px, duas 129 px.
-  it("passa a 46 px só quando a pergunta quebra em mais de uma linha a 62 px", () => {
-    expect(tvQuestionLong(64.5, 62)).toBe(false);
-    expect(tvQuestionLong(65, 62)).toBe(false); // arredondamento da medida
-    expect(tvQuestionLong(129, 62)).toBe(true); // "Welches Dessert gewinnt heute?" (30 letras)
-    expect(tvQuestionLong(193.4, 62)).toBe(true);
-  });
-  it("sem medida (elemento ainda sem tamanho): fica nos 62 px", () => {
-    expect(tvQuestionLong(0, 62)).toBe(false);
-    expect(tvQuestionLong(Number.NaN, 62)).toBe(false);
-    expect(tvQuestionLong(129, 0)).toBe(false);
-    expect(tvQuestionLong(129, Number.NaN)).toBe(false);
   });
 });
 

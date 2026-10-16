@@ -5,7 +5,7 @@ import { thumbSrc } from "@/lib/menu/media";
 import type { MenuItem, PublicMenu } from "@/lib/menu/types";
 import { buildIndex, itemPrice, resolveLine } from "@/lib/orders/pricing";
 import { ct, ctf } from "./i18n";
-import type { OptionId, PollTemplate, PublicOption, PublicState } from "./types";
+import type { OptionId, PollTemplate, PublicOption, PublicPost, PublicState } from "./types";
 
 // ---------- Balão na capa ----------
 
@@ -332,23 +332,76 @@ export function backoff(failures: number): number {
   return Math.min(TV_BACKOFF_MAX_MS, TV_POLL_MS * 2 ** Math.floor(failures));
 }
 
-// O que o telão mostra: nada da Comunidade se ela está desligada (ou sem estado); as barras
-// com enquete aberta, ou encerrada com votos (a vencedora, pelos 15 min em que ela fica no
-// estado); senão as fotos da casa, o destaque e a próxima enquete.
-export type TvMode = "off" | "poll" | "idle";
-export function tvMode(s: PublicState | null): TvMode {
+// O que o telão mostra (ficha v2, telas 18 a 32): nada da Comunidade se ela está desligada
+// (ou sem estado); as barras com a enquete aberta; "Deu X" por 45 s depois que ela fecha com
+// uma vencedora (empate e sem votos não coroam ninguém); senão o destaque da casa.
+// closedSeen: quando esta TV viu a enquete fechada pela primeira vez (relógio do servidor).
+export const TV_WIN_MS = 45_000;
+export type TvScreen = "off" | "poll" | "win" | "feat";
+export function tvScreen(s: PublicState | null, closedSeen: number | null, nowMs: number): TvScreen {
   if (!s || !s.enabled) return "off";
-  if (s.poll && (!s.poll.closed || s.poll.has_votes)) return "poll";
-  return "idle";
+  const p = s.poll;
+  if (p && !p.closed) return "poll";
+  if (p && pollOutcome(p).kind === "win") {
+    const end = tvClosedAt(p, closedSeen);
+    if (nowMs >= end && nowMs - end < TV_WIN_MS) return "win";
+  }
+  return "feat";
 }
 
-// Pergunta do telão: 62 px numa linha; se quebra em mais de uma, passa a 46 px (.long) para
-// as barras não descerem sobre o aviso do QR. Decide pela altura medida a 62 px, não pelo
-// número de letras: a largura muda com a língua, com as letras e com a fonte. Uma linha tem
-// cerca de 1,04 × o tamanho da fonte; duas, 2,08. Sem medida, fica nos 62 px.
-export function tvQuestionLong(height: number, fontPx: number): boolean {
-  if (!(height > 0) || !(fontPx > 0)) return false;
-  return height > fontPx * 1.5;
+// Quando a enquete fechou: no fim marcado; fechada antes pelo painel, a hora em que a TV a viu
+// fechada (a leitura pública não traz o closed_at). O que vier antes.
+export function tvClosedAt(p: { ends_at: string }, closedSeen: number | null): number {
+  const end = Date.parse(p.ends_at);
+  if (closedSeen === null || !Number.isFinite(closedSeen)) return end;
+  return Number.isFinite(end) ? Math.min(end, closedSeen) : closedSeen;
+}
+
+// Cor da casa no telão: só hexadecimal passa (o valor vai para o style); senão o dourado do
+// cardápio. Os tons claros já vão prontos, sem color-mix (TV antiga não tem).
+const TV_ACCENT_DEFAULT = "#e8b04b";
+export function tvAccent(c: string | null | undefined): Record<"--accent" | "--accent-9" | "--accent-16" | "--accent-56" | "--accent-70", string> {
+  let v = (c ?? "").trim().toLowerCase();
+  if (/^#[0-9a-f]{3}$/.test(v)) v = `#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}`;
+  if (!/^#[0-9a-f]{6}$/.test(v)) v = TV_ACCENT_DEFAULT;
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16));
+  const a = (x: number) => `rgba(${r}, ${g}, ${b}, ${x})`;
+  return { "--accent": v, "--accent-9": a(0.09), "--accent-16": a(0.16), "--accent-56": a(0.56), "--accent-70": a(0.7) };
+}
+
+// Ordem das barras no telão: a líder sempre em primeiro (maior %; no empate, a ordem da casa).
+export function tvOrder(options: PublicOption[]): OptionId[] {
+  return options
+    .map((o, i) => ({ id: o.id, pct: o.pct, i }))
+    .sort((a, b) => b.pct - a.pct || a.i - b.i)
+    .map((o) => o.id);
+}
+
+// Pergunta comprida desce um tamanho no telão (medida em letras: tudo escala pela mesma
+// unidade, então vale em qualquer TV).
+export function tvLongQuestion(q: string): boolean {
+  return q.trim().length > 44;
+}
+
+// Modo simples automático: média acima de 24 ms por quadro nos primeiros 2 s de tela.
+export const TV_SLOW_FRAME_MS = 24;
+export function tvSlow(frames: number, elapsedMs: number): boolean {
+  if (!(elapsedMs > 0)) return false;
+  if (!(frames > 0)) return true;
+  return elapsedMs / frames > TV_SLOW_FRAME_MS;
+}
+
+// Telão sem enquete: o destaque da casa e as fotos da casa marcadas para o telão (prato ainda
+// no cardápio), até 8, uma de cada vez.
+export const TV_SLIDES_MAX = 8;
+export type TvSlide = { kind: "highlight"; item_id: string } | { kind: "post"; item_id: string; post: PublicPost };
+export function tvFeatSlides(mural: PublicPost[], known: Set<string>, highlightId: string | null): TvSlide[] {
+  const out: TvSlide[] = highlightId ? [{ kind: "highlight", item_id: highlightId }] : [];
+  for (const p of mural) {
+    if (out.length >= TV_SLIDES_MAX) break;
+    if (p.on_tv && known.has(p.item_id)) out.push({ kind: "post", item_id: p.item_id, post: p });
+  }
+  return out;
 }
 
 // Código de pareamento guardado na TV (localStorage tl-code:<slug>): { code, exp, hash }, com

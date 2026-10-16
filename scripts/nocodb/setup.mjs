@@ -37,8 +37,9 @@ export const TABLES = {
     text("phone"), text("address"), text("instagram"), text("facebook"), text("wifi_name"),
     text("wifi_password"), json("payment_methods"), bool("show_hours"),
     bool("show_payments"), bool("orders_enabled"),
-    // Comunidade: interruptor (vazio = desligada) e a hora em que vira o dia ("HH:MM", vazio = "05:00").
-    bool("community_enabled"), text("community_day_start"), created,
+    // Comunidade: interruptor (vazio = desligada), a hora em que vira o dia ("HH:MM", vazio =
+    // "05:00") e o modo simples do telão (vazio = desligado; a TV ainda liga sozinha se engasgar).
+    bool("community_enabled"), text("community_day_start"), bool("community_tv_simple"), created,
   ],
   members: [text("restaurant_id"), text("user_id"), text("role"), created],
   categories: [

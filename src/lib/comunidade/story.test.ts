@@ -13,6 +13,8 @@ import {
   storyHandle,
   storyImageSource,
   storyPhoto,
+  storyComeSize,
+  storyTitleSize,
   storyTexts,
   type StoryDeps,
   type StorySource,
@@ -37,6 +39,7 @@ const head = (over: Partial<CommunityHead> = {}): CommunityHead => ({
   instagram: "forno",
   logo_path: null,
   brand_color: "#b8862f",
+  tv_simple: false,
   ...over,
 });
 
@@ -272,6 +275,24 @@ describe("resolveStory: enquete", () => {
     expect(s.lang).toBe("pt-BR");
   });
 
+  it("miniatura de cada opção (a das perdedoras aparece ao lado do %); sem prato, nada", async () => {
+    const s = asPoll(await resolveStory(deps(), "forno", { poll: P_CLOSED }));
+    expect(s.thumbs).toEqual({
+      a: "https://x.public.blob.vercel-storage.com/r1/items/burger.webp-t",
+      b: "https://x.public.blob.vercel-storage.com/r1/items/pizza.webp-t",
+      c: null,
+    });
+    expect(asPoll(await resolveStory(deps(), "forno", { poll: P_MUSIC })).thumbs).toEqual({ a: null, b: null });
+  });
+
+  it("storyTitleSize: \"Deu X\" a 124 px; nome comprido desce", () => {
+    expect(storyTitleSize("Deu Burger two")).toBe(124);
+    expect(storyTitleSize("x".repeat(16))).toBe(124);
+    expect(storyTitleSize("x".repeat(17))).toBe(104);
+    expect(storyTitleSize("x".repeat(25))).toBe(104);
+    expect(storyTitleSize("x".repeat(26))).toBe(84);
+  });
+
   it("aberta: a foto de quem lidera agora", async () => {
     const s = asPoll(await resolveStory(deps(), "forno", { poll: P_OPEN }));
     expect(s.poll.closed).toBe(false);
@@ -334,29 +355,50 @@ describe("parseStoryQuery", () => {
 });
 
 describe("textos, cor, @ e foto da arte", () => {
-  it("textos da enquete encerrada e da foto da casa", async () => {
+  it("textos da enquete encerrada e da foto da casa (ficha v2, tela 16)", async () => {
     const closed = asPoll(await resolveStory(deps(), "forno", { poll: P_CLOSED }));
     expect(storyTexts(closed)).toEqual({
-      kicker: "Enquete da casa · encerrada",
-      title: "Qual sai hoje?",
+      kicker: "Enquete da casa, encerrada",
+      question: "Qual sai hoje?",
+      title: "Deu Burger Two",
       sub: null,
-      foot: "Vem votar com a gente",
-      footSub: "aponte a câmera para o cardápio",
+      come: "Vem pro Forno",
+      point: "o cardápio da casa: aponte a câmera",
     });
     const open = asPoll(await resolveStory(deps(), "forno", { poll: P_OPEN }));
-    expect(storyTexts(open).kicker).toBe("Enquete da casa · ao vivo");
+    expect(storyTexts(open)).toMatchObject({ kicker: "Enquete da casa, ao vivo", title: "Pizza doce na frente" });
     const music = asPoll(await resolveStory(deps(), "forno", { poll: P_MUSIC }));
-    expect(storyTexts(music).title).toBe("Qual a próxima música?");
+    expect(storyTexts(music)).toMatchObject({ question: "Qual a próxima música?", title: "Deu Samba" });
     const house = asPost(await resolveStory(deps(), "forno", { post: POST_PIZZA }));
     expect(storyTexts(house)).toEqual({
       kicker: "Saindo agora da cozinha",
+      question: null,
       title: "Pizza doce",
       sub: "destaque da casa",
-      foot: "Peça o seu",
-      footSub: "aponte a câmera para o cardápio",
+      come: "Vem pro Forno",
+      point: "o cardápio da casa: aponte a câmera",
     });
     const plain = asPost(await resolveStory(deps(), "forno", { post: POST_OK }));
     expect(storyTexts(plain).sub).toBeNull();
+  });
+
+  it("\"Vem pro\" usa o nome inteiro da casa (sem campo novo); sem nome, o slug", async () => {
+    const depot = deps({ headRow: head({ name: "Depot Medieval" }) });
+    expect(storyTexts(asPoll(await resolveStory(depot, "forno", { poll: P_CLOSED }))).come).toBe("Vem pro Depot Medieval");
+    const noName = deps({ headRow: head({ name: "" }) });
+    expect(storyTexts(asPoll(await resolveStory(noName, "forno", { poll: P_CLOSED }))).come).toBe("Vem pro forno");
+  });
+
+  it("storyComeSize: 72 px numa linha; nome comprido desce o tamanho e corta com reticências", () => {
+    // Medido no PNG: "Vem pro depotmedieval" (21 letras) a 72 px quebra na coluna de 680 px.
+    expect(storyComeSize("Vem pro Depot")).toEqual({ text: "Vem pro Depot", size: 72 });
+    expect(storyComeSize("Vem pro Depot Bar")).toEqual({ text: "Vem pro Depot Bar", size: 60 });
+    expect(storyComeSize("Vem pro Depot Medieval")).toEqual({ text: "Vem pro Depot Medieval", size: 60 });
+    expect(storyComeSize("Vem pro Cantina da Nona Rosa").size).toBe(52);
+    const long = storyComeSize("Vem pro " + "x".repeat(80));
+    expect(long.size).toBe(52);
+    expect(long.text).toHaveLength(44);
+    expect(long.text.endsWith("…")).toBe(true);
   });
 
   it("cor da marca só em hexadecimal; senão, a do cardápio", () => {

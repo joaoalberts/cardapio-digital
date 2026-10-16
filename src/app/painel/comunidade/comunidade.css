@@ -85,6 +85,12 @@
     font-size: 13px;
     color: var(--pmuted);
   }
+  & .cp-sw-row.cp-sw-last {
+    margin: 14px 0 0;
+    padding: 14px 0 0;
+    border-bottom: 0;
+    border-top: 1px solid #f0f0f0;
+  }
   & .cp-sw {
     position: relative;
     width: 50px;
