@@ -16,6 +16,11 @@ import { Flag } from "./flag";
 import { OrderProvider, useOrder } from "./order/order-context";
 import { OrderLayer } from "./order/order-layer";
 import { StoryBuy } from "./order/story-actions";
+import { SpecialStory } from "./order/special-story";
+import {
+  SPECIAL_KEY, afterShown, ensureFirstEligible, injectOffer, parseClock, pickSpecial, placeOffer,
+  type OfferPlacement, type SpecialClock,
+} from "@/lib/menu/special-schedule";
 import { CartButton } from "./order/cart-button";
 
 const AUTO_MS = 6000; // cada foto fica 6 s; vídeo usa a própria duração
@@ -92,7 +97,14 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   useEffect(() => syncMenu(menu), [menu, syncMenu]);
   // Relógio do horário das categorias: começa depois da primeira pintura e anda a cada minuto.
   const [now, setNow] = useState<number | null>(null);
-  const cats = useMemo(() => visibleCats(menu, now), [menu, now]);
+  // Oferta relâmpago: o produto especial sorteado entra como story extra na categoria
+  // (special-schedule.ts decide quando e onde; aqui só se injeta e se reage ao fim).
+  const [placement, setPlacement] = useState<OfferPlacement | null>(null);
+  const specialItem = useMemo(
+    () => (placement ? (menu.specials?.items.find((i) => i.id === placement.itemId) ?? null) : null),
+    [menu, placement],
+  );
+  const cats = useMemo(() => injectOffer(visibleCats(menu, now), placement, specialItem), [menu, now, placement, specialItem]);
   const catsRef = useRef(cats);
   const t = (k: StringKey) => tr(k, lang);
 
@@ -346,6 +358,114 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
     else setItem(cur, 0);
   }, [goCat, setItem]);
 
+  // ---------- Oferta relâmpago ----------
+  // Relógio por cliente no localStorage (sem ele, vale só nesta visita). Um story especial
+  // visto e encerrado (pegou, perdeu ou o cliente passou) espera o intervalo do produto.
+  const clock = useRef<SpecialClock | null>(null);
+  const placementRef = useRef<OfferPlacement | null>(null);
+  const offerShown = useRef(false); // o story da oferta já ficou na tela
+  const seen = useRef({ count: 0, last: "" });
+  useEffect(() => {
+    placementRef.current = placement;
+  }, [placement]);
+  const readClock = useCallback((): SpecialClock => {
+    if (!clock.current) {
+      try {
+        clock.current = parseClock(localStorage.getItem(SPECIAL_KEY(slug)));
+      } catch {
+        clock.current = parseClock(null);
+      }
+    }
+    return clock.current;
+  }, [slug]);
+  const saveClock = useCallback(
+    (c: SpecialClock) => {
+      clock.current = c;
+      try {
+        localStorage.setItem(SPECIAL_KEY(slug), JSON.stringify(c));
+      } catch {}
+    },
+    [slug],
+  );
+
+  // Tira o story da oferta da categoria sem pular nenhum prato: se o cliente já passou
+  // dela, o índice daquela categoria volta uma casa.
+  const dropOffer = useCallback(
+    (shown: SpecialClock | null) => {
+      const pl = placementRef.current;
+      if (!pl) return;
+      if (shown) saveClock(shown);
+      const list = catsOf();
+      const ci = list.findIndex((c) => c.id === pl.catId);
+      const at = ci >= 0 ? list[ci].items.findIndex((it) => it.id === pl.itemId) : -1;
+      const v = viewRef.current;
+      if (at >= 0 && v.idx[ci] > at) {
+        const idx = [...v.idx];
+        idx[ci] -= 1;
+        update({ idx });
+      }
+      offerShown.current = false;
+      placementRef.current = null;
+      setPlacement(null);
+      resetTimer();
+    },
+    [resetTimer, saveClock, update],
+  );
+
+  const specialItemRef = useRef<MenuItem | null>(null);
+  useEffect(() => {
+    specialItemRef.current = specialItem;
+  }, [specialItem]);
+
+  const endSpecial = useCallback(
+    (outcome: "taken" | "missed") => {
+      void outcome; // pegou ou perdeu: nos dois casos a oferta espera o intervalo
+      const item = specialItemRef.current;
+      dropOffer(item ? afterShown(readClock(), item, Date.now()) : null);
+    },
+    [dropOffer, readClock],
+  );
+
+  // A cada story novo: conta stories vistos, encerra a oferta se o cliente saiu dela,
+  // recoloca a oferta pendente que ele pulou sem ver e sorteia uma nova quando é a hora.
+  const curItem = view.open ? cats[view.cur]?.items[view.idx[view.cur]] : undefined;
+  const storyKey = view.open && curItem ? `${view.cur}:${view.idx[view.cur]}:${curItem.id}` : "";
+  const busyOrder = order.sheet !== null || order.pick !== null;
+  useEffect(() => {
+    if (!storyKey || seen.current.last === storyKey) return;
+    seen.current.last = storyKey;
+    seen.current.count += 1;
+    const item = catsRef.current[viewRef.current.cur]?.items[viewRef.current.idx[viewRef.current.cur]];
+    if (item?.special) {
+      offerShown.current = true;
+      return;
+    }
+    const pl = placementRef.current;
+    if (pl && offerShown.current) {
+      queueMicrotask(() => endSpecial("missed")); // passou para outro story: conta como perdida
+      return;
+    }
+    const now0 = Date.now();
+    const c0 = readClock();
+    const c1 = ensureFirstEligible(c0, now0, Math.random);
+    if (c1 !== c0) saveClock(c1);
+    if (!order.enabled) return;
+    const list = catsRef.current;
+    const v = viewRef.current;
+    if (pl) {
+      const ci = list.findIndex((c) => c.id === pl.catId);
+      const at = ci >= 0 ? list[ci].items.findIndex((it) => it.id === pl.itemId) : -1;
+      const ahead = ci > v.cur || (ci === v.cur && at > v.idx[v.cur]);
+      if (!ahead) queueMicrotask(() => dropOffer(null)); // pulou sem ver: volta a ser sorteada à frente
+      return;
+    }
+    const sp = pickSpecial(menu.specials?.items ?? [], c1, { now: now0, storiesSeen: seen.current.count, timezone: menu.restaurant.timezone, busy: busyOrder, openingHours: menu.restaurant.opening_hours }, Math.random);
+    if (!sp) return;
+    const next = placeOffer(list, v.cur, v.idx[v.cur], sp.id, Math.random);
+    if (next) queueMicrotask(() => setPlacement(next));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reage só à troca de story
+  }, [storyKey]);
+
   // Barra de progresso: atualizada a cada quadro direto no DOM, sem re-render.
   const tick = useCallback(() => {
     const step = () => {
@@ -355,6 +475,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
       const p = panelEls.current[v.cur];
       if (!cat || !p) return;
       const item = cat.items[v.idx[v.cur]];
+      if (item?.special) return; // a oferta relâmpago tem o próprio tempo (SpecialStory)
       const vid = p.querySelector("video");
       let frac: number;
       if (isVideo(item) && vid && vid.duration) {
@@ -582,7 +703,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
 
   // ---------- Gestos ----------
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button > 0 || gesture.current || (e.target as HTMLElement).closest("button")) return;
+    if (e.button > 0 || gesture.current || (e.target as HTMLElement).closest("button, .sp-foot")) return;
     cancelAnimationFrame(anim.current);
     const now = performance.now();
     gesture.current = {
@@ -895,7 +1016,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
             return (
               <div
                 key={c.id}
-                className="panel"
+                className={`panel${item.special ? " special" : ""}`}
                 ref={(el) => {
                   panelEls.current[i] = el;
                 }}
@@ -907,7 +1028,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
                       item={item}
                       live={i === view.cur && view.target === view.cur}
                       onEnded={() => {
-                        if (viewRef.current.cur === i && playing()) next();
+                        if (viewRef.current.cur === i && playing() && !item.special) next();
                       }}
                     />
                   )}
@@ -921,10 +1042,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
                   ))}
                 </div>
                 <div className="info">
-                  {/* Linha pequena espaçada acima do nome: o primeiro selo do prato ou, sem selo, a categoria. */}
-                  <span className="eyebrow">{item.tags?.length ? tagLabel(item.tags[0], lang) : c.name}</span>
                   <h3 className="fd">{item.name}</h3>
-                  <i className="rule" aria-hidden />
                   {item.description && <p>{item.description}</p>}
                   {((item.tags?.length ?? 0) > 1 || item.serves || item.country) && (
                     <ul className="tags">
@@ -948,6 +1066,14 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
                   {/* Preço e quantidade na mesma linha e, embaixo, "Pedir agora" (layout do João, 15/10). */}
                   <StoryBuy key={item.id} item={item} kind={c.name} price={!item.hide_price && <Price item={item} lang={lang} className="price solo" />} />
                 </div>
+                {item.special && (
+                  <SpecialStory
+                    key={`${item.id}:${placement?.catId}:${placement?.at}`}
+                    item={item}
+                    live={view.open && i === view.cur && view.target === view.cur}
+                    onDone={endSpecial}
+                  />
+                )}
                 <div className="dim" />
               </div>
             );
@@ -1012,12 +1138,13 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
                   <h3 className="fd">
                     {c.name}
                     <small>
-                      {c.items.length} {t("items")}
+                      {c.items.filter((it) => !it.special).length} {t("items")}
                     </small>
                   </h3>
                   {c.description && <p className="lobs">{c.description}</p>}
                   <div className="dgrid">
                     {c.items.map((it, i) => {
+                      if (it.special) return null; // a oferta relâmpago só aparece como story
                       const th = thumbSrc(it);
                       return (
                         <button

@@ -10,6 +10,7 @@ import { MesaTag } from "./mesa-tag";
 import "@/styles/font-themes.css";
 import "./menu.css";
 import "./order/order.css";
+import "./order/special.css";
 
 export const viewport: Viewport = {
   themeColor: "#0b0a09",

@@ -7,7 +7,10 @@ export const NOTE_MAX = 140;
 export const MAX_QTY = 20;
 export const MAX_LINES = 30;
 
-export type CartLineInput = { item: string; option?: string | null; half?: string | null; qty: number; note?: string | null };
+// claim = registro da oferta relâmpago pega (special_claims); só nas linhas de produto especial.
+export type CartLineInput = { item: string; option?: string | null; half?: string | null; qty: number; note?: string | null; claim?: string | null };
+// Registro já conferido pelo serviço (mesa, celular, não usado, não vencido).
+export type ClaimRef = { item_id: string; item_name: string; unit_cents: number; qty_max: number };
 export type PricedLine = {
   item_id: string;
   name: string;
@@ -17,8 +20,10 @@ export type PricedLine = {
   qty: number;
   unit_cents: number;
   note: string;
+  special?: boolean;
+  claim?: string; // registro da oferta usado nesta linha (confere quem usou primeiro)
 };
-export type LineErrorReason = "unavailable" | "no_price" | "option" | "half" | "qty" | "note" | "closed_category";
+export type LineErrorReason = "unavailable" | "no_price" | "option" | "half" | "qty" | "note" | "closed_category" | "special";
 export type LineError = { index: number; item: string; reason: LineErrorReason };
 export type PriceResult = { ok: true; lines: PricedLine[]; total_cents: number } | { ok: false; errors: LineError[] };
 
@@ -28,9 +33,10 @@ export type Resolved =
   | { ok: false; reason: LineErrorReason };
 
 // Cada prato pela categoria real dele (o cardápio do banco não tem "Destaques").
+// Os produtos especiais entram com a categoria escondida deles.
 export function buildIndex(menu: PublicMenu): MenuIndex {
   const items: MenuIndex["items"] = new Map();
-  for (const category of menu.categories) {
+  for (const category of menu.specials ? [...menu.categories, menu.specials] : menu.categories) {
     for (const item of category.items) if (!items.has(item.id)) items.set(item.id, { item, category });
   }
   return { items, timezone: menu.restaurant.timezone };
@@ -81,13 +87,27 @@ export function resolveLine(index: MenuIndex, line: Pick<CartLineInput, "item" |
   return { ok: true, unit: halfPrice(pa, pb), item: a.item, half: b.item, option };
 }
 
-export function priceCart(menu: PublicMenu, lines: CartLineInput[], now = new Date()): PriceResult {
+// claims: registros da oferta relâmpago, já validados. A linha com registro sai pelo preço e nome gravados nele.
+export function priceCart(menu: PublicMenu, lines: CartLineInput[], now = new Date(), claims: Map<string, ClaimRef> = new Map()): PriceResult {
   if (!lines.length || lines.length > MAX_LINES) return { ok: false, errors: [{ index: -1, item: "", reason: "qty" }] };
   const index = buildIndex(menu);
   const errors: LineError[] = [];
   const out: PricedLine[] = [];
+  const usedByClaim = new Map<string, number>(); // um registro vale para o limite dele no pedido inteiro
   lines.forEach((l, i) => {
     const fail = (reason: LineErrorReason) => errors.push({ index: i, item: l.item, reason });
+    if (l.claim) {
+      const c = claims.get(l.claim);
+      if (!c || c.item_id !== l.item || l.half || l.option) return fail("special");
+      const used = usedByClaim.get(l.claim) ?? 0;
+      if (!Number.isInteger(l.qty) || l.qty < 1 || used + l.qty > c.qty_max) return fail("special");
+      usedByClaim.set(l.claim, used + l.qty);
+      const note = cleanNote(l.note);
+      if (note === null) return fail("note");
+      out.push({ item_id: l.item, name: c.item_name, half_item_id: null, half_name: null, option: null, qty: l.qty, unit_cents: c.unit_cents, note, special: true, claim: l.claim });
+      return;
+    }
+    if (menu.specials?.items.some((it) => it.id === l.item)) return fail("special");
     const r = resolveLine(index, l, now);
     if (!r.ok) return fail(r.reason);
     if (!Number.isInteger(l.qty) || l.qty < 1 || l.qty > MAX_QTY) return fail("qty");

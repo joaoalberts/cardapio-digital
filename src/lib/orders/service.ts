@@ -2,7 +2,8 @@
 // O banco vem de fora (deps.db): no app é o NocoDB; nos testes, um banco em memória.
 import { openStatus } from "@/lib/menu/hours";
 import type { PublicMenu } from "@/lib/menu/types";
-import { MAX_LINES, priceCart, type CartLineInput, type LineError, type PricedLine } from "./pricing";
+import { MAX_LINES, priceCart, type CartLineInput, type ClaimRef, type LineError, type PricedLine } from "./pricing";
+import type { ClaimRow } from "./specials";
 
 export type OrderStatus = "new" | "preparing" | "ready" | "delivered";
 export const NEXT_STATUS: Record<OrderStatus, OrderStatus | null> = {
@@ -29,12 +30,12 @@ export type OrderRow = {
 export type PublicOrder = Pick<OrderRow, "id" | "status" | "total_cents" | "lines" | "created_at" | "table_label">;
 
 type Where = Record<string, string | number | boolean | null>;
-type OrderTable = "orders" | "dining_tables";
+type OrderTable = "orders" | "dining_tables" | "special_claims";
 export type OrdersDb = {
   list<T>(table: OrderTable, where: Where, opts?: { sort?: string; limit?: number }): Promise<T[]>;
   first<T>(table: OrderTable, where: Where): Promise<T | null>;
   insertOne<T extends Record<string, unknown>>(table: "orders", row: T): Promise<T & { id: string }>;
-  update(table: "orders", where: Where, patch: Record<string, unknown>): Promise<number>;
+  update(table: "orders" | "special_claims", where: Where, patch: Record<string, unknown>): Promise<number>;
 };
 export type Deps = { db: OrdersDb; getMenu: (slug: string) => Promise<PublicMenu | null>; now?: () => Date };
 
@@ -65,11 +66,13 @@ export function parseCreateInput(body: unknown): CreateInput | null {
     const option = l.option ?? null;
     const half = l.half ?? null;
     const note = l.note ?? null;
+    const claim = l.claim ?? null;
     if (!isUuid(l.item) || typeof l.qty !== "number") return null;
+    if (claim !== null && !isUuid(claim)) return null;
     if (option !== null && (typeof option !== "string" || option.length > 40)) return null;
     if (half !== null && !isUuid(half)) return null;
     if (note !== null && (typeof note !== "string" || note.length > 1000)) return null;
-    lines.push({ item: l.item, option, half, qty: l.qty, note });
+    lines.push(claim ? { item: l.item, option, half, qty: l.qty, note, claim } : { item: l.item, option, half, qty: l.qty, note });
   }
   return { mesa: b.mesa, device: b.device, ref: b.ref, lines };
 }
@@ -110,7 +113,15 @@ export async function createOrder(deps: Deps, slug: string, body: unknown): Prom
     if (!st.open) return { ok: false, code: "closed", opensAt: st.opensAt };
   }
 
-  const priced = priceCart(menu, input.lines, now);
+  // Oferta relâmpago: só vale o registro desta mesa e deste celular, não usado e no prazo.
+  const claims = new Map<string, ClaimRef>();
+  for (const id of new Set(input.lines.map((l) => l.claim).filter((c): c is string => !!c))) {
+    const c = await deps.db.first<ClaimRow>("special_claims", { uid: id, restaurant_id: r.id });
+    const valid = c && c.table_id === table.id && c.device_id === input.device && !c.order_id && Date.parse(c.expires_at) > now.getTime();
+    if (valid) claims.set(id, { item_id: c.item_id, item_name: c.item_name, unit_cents: c.unit_cents, qty_max: c.qty_max });
+  }
+
+  const priced = priceCart(menu, input.lines, now, claims);
   if (!priced.ok) return { ok: false, code: "lines", errors: priced.errors };
 
   const row = await deps.db.insertOne("orders", {
@@ -138,6 +149,24 @@ export async function createOrder(deps: Deps, slug: string, body: unknown): Prom
       status_at: now.toISOString(),
     });
     return winner.device_id === input.device ? { ok: true, order: toPublic(winner) } : { ok: false, code: "invalid" };
+  }
+  // Oferta relâmpago: conferir e marcar o registro não é atômico. Dois pedidos ao mesmo
+  // tempo com o mesmo registro: vence o primeiro pedido aberto (menor Id) que o usa; o outro
+  // é fechado, como no ref repetido, e a linha volta como "special".
+  if (claims.size) {
+    const used = (o: OrderRow, id: string) => (o.lines ?? []).some((l) => l.claim === id);
+    const mineRows = await deps.db.list<OrderRow>("orders", { restaurant_id: r.id, device_id: input.device, open: true }, { sort: "Id" });
+    const lost = [...claims.keys()].filter((id) => {
+      const first = mineRows.find((o) => used(o, id));
+      return first && first.id !== mine.id;
+    });
+    if (lost.length) {
+      await deps.db.update("orders", { uid: mine.id, restaurant_id: r.id }, { open: false, status: "delivered", status_at: now.toISOString() });
+      const errors = input.lines.flatMap((l, index) => (l.claim && lost.includes(l.claim) ? [{ index, item: l.item, reason: "special" as const }] : []));
+      return { ok: false, code: "lines", errors };
+    }
+    // O registro usado fica preso a este pedido: não vale em outro.
+    for (const id of claims.keys()) await deps.db.update("special_claims", { uid: id, restaurant_id: r.id }, { order_id: mine.id });
   }
   return { ok: true, order: toPublic(mine) };
 }

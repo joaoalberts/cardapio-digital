@@ -20,6 +20,7 @@ export type Table =
   | "translations"
   | "dining_tables"
   | "orders"
+  | "special_claims"
   | "support_requests";
 
 export type Row = Record<string, unknown>;
@@ -27,11 +28,14 @@ export type Row = Record<string, unknown>;
 export type Where = Record<string, string | number | boolean | null>;
 
 // Colunas JSON e Checkbox voltam em formatos diferentes conforme o banco do NocoDB.
-const JSON_COLS = new Set(["languages", "opening_hours", "payment_methods", "price_options", "tags", "lines"]);
+const JSON_COLS = new Set(["languages", "opening_hours", "payment_methods", "price_options", "tags", "lines", "special_days"]);
 const BOOL_COLS = new Set([
-  "active", "featured", "hide_price", "auto", "show_hours", "show_payments", "half_half", "orders_enabled", "open",
+  "active", "featured", "hide_price", "auto", "show_hours", "show_payments", "half_half", "orders_enabled", "open", "special",
 ]);
-const NUM_COLS = new Set(["menu_version", "position", "price_cents", "promo_price_cents", "serves", "total_cents"]);
+const NUM_COLS = new Set([
+  "menu_version", "position", "price_cents", "promo_price_cents", "serves", "total_cents",
+  "special_every_h", "special_show_s", "special_limit", "unit_cents", "qty_max",
+]);
 const SYSTEM = new Set(["CreatedAt", "UpdatedAt", "nc_created_by", "nc_updated_by", "nc_order"]);
 
 function token() {

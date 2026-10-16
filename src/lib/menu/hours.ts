@@ -9,7 +9,7 @@ const toMin = (hhmm: string) => {
 };
 
 // Dia da semana e minuto do dia no fuso do restaurante (não do celular do cliente).
-function localNow(timezone: string, now: Date) {
+export function localNow(timezone: string, now: Date) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     weekday: "short",

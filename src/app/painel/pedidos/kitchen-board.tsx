@@ -184,6 +184,7 @@ export function KitchenBoard({ restaurantId, initial, enabled: enabled0 }: { res
                         <li key={i}>
                           <b>{l.qty}×</b>
                           {l.half_name ? `Meio a meio${l.option ? ` ${l.option}` : ""}` : `${l.name}${l.option ? ` ${l.option}` : ""}`}
+                          {l.special && <span className="kb-offer">Oferta</span>}
                           {l.half_name && (
                             <span className="kb-halves">
                               ½ {l.name} · ½ {l.half_name}

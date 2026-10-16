@@ -281,8 +281,6 @@
 
 /* Texto: linha pequena espaçada, nome, traço dourado curto e descrição. */
 .cm .viewer .info .eyebrow { font-size: 11px; letter-spacing: 0.34em; text-transform: uppercase; color: rgba(255, 255, 255, 0.78); margin-bottom: -2px; }
-.cm .viewer .info .rule { display: block; width: 44px; height: 1.5px; border-radius: 2px; background: var(--accent); margin: 4px 0 2px; }
-.cm .viewer .info h3 + .rule + p { margin-top: 2px; }
 .cm .viewer .info p { font-size: 15px; color: rgba(255, 255, 255, 0.72); max-width: 34ch; }
 
 /* Preço à esquerda e quantidade à direita. */
@@ -307,3 +305,96 @@
 .cm .o-go-arrow { width: 22px; height: 22px; stroke-width: 1.5; }
 /* Com a barra "Pedir agora" no pé, o texto sobe um pouco menos que com a barrinha da metade. */
 .cm .viewer .info { padding-bottom: calc(22px + var(--safe-bottom) + var(--under-bar)); }
+/* "Pedir agora" e quantidade mais baixos; nome, descrição e preço descem (15/10). */
+.cm .o-go { height: 48px; margin-top: 10px; }
+.cm .o-go-ic .icon { width: 22px; height: 22px; }
+.cm .o-qty { height: 38px; }
+.cm .o-qty button { width: 42px; font-size: 18px; }
+.cm .viewer .buyrow { min-height: 38px; margin-top: 8px; }
+.cm .viewer .info { padding-bottom: calc(12px + var(--safe-bottom) + var(--under-bar)); }
+/* "Pedir agora" em vidro fosco escuro (modelo 1 escolhido pelo João, 15/10). */
+.cm .o-go { background: rgba(18, 14, 12, 0.42); backdrop-filter: blur(22px) saturate(1.4); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 10px 30px rgba(0, 0, 0, 0.35); }
+
+/* Sem a linha dourada; o título desce e fica colado na descrição (pedido do João, 15/10). */
+.cm .viewer .info h3 + p { margin-top: -10px; }
+
+/* Sombra só atrás do texto do story (pedido do João, 15/10): nasce um pouco acima do
+   selo/nome e escurece até o pé; o resto da foto fica limpo. Acompanha a altura do texto. */
+.cm .viewer .shade {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0) 22%);
+}
+.cm .viewer .info::before {
+  content: "";
+  position: absolute;
+  inset: -56px 0 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0.42) 56px, rgba(0, 0, 0, 0.62) 55%, rgba(0, 0, 0, 0.78) 100%);
+}
+.cm .viewer .info :is(.eyebrow, h3, p) { text-shadow: 0 1px 16px rgba(0, 0, 0, 0.45); }
+
+/* "Seu pedido" sem a frase da conta (pedido do João, 15/10): total alinhado às bordas da
+   lista (mesma coluna dos preços) e respiros iguais entre total, "Continuar" e o deslizar. */
+.cm .o-summary { gap: 14px; padding-top: 16px; }
+.cm .o-total { padding: 0; align-items: center; }
+.cm .o-total span { font-size: 15px; }
+.cm .o-total strong { font-size: 24px; }
+.cm .o-cart { min-height: 0; }
+.cm .o-cart .o-body { padding-bottom: 10px; }
+
+/* Deslizar no tamanho e nas proporções do "deslize para desligar" do iPhone (pedido do João, 16/10):
+   trilho de 72px, bolinha de 62px, sem o anel verde; o texto ganha o brilho que passa, como no iOS. */
+.cm .o-slide { height: 72px; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(20px) saturate(1.4); }
+.cm .o-slide-fill { background: rgba(255, 255, 255, 0.06); }
+.cm .o-slide-knob { top: 5px; left: 5px; width: 62px; height: 62px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); animation: none; }
+.cm .o-slide-knob[data-nudge] { animation: o-nudge 0.5s; }
+.cm .o-slide-knob .icon { width: 26px; height: 26px; }
+.cm .o-slide-txt { padding-left: 72px; font-size: 17px; color: transparent; background: linear-gradient(100deg, rgba(247, 239, 230, 0.5) 35%, #fff 50%, rgba(247, 239, 230, 0.5) 65%) 0 0 / 300% 100%; -webkit-background-clip: text; background-clip: text; animation: o-shine 2.6s linear infinite; }
+@keyframes o-shine { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .cm .o-slide-txt { animation: none; color: rgba(247, 239, 230, 0.85); } }
+
+/* Pedido do João (16/10): carrinho do topo só com o ícone, sem o círculo de vidro, e o número
+   na cor creme da bolinha do "Deslize"; a seta de minimizar do "Seu pedido" vai para o centro
+   do cabeçalho, na mesma linha do título, sem a bola de vidro. */
+.cm .viewer .o-cartbtn.vcart, .cm .o-cartbtn.hero-cart { background: none; border: 0; box-shadow: none; backdrop-filter: none; }
+.cm .o-cartbtn .icon { width: 24px; height: 24px; filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.55)); }
+.cm .o-cartbtn-n { top: 1px; right: 0; background: var(--fg); color: #1b1714; }
+.cm .g-title.cart { position: relative; }
+.cm .g-title.cart .o-ic { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; background: none; }
+.cm .g-title.cart .o-ic .icon { width: 22px; height: 22px; }
+/* A folha de vidro pegava a cor da foto de trás (o verde das ervas da pizza de salmão ficava
+   no fundo, "efeito verde"): vidro um pouco mais escuro e com a cor de trás apagada, não reforçada. */
+.cm .o-sheet { background: rgba(28, 22, 18, 0.7); backdrop-filter: blur(30px) saturate(0.55); }
+/* Total e preços das linhas mais para dentro, perto do centro (pedido do João, 16/10). */
+.cm .o-total { padding: 0 22px 0 10px; }
+.cm .o-lines .o-price { margin-right: 22px; }
+/* Categoria ativa no topo do story sem o balão de vidro: só o texto mais forte. */
+.cm .viewer .vtabs button[aria-selected="true"] { background: none; backdrop-filter: none; box-shadow: none; font-weight: 600; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5); }
+/* Aba ativa (Carrinho / Meus pedidos) sem o branco: vidro um tom mais claro que o da folha. */
+.cm .o-seg button[aria-selected="true"] { background: rgba(255, 255, 255, 0.16); color: var(--fg); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 2px 8px rgba(0, 0, 0, 0.2); }
+/* Minimizar vira um traço no topo da folha (pedido do João, 16/10); "Editar" mais para dentro,
+   na coluna dos preços. */
+.cm .g-title.cart .o-ic { top: -12px; transform: translateX(-50%); width: 72px; height: 22px; border-radius: 11px; }
+.cm .g-title.cart .o-ic .icon { display: none; }
+.cm .g-title.cart .o-ic::before { content: ""; width: 38px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.38); }
+.cm .g-title.cart .g-editl { margin-right: 22px; }
+.cm .o-cart { padding-top: 26px; }
+/* Número do carrinho em vidro com brilho leve, em vez do creme chapado (pedido do João, 16/10). */
+.cm .o-cartbtn-n { min-width: 20px; height: 20px; border-radius: 10px; color: var(--fg); background: linear-gradient(160deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.1) 60%); backdrop-filter: blur(10px) saturate(1.4); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 0 10px rgba(255, 255, 255, 0.18); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
+/* Linha meio a meio (pedido do João, 16/10): sem "1 pizza" e sem o traço; o selo e os sabores
+   alinhados na mesma margem, com um respiro entre o selo e os sabores. */
+.cm .o-tag { justify-items: start; margin-bottom: 2px; }
+.cm .o-brk { padding-left: 0; border-left: 0; gap: 2px; }
+/* O João sentiu falta do anel verde-limão pulsando na bolinha do "Deslize" (16/10): volta,
+   no tamanho novo. */
+.cm .o-slide-knob { box-shadow: 0 0 0 3px var(--o-lime), 0 0 16px 5px rgba(216, 240, 90, 0.35); animation: o-glow 1.8s ease-in-out infinite; }
+.cm .o-slide-knob[data-nudge] { animation: o-nudge 0.5s, o-glow 1.8s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .cm .o-slide-knob, .cm .o-slide-knob[data-nudge] { animation: none; } }
+.cm .o-tag { line-height: 1.1; margin-bottom: -1px; }
+.cm .o-brk { gap: 0; line-height: 1.3; }
+.cm .g-title.cart .o-ic { top: -22px; }
+/* Abas Carrinho / Meus pedidos menores (pedido do João, 16/10). */
+.cm .o-tabs { padding: 2px; gap: 2px; }
+.cm .o-tabs button { min-height: 28px; font-size: 13px; }
+/* Oferta relâmpago no pedido: raio pequeno em champanhe ao lado do nome (16/10). */
+.cm .o-bolt { width: 13px; height: 13px; margin-left: 6px; vertical-align: -1px; color: #e9dcc4; fill: rgba(233, 220, 196, 0.25); }

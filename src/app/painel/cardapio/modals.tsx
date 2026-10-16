@@ -77,7 +77,7 @@ export function FootButtons({ onClose, onSave, busy, disabled }: { onClose: () =
   );
 }
 
-function ConfirmDelete({ label, onConfirm, busy }: { label: string; onConfirm: () => void; busy: boolean }) {
+export function ConfirmDelete({ label, onConfirm, busy }: { label: string; onConfirm: () => void; busy: boolean }) {
   const [ask, setAsk] = useState(false);
   if (!ask)
     return (
@@ -98,7 +98,7 @@ function ConfirmDelete({ label, onConfirm, busy }: { label: string; onConfirm: (
   );
 }
 
-function Check({ checked, onChange, children }: { checked: boolean; onChange: (v: boolean) => void; children: React.ReactNode }) {
+export function Check({ checked, onChange, children }: { checked: boolean; onChange: (v: boolean) => void; children: React.ReactNode }) {
   return (
     <label className="md-check">
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />

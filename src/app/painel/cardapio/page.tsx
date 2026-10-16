@@ -34,7 +34,7 @@ async function Cardapio() {
     wifi_name: string | null;
     wifi_password: string | null;
   };
-  type Cat = { id: string; name: string; active: boolean; description: string | null; available_from: string | null; available_to: string | null; half_half: boolean };
+  type Cat = { id: string; name: string; active: boolean; description: string | null; available_from: string | null; available_to: string | null; half_half: boolean; special?: boolean };
   type It = {
     id: string; category_id: string; name: string; description: string | null; price_cents: number;
     promo_price_cents: number | null; tags: string[] | null; active: boolean; featured: boolean; hide_price: boolean;
@@ -68,7 +68,8 @@ async function Cardapio() {
       : null;
   const hhmm = (t: string | null) => (t ? t.slice(0, 5) : null);
 
-  const categories: EditorCategory[] = cats.map((c) => ({
+  // A categoria escondida dos produtos especiais tem a seção própria (/painel/especiais).
+  const categories: EditorCategory[] = cats.filter((c) => !c.special).map((c) => ({
     id: c.id,
     name: c.name,
     active: c.active,

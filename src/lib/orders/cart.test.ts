@@ -113,3 +113,20 @@ describe("armazenamento", () => {
     expect(parseStoredCart(bad, 0).map((l) => [l.item, l.key])).toEqual([["smash", lineKey(smash)]]);
   });
 });
+
+describe("oferta relâmpago no carrinho", () => {
+  const esp: NewLine = { item: "rainha", option: null, half: null, qty: 1, note: "", claim: "c1", claim_cents: 6900, claim_name: "Pizza da Rainha" };
+  it("cada oferta pega vira uma linha própria", () => {
+    let c = addLine([], esp);
+    c = addLine(c, { ...esp, claim: "c2" });
+    expect(c).toHaveLength(2);
+  });
+  it("o carrinho guardado mantém o registro da oferta", () => {
+    const back = parseStoredCart(serializeCart(addLine([], esp), 1000), 2000);
+    expect(back[0]).toEqual(expect.objectContaining({ claim: "c1", claim_cents: 6900, claim_name: "Pizza da Rainha" }));
+  });
+  it("linha antiga sem registro continua sem registro", () => {
+    const back = parseStoredCart(serializeCart(addLine([], smash), 1000), 2000);
+    expect(back[0].claim ?? null).toBeNull();
+  });
+});

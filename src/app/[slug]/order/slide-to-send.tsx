@@ -4,6 +4,9 @@ import { useRef, useState } from "react";
 
 // Deslizar até 85% envia; um toque só balança (dica); Enter/Espaço e a ativação do leitor de tela enviam direto.
 // onSend devolve false quando falhou: o botão volta ao começo.
+// Altura do trilho = bolinha (62px) + 5px de cada lado, nas proporções do "deslize para desligar" do iPhone.
+const SIZE = 72;
+
 export function SlideToSend({ label, busyLabel, disabled, onSend }: { label: string; busyLabel: string; disabled?: boolean; onSend: () => Promise<boolean> }) {
   const track = useRef<HTMLDivElement>(null);
   const start = useRef<number | null>(null);
@@ -12,7 +15,7 @@ export function SlideToSend({ label, busyLabel, disabled, onSend }: { label: str
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [nudge, setNudge] = useState(0);
-  const max = () => (track.current ? track.current.clientWidth - 58 : 0);
+  const max = () => (track.current ? track.current.clientWidth - SIZE : 0);
 
   const fire = async () => {
     setX(max());
@@ -63,7 +66,7 @@ export function SlideToSend({ label, busyLabel, disabled, onSend }: { label: str
         void fire();
       }}
     >
-      <div className="o-slide-fill" style={{ width: 58 + x }} />
+      <div className="o-slide-fill" style={{ width: SIZE + x }} />
       <div className="o-slide-txt">{busy ? busyLabel : label}</div>
       <div className="o-slide-knob" key={nudge} data-nudge={nudge > 0 || undefined} style={{ transform: `translateX(${x}px)` }}>
         <svg className="icon" viewBox="0 0 24 24" aria-hidden>

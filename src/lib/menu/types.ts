@@ -24,7 +24,14 @@ export type MenuItem = {
   // Categoria real do prato (mesmo quando aparece em "Destaques") e se ela aceita meio a meio.
   category_id: string;
   half_half: boolean;
+  // Só nos produtos especiais (oferta relâmpago).
+  special?: SpecialInfo | null;
 };
+
+// Regras de um produto especial: a cada quantas horas aparece para o mesmo cliente,
+// quantos segundos fica na tela, em que dias (0 = domingo; vazio = todos), em que
+// horário ("HH:MM"; vazio = o dia todo) e quantas unidades cada vez que é pego.
+export type SpecialInfo = { every_h: number; show_s: number; days: number[]; from: string | null; to: string | null; limit: number };
 
 export type MenuCategory = {
   id: string;
@@ -67,4 +74,5 @@ export type MenuRestaurant = {
 // 7 dias (0 = domingo), cada um com faixas "HH:MM"; fechar antes de abrir passa da meia-noite.
 export type OpeningHours = { open: string; close: string }[][];
 
-export type PublicMenu = { restaurant: MenuRestaurant; categories: MenuCategory[] };
+// specials = a categoria escondida dos produtos especiais (só os ligados); nunca entra em categories.
+export type PublicMenu = { restaurant: MenuRestaurant; categories: MenuCategory[]; specials?: MenuCategory | null };

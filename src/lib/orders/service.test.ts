@@ -21,6 +21,7 @@ function makeMenu(over: Partial<PublicMenu["restaurant"]> = {}, price = 3490): P
 function fakeDb() {
   const tables: Record<string, Record<string, unknown>[]> = {
     orders: [],
+    special_claims: [],
     dining_tables: [
       { uid: U(1), id: U(1), restaurant_id: "r1", label: "Mesa 7", code: "ABC234", active: true },
       { uid: U(2), id: U(2), restaurant_id: "r1", label: "Mesa 8", code: "OFF234", active: false },
@@ -168,5 +169,81 @@ describe("pedidos do aparelho e da cozinha", () => {
     const deps = { db: s.db, now: () => NOON, isMember: async () => false };
     expect(await setOrderStatus(deps, "r1", r.order.id, "preparing")).toEqual({ error: "Entre de novo no painel." });
     expect(s.tables.orders[0].status).toBe("new");
+  });
+});
+
+
+describe("oferta relâmpago no pedido", () => {
+  const ESP = U(111), CLAIM = U(401), CLAIM2 = U(402);
+  const LATER = new Date(NOON.getTime() + 60_000);
+  const withSpecial = (on = true): PublicMenu => ({
+    ...makeMenu(),
+    specials: {
+      id: "c-esp", name: "Produtos especiais",
+      items: on ? [{ id: ESP, name: "Pizza da Rainha", description: "", price_cents: 12000, promo_price_cents: 6900, media: [], category_id: "c-esp", half_half: false }] : [],
+    },
+  });
+  const claimRow = (over: Record<string, unknown> = {}) => ({
+    uid: CLAIM, id: CLAIM, restaurant_id: "r1", table_id: U(1), device_id: DEV, item_id: ESP, item_name: "Pizza da Rainha",
+    unit_cents: 6900, qty_max: 1, expires_at: new Date(NOON.getTime() + 3_600_000).toISOString(), order_id: null, created_at: NOON.toISOString(), ...over,
+  });
+  const espBody = (over: Record<string, unknown> = {}) => body({ lines: [{ item: ESP, qty: 1, note: "", claim: CLAIM }], ...over });
+
+  it("aceita com registro válido, cobra o preço do registro e marca o registro como usado", async () => {
+    const s = setup(withSpecial());
+    s.tables.special_claims.push(claimRow());
+    const r = await createOrder(s.deps, "forno", espBody());
+    expect(r.ok).toBe(true);
+    expect(s.tables.orders[0]).toMatchObject({ total_cents: 6900 });
+    expect((s.tables.orders[0].lines as Record<string, unknown>[])[0]).toMatchObject({ unit_cents: 6900, special: true, name: "Pizza da Rainha" });
+    expect(s.tables.special_claims[0].order_id).toBe(s.tables.orders[0].uid);
+  });
+
+  it("o mesmo registro em outro pedido é recusado", async () => {
+    const s = setup(withSpecial());
+    s.tables.special_claims.push(claimRow());
+    expect((await createOrder(s.deps, "forno", espBody())).ok).toBe(true);
+    const again = await createOrder(s.deps, "forno", espBody({ ref: REF2 }));
+    expect(again).toEqual({ ok: false, code: "lines", errors: [{ index: 0, item: ESP, reason: "special" }] });
+  });
+
+  it("registro vencido, de outro celular ou de outra mesa é recusado", async () => {
+    for (const over of [{ expires_at: new Date(NOON.getTime() - 1).toISOString() }, { device_id: DEV2 }, { table_id: U(2) }]) {
+      const s = setup(withSpecial());
+      s.tables.special_claims.push(claimRow(over));
+      expect(await createOrder(s.deps, "forno", espBody())).toEqual({ ok: false, code: "lines", errors: [{ index: 0, item: ESP, reason: "special" }] });
+    }
+  });
+
+  it("o dono desligou o especial depois do toque: vale o preço do registro", async () => {
+    const s = setup(withSpecial(false));
+    s.tables.special_claims.push(claimRow());
+    const r = await createOrder(s.deps, "forno", espBody());
+    expect(r.ok && r.order.total_cents).toBe(6900);
+  });
+
+  it("reenvio com o mesmo ref devolve o mesmo pedido, sem recusar o registro já usado por ele", async () => {
+    const s = setup(withSpecial());
+    s.tables.special_claims.push(claimRow());
+    const a = await createOrder(s.deps, "forno", espBody());
+    const b = await createOrder({ ...s.deps, now: () => LATER }, "forno", espBody());
+    expect(b).toEqual(a);
+    expect(s.tables.orders).toHaveLength(1);
+  });
+
+  it("dois pedidos ao mesmo tempo com o mesmo registro: só o primeiro leva", async () => {
+    const s = setup(withSpecial());
+    s.tables.special_claims.push(claimRow());
+    const [a, b] = await Promise.all([createOrder(s.deps, "forno", espBody()), createOrder(s.deps, "forno", espBody({ ref: REF2 }))]);
+    const oks = [a, b].filter((r) => r.ok);
+    expect(oks).toHaveLength(1);
+    expect([a, b].find((r) => !r.ok)).toEqual({ ok: false, code: "lines", errors: [{ index: 0, item: ESP, reason: "special" }] });
+    expect(s.tables.orders.filter((o) => o.open)).toHaveLength(1);
+  });
+
+  it("registro de outro restaurante não existe para este", async () => {
+    const s = setup(withSpecial());
+    s.tables.special_claims.push(claimRow({ uid: CLAIM2, id: CLAIM2, restaurant_id: "r2" }));
+    expect((await createOrder(s.deps, "forno", espBody({ lines: [{ item: ESP, qty: 1, note: "", claim: CLAIM2 }] }))).ok).toBe(false);
   });
 });

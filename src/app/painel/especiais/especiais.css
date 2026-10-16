@@ -1,0 +1,48 @@
+/* Painel: produtos especiais (oferta relâmpago). Segue o visual do painel (DGuests). */
+.ap .sp {
+  & .sp-lead { margin: 0 0 16px; color: var(--muted); max-width: 70ch; font-size: 14px; line-height: 1.5; }
+  & .sp-new { margin-bottom: 18px; }
+  & .sp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  & .sp-row { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--card); }
+  & .sp-row.off { opacity: 0.6; }
+  & .sp-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; text-align: left; background: none; border: 0; padding: 0; cursor: pointer; color: var(--fg); }
+  & .sp-open img, & .sp-ph { width: 56px; height: 56px; border-radius: 6px; object-fit: cover; flex: none; background: var(--bg); }
+  & .sp-txt { display: grid; gap: 2px; min-width: 0; }
+  & .sp-txt b { font-size: 15px; font-weight: 600; }
+  & .sp-txt span { font-size: 13.5px; color: var(--fg); }
+  & .sp-txt s { color: var(--muted); }
+  & .sp-txt strong { color: var(--gold-dark); }
+  & .sp-txt small { font-size: 12.5px; color: var(--muted); }
+  & .sp-switch { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; flex: none; }
+  & .sp-switch input { width: 18px; height: 18px; accent-color: var(--gold); }
+  & .sp-empty { color: var(--muted); font-size: 14px; }
+}
+/* Formulário (dentro da janela .md, que fica fora de .sp). */
+.ap .sp-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ap .sp-days { display: flex; gap: 6px; flex-wrap: wrap; }
+.ap .sp-days button { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-weight: 600; cursor: pointer; }
+.ap .sp-days button[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #fff; }
+@media (max-width: 560px) { .ap .sp-two { grid-template-columns: 1fr; } }
+/* Cartão do produto especial reorganizado (pedido do João, 16/10): foto, nome e preços em
+   cima, regras em etiquetas embaixo; à direita, um interruptor no lugar da caixinha. */
+.ap .sp {
+  & .sp-row { gap: 16px; padding: 12px 14px; align-items: center; }
+  & .sp-open { gap: 14px; align-items: center; }
+  & .sp-open img, & .sp-ph { width: 64px; height: 64px; border-radius: 8px; }
+  & .sp-txt { gap: 6px; }
+  & .sp-txt b { font-size: 16px; line-height: 1.2; }
+  & .sp-price { display: flex; align-items: baseline; gap: 8px; }
+  & .sp-price s { font-size: 13px; color: var(--muted); }
+  & .sp-price strong { font-size: 17px; font-weight: 700; color: var(--gold-dark); }
+  & .sp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  & .sp-chips i { font-style: normal; font-size: 12px; color: #6b6b6b; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+  & .sp-switch { position: relative; flex-direction: column; gap: 6px; min-width: 64px; }
+  & .sp-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  & .sp-track { width: 44px; height: 26px; border-radius: 999px; background: #d4d4d4; position: relative; transition: background 0.2s; }
+  & .sp-track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); transition: transform 0.2s; }
+  & .sp-switch input:checked + .sp-track { background: var(--gold); }
+  & .sp-switch input:checked + .sp-track::after { transform: translateX(18px); }
+  & .sp-switch input:focus-visible + .sp-track { outline: 2px solid var(--gold-dark); outline-offset: 2px; }
+  & .sp-switch input:disabled + .sp-track { opacity: 0.6; }
+  & .sp-state { font-size: 12px; color: var(--muted); }
+}

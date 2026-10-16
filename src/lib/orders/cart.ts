@@ -2,7 +2,18 @@
 // tamanho, 2º sabor e observação) viram uma só, somando a quantidade.
 import { MAX_LINES, MAX_QTY } from "./pricing";
 
-export type CartLine = { key: string; item: string; option: string | null; half: string | null; qty: number; note: string };
+// claim*: oferta relâmpago pega (registro no servidor, preço e nome garantidos no toque).
+export type CartLine = {
+  key: string;
+  item: string;
+  option: string | null;
+  half: string | null;
+  qty: number;
+  note: string;
+  claim?: string | null;
+  claim_cents?: number | null;
+  claim_name?: string | null;
+};
 export type NewLine = Omit<CartLine, "key">;
 export type Removed = { line: CartLine; index: number };
 
@@ -11,9 +22,11 @@ export const CART_TTL = 6 * 60 * 60 * 1000;
 // JSON e não "join": observação ou opção com "|" não pode fazer duas linhas diferentes virarem a mesma chave.
 // Meio a meio: os dois sabores entram em ordem fixa, então Calabresa + Margherita e
 // Margherita + Calabresa são a mesma pizza (o preço é a média, igual nos dois sentidos).
-export const lineKey = (l: Pick<CartLine, "item" | "option" | "half" | "note">) => {
+// Cada oferta pega é uma linha própria: o registro entra na chave.
+export const lineKey = (l: Pick<CartLine, "item" | "option" | "half" | "note" | "claim">) => {
   const flavors = l.half ? [l.item, l.half].sort() : [l.item, ""];
-  return JSON.stringify([...flavors, l.option ?? "", l.note.trim()]);
+  const base = [...flavors, l.option ?? "", l.note.trim()];
+  return JSON.stringify(l.claim ? [...base, l.claim] : base);
 };
 
 const cap = (n: number) => Math.max(1, Math.min(MAX_QTY, Math.floor(n)));
@@ -89,7 +102,10 @@ export function parseStoredCart(raw: string | null, now: number): CartLine[] {
     let cart: CartLine[] = [];
     for (const l of data.lines as Record<string, unknown>[]) {
       if (!l || !str(l.item) || !optStr(l.option) || !optStr(l.half) || !str(l.note) || typeof l.qty !== "number") continue;
-      cart = addLine(cart, { item: l.item, option: l.option, half: l.half, note: l.note, qty: l.qty });
+      const claim = str(l.claim) && typeof l.claim_cents === "number" && str(l.claim_name)
+        ? { claim: l.claim, claim_cents: l.claim_cents, claim_name: l.claim_name }
+        : {};
+      cart = addLine(cart, { item: l.item, option: l.option, half: l.half, note: l.note, qty: l.qty, ...claim });
     }
     return cart;
   } catch {

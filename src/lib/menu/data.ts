@@ -2,6 +2,7 @@ import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
 import * as db from "@/lib/db/nocodb";
 import type { MenuCategory, MenuItem, MenuMedia, MenuRestaurant, OpeningHours, PublicMenu } from "./types";
+import { specialInfo } from "./specials";
 
 export function menuTag(slug: string) {
   return `menu:${slug}`;
@@ -30,8 +31,17 @@ type R = Omit<MenuRestaurant, "cover" | "language"> & {
   show_payments: boolean;
   orders_enabled: boolean;
 };
-type C = { id: string; name: string; description: string | null; available_from: string | null; available_to: string | null; active: boolean; half_half: boolean };
-type I = Omit<MenuItem, "media"> & { category_id: string; active: boolean };
+type C = { id: string; name: string; description: string | null; available_from: string | null; available_to: string | null; active: boolean; half_half: boolean; special?: boolean };
+type I = Omit<MenuItem, "media" | "special"> & {
+  category_id: string;
+  active: boolean;
+  special_every_h?: number | null;
+  special_show_s?: number | null;
+  special_days?: unknown;
+  special_from?: string | null;
+  special_to?: string | null;
+  special_limit?: number | null;
+};
 type M = MenuMedia & { Id: number; item_id: string | null; category_id: string | null; status: string };
 type T = { category_id: string | null; item_id: string | null; language: string; name: string; description: string | null };
 
@@ -72,8 +82,29 @@ export async function getPublicMenu(slug: string, lang = "pt-BR"): Promise<Publi
   // Mais recente = criada por último (maior Id), como o "order by created_at desc" de antes.
   const latest = (list: M[]) => (list.length ? media(list.reduce((a, b) => (a.Id > b.Id ? a : b))) : null);
 
+  const toItem = (i: I, c: C): MenuItem => {
+    const it = tr("item_id", i.id);
+    return {
+      id: i.id,
+      name: it?.name || i.name,
+      description: it?.description || i.description || "",
+      price_cents: i.price_cents ?? 0,
+      promo_price_cents: i.promo_price_cents ?? null,
+      hide_price: !!i.hide_price,
+      featured: !!i.featured,
+      serves: i.serves ?? null,
+      country: i.country ?? null,
+      price_options: i.price_options ?? null,
+      tags: i.tags ?? [],
+      media: ready.filter((m) => m.item_id === i.id).map(media),
+      category_id: c.id,
+      half_half: !!c.half_half,
+    };
+  };
+
+  // A categoria escondida dos produtos especiais nunca vira categoria do cardápio.
   const categories: MenuCategory[] = cats
-    .filter((c) => c.active)
+    .filter((c) => c.active && !c.special)
     .map((c) => {
       const ct = tr("category_id", c.id);
       return {
@@ -83,29 +114,22 @@ export async function getPublicMenu(slug: string, lang = "pt-BR"): Promise<Publi
         available_from: c.available_from || null,
         available_to: c.available_to || null,
         cover: latest(ready.filter((m) => m.category_id === c.id)),
-        items: items
-          .filter((i) => i.category_id === c.id && i.active)
-          .map((i) => {
-            const it = tr("item_id", i.id);
-            return {
-              id: i.id,
-              name: it?.name || i.name,
-              description: it?.description || i.description || "",
-              price_cents: i.price_cents ?? 0,
-              promo_price_cents: i.promo_price_cents ?? null,
-              hide_price: !!i.hide_price,
-              featured: !!i.featured,
-              serves: i.serves ?? null,
-              country: i.country ?? null,
-              price_options: i.price_options ?? null,
-              tags: i.tags ?? [],
-              media: ready.filter((m) => m.item_id === i.id).map(media),
-              category_id: c.id,
-              half_half: !!c.half_half,
-            };
-          }),
+        items: items.filter((i) => i.category_id === c.id && i.active).map((i) => toItem(i, c)),
       };
     });
+
+  // Produtos especiais: só os ligados e com preço de oferta menor que o normal.
+  // Nunca entram em "Destaques" nem em meio a meio.
+  const sc = cats.find((c) => c.special);
+  const specials: MenuCategory | null = sc
+    ? {
+        id: sc.id,
+        name: sc.name,
+        items: items
+          .filter((i) => i.category_id === sc.id && i.active && i.promo_price_cents != null && i.promo_price_cents < (i.price_cents ?? 0))
+          .map((i) => ({ ...toItem(i, sc), featured: false, half_half: false, price_options: null, special: specialInfo(i) })),
+      }
+    : null;
 
   const restaurant: MenuRestaurant = {
     id: r.id,
@@ -132,5 +156,5 @@ export async function getPublicMenu(slug: string, lang = "pt-BR"): Promise<Publi
     language,
     orders_enabled: !!r.orders_enabled,
   };
-  return { restaurant, categories };
+  return { restaurant, categories, specials };
 }

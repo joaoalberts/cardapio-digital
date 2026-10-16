@@ -130,3 +130,53 @@ describe("priceCart", () => {
     expect(priceCart(menu(), Array.from({ length: 30 }, () => ({ item: "smash", qty: 1 })), NOON).ok).toBe(true);
   });
 });
+
+describe("oferta relâmpago (preço do registro)", () => {
+  const ESP = "rainha";
+  const C1 = "claim-1";
+  const withSpecial = (on = true): PublicMenu => ({
+    ...menu(),
+    specials: { id: "c-esp", name: "Produtos especiais", items: on ? [item(ESP, "c-esp", false, { price_cents: 12000, promo_price_cents: 6900 })] : [] },
+  });
+  const claims = new Map([[C1, { item_id: ESP, item_name: "Pizza da Rainha", unit_cents: 6900, qty_max: 1 }]]);
+
+  it("linha com registro usa o preço e o nome do registro", () => {
+    const r = priceCart(withSpecial(), [{ item: ESP, claim: C1, qty: 1 }], NOON, claims);
+    expect(r).toEqual({ ok: true, total_cents: 6900, lines: [expect.objectContaining({ item_id: ESP, name: "Pizza da Rainha", unit_cents: 6900, special: true, qty: 1 })] });
+  });
+
+  it("vale mesmo com o especial desligado depois do toque", () => {
+    const r = priceCart(withSpecial(false), [{ item: ESP, claim: C1, qty: 1 }], NOON, claims);
+    expect(r.ok).toBe(true);
+  });
+
+  it("acima do limite do registro é recusado", () => {
+    expect(priceCart(withSpecial(), [{ item: ESP, claim: C1, qty: 2 }], NOON, claims)).toEqual({ ok: false, errors: [{ index: 0, item: ESP, reason: "special" }] });
+  });
+
+  it("registro que não existe ou de outro produto é recusado", () => {
+    expect(priceCart(withSpecial(), [{ item: ESP, claim: "nada", qty: 1 }], NOON, claims).ok).toBe(false);
+    const other = new Map([[C1, { item_id: "smash", item_name: "Smash", unit_cents: 100, qty_max: 1 }]]);
+    const r = priceCart(withSpecial(), [{ item: ESP, claim: C1, qty: 1 }], NOON, other);
+    expect(r).toEqual({ ok: false, errors: [{ index: 0, item: ESP, reason: "special" }] });
+  });
+
+  it("produto especial sem registro é recusado (não sai pelo preço de oferta)", () => {
+    expect(priceCart(withSpecial(), [{ item: ESP, qty: 1 }], NOON, claims)).toEqual({ ok: false, errors: [{ index: 0, item: ESP, reason: "special" }] });
+  });
+
+  it("prato comum continua igual com o mapa de registros", () => {
+    const r = priceCart(withSpecial(), [{ item: "smash", qty: 1 }], NOON, claims);
+    expect(r.ok && r.lines[0]).toEqual(expect.objectContaining({ unit_cents: 3490 }));
+    expect(r.ok && r.lines[0].special).toBeFalsy();
+  });
+});
+
+describe("oferta relâmpago: um registro, várias linhas", () => {
+  it("o mesmo registro em duas linhas do pedido soma contra o limite", () => {
+    const m: PublicMenu = { ...menu(), specials: { id: "c-esp", name: "E", items: [item("rainha", "c-esp", false, { price_cents: 12000, promo_price_cents: 6900 })] } };
+    const claims = new Map([["c1", { item_id: "rainha", item_name: "Pizza da Rainha", unit_cents: 6900, qty_max: 1 }]]);
+    const r = priceCart(m, [{ item: "rainha", claim: "c1", qty: 1 }, { item: "rainha", claim: "c1", qty: 1, note: "outra" }], NOON, claims);
+    expect(r).toEqual({ ok: false, errors: [{ index: 1, item: "rainha", reason: "special" }] });
+  });
+});

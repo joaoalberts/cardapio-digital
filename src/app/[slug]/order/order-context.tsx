@@ -48,10 +48,12 @@ type OrderApi = {
   syncMenu: (menu: PublicMenu) => void;
   setTable: (t: Table | null) => void;
   setViewerOpen: (open: boolean) => void;
-  unit: (l: Pick<CartLine, "item" | "option" | "half">) => number | null;
+  unit: (l: Pick<CartLine, "item" | "option" | "half" | "claim_cents">) => number | null;
   itemById: (id: string) => MenuItem | undefined;
   inCart: (itemId: string) => number;
   add: (l: NewLine, from?: HTMLElement | null) => void;
+  // Oferta relâmpago: grava o registro no servidor e põe a linha com o preço garantido.
+  takeSpecial: (item: MenuItem, qty: number) => Promise<{ ok: true; cents: number } | { ok: false }>;
   replace: (key: string, l: NewLine) => void;
   setQty: (key: string, qty: number) => void;
   remove: (key: string) => void;
@@ -181,7 +183,8 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
 
   const itemById = useCallback((id: string) => index?.items.get(id)?.item, [index]);
   const unit = useCallback(
-    (l: Pick<CartLine, "item" | "option" | "half">) => {
+    (l: Pick<CartLine, "item" | "option" | "half" | "claim_cents">) => {
+      if (l.claim_cents != null) return l.claim_cents; // oferta relâmpago: o preço do registro
       if (!index) return null;
       const r = resolveLine(index, l);
       return r.ok ? r.unit : null;
@@ -213,7 +216,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       setLines((c) => {
         const { cart, removed } = removeLine(c, key);
         if (removed) {
-          const name = index?.items.get(removed.line.item)?.item.name ?? "";
+          const name = index?.items.get(removed.line.item)?.item.name ?? removed.line.claim_name ?? "";
           showToast(tf("oRemoved", lang, { name }), () => {
             dirty.current = true;
             setLines((now) => restoreLine(now, removed));
@@ -223,6 +226,37 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       });
     },
     [index, lang, showToast],
+  );
+
+  const takeSpecial = useCallback(
+    async (item: MenuItem, qty: number): Promise<{ ok: true; cents: number } | { ok: false }> => {
+      if (!table || !device || !enabled) return { ok: false };
+      // Rede parada não pode prender o cliente no botão: em 6 s conta como falha.
+      const ctrl = new AbortController();
+      const stop = setTimeout(() => ctrl.abort(), 6000);
+      try {
+        const r = await fetch(`/api/especiais/${slug}/pegar`, {
+          signal: ctrl.signal,
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ mesa: table.code, device, item: item.id }),
+        });
+        const res = (await r.json().catch(() => null)) as { ok: boolean; claim?: string; unit_cents?: number; qty_max?: number; name?: string } | null;
+        if (!res?.ok || !res.claim || typeof res.unit_cents !== "number") return { ok: false };
+        const n = Math.max(1, Math.min(res.qty_max ?? 1, Math.floor(qty)));
+        dirty.current = true;
+        setLines((c) => addLine(c, { item: item.id, option: null, half: null, qty: n, note: "", claim: res.claim, claim_cents: res.unit_cents, claim_name: res.name ?? item.name }));
+        try {
+          navigator.vibrate?.(18);
+        } catch {}
+        return { ok: true, cents: res.unit_cents };
+      } catch {
+        return { ok: false };
+      } finally {
+        clearTimeout(stop);
+      }
+    },
+    [table, device, enabled, slug],
   );
 
   const send = useCallback(async (): Promise<SendOutcome> => {
@@ -242,7 +276,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
           mesa: table.code,
           device,
           ref: refAttempt.current,
-          lines: lines.map(({ item, option, half, qty, note }) => ({ item, option, half, qty, note })),
+          lines: lines.map(({ item, option, half, qty, note, claim }) => (claim ? { item, option, half, qty, note, claim } : { item, option, half, qty, note })),
         }),
       });
       res = (await r.json().catch(() => null)) as CreateResult | null;
@@ -269,9 +303,10 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       // Por chave, não por índice: o cliente pode ter mexido no carrinho durante o envio.
       const badKeys = new Set(res.errors.map((e) => lines[e.index]?.key).filter(Boolean));
       const first = lines[res.errors[0].index];
-      const name = (first && index?.items.get(first.item)?.item.name) || "";
+      const name = (first && (index?.items.get(first.item)?.item.name ?? first.claim_name)) || "";
       dirty.current = true;
       setLines((c) => c.filter((l) => !badKeys.has(l.key)));
+      if (res.errors.some((e) => e.reason === "special")) return { ok: false, message: tr("oSpecialInvalid", lang) };
       return { ok: false, message: tf("oErrGone", lang, { name }) };
     }
     if (res.code === "invalid") return { ok: false, message: tr("oErrInvalid", lang) };
@@ -328,6 +363,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
     itemById,
     inCart: (id) => lines.filter((l) => l.item === id || l.half === id).reduce((s, l) => s + l.qty, 0),
     add,
+    takeSpecial,
     replace: (key, l) => {
       dirty.current = true;
       setLines((c) => replaceLine(c, key, l));

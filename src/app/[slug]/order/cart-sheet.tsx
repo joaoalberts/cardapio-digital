@@ -11,7 +11,7 @@ import { SlideToSend } from "./slide-to-send";
 type Done = { number: number; priceChanged: boolean; total: number } | null;
 
 // "Seu pedido" na folha de vidro: contagem ao lado do título, "Editar" discreto (quantidade,
-// excluir e trocar uma metade), seta para comprimir, "Continuar pedido" e deslizar para enviar.
+// excluir e trocar uma metade), seta para comprimir, "Continuar pedindo" e deslizar para enviar.
 export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
   const o = useOrder();
   const L = o.lang;
@@ -52,7 +52,8 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
     const sa = thumbSrc(it);
     const sb = thumbSrc(other);
     const qty = l.qty > 1 && !ed ? `${l.qty}× ` : "";
-    const label = other ? `½ ${it?.name ?? ""} + ½ ${other.name}` : it?.name ?? ""; // nome do prato nos rótulos dos botões
+    const name = it?.name ?? l.claim_name ?? ""; // oferta desligada depois do toque: vale o nome do registro
+    const label = other ? `½ ${it?.name ?? ""} + ½ ${other.name}` : name; // nome do prato nos rótulos dos botões
     const sub = [l.option, other ? null : it?.half_half ? tr("oWhole", L) : l.qty === 1 ? tr("oUnit1", L) : tf("oUnits", L, { n: l.qty })].filter(Boolean).join(" · ");
     return (
       <li key={l.key} className={`o-line${u == null ? " gone" : ""}`}>
@@ -63,7 +64,7 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
         <div className="o-main">
           {other ? (
             <>
-              <span className="o-tag">{qty}{tr("oHalf", L)}<small>{tr("oOnePizza", L)}</small></span>
+              <span className="o-tag">{qty}{tr("oHalf", L)}</span>
               <span className="o-brk">
                 <span>{it?.name}{ed && <button className="o-swap" onClick={() => swap(l, "item")} aria-label={`${tr("oSwap", L)} ½ ${it?.name ?? ""}`}>{tr("oSwap", L)}</button>}</span>
                 <span>{other.name}{ed && <button className="o-swap" onClick={() => swap(l, "half")} aria-label={`${tr("oSwap", L)} ½ ${other.name}`}>{tr("oSwap", L)}</button>}</span>
@@ -72,19 +73,22 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
             </>
           ) : (
             <>
-              <span className="o-name">{qty}{it?.name}</span>
+              <span className="o-name">
+                {qty}
+                {name}
+                {l.claim && <Bolt />}
+              </span>
               {sub && <span className="o-det">{sub}</span>}
             </>
           )}
           {l.note && <span className="o-note">{l.note}</span>}
           {ed && (
             <span className="o-edlinks">
-              {it && <button onClick={() => o.openItem(it, { edit: l, focusNote: !l.note })}>{l.note ? tr("oEdit", L) : tr("oNote", L)}</button>}
               <button className="del" onClick={() => o.remove(l.key)} aria-label={`${tr("oDelete", L)} ${label}`}>{tr("oDelete", L)}</button>
             </span>
           )}
         </div>
-        {ed ? (
+        {ed && !l.claim ? (
           <div className="o-stepper small">
             <button onClick={() => (l.qty > 1 ? o.setQty(l.key, l.qty - 1) : o.remove(l.key))} aria-label={`${l.qty > 1 ? tr("oLess", L) : tr("oRemove", L)}: ${label}`}>−</button>
             <output>{l.qty}</output>
@@ -115,8 +119,8 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
       </div>
       {o.orders.length > 0 && (
         <div className="o-seg o-tabs" role="tablist">
-          <button role="tab" aria-selected={tab === "cart"} onClick={() => go("cart")}>{n ? `${tr("oCart", L)} · ${n}` : tr("oCart", L)}</button>
-          <button role="tab" aria-selected={tab === "orders"} onClick={() => go("orders")}>{`${tr("oMine", L)} · ${o.orders.length}`}</button>
+          <button role="tab" aria-selected={tab === "cart"} onClick={() => go("cart")}>{tr("oCart", L)}</button>
+          <button role="tab" aria-selected={tab === "orders"} onClick={() => go("orders")}>{tr("oMine", L)}</button>
         </div>
       )}
 
@@ -140,7 +144,6 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
             <>
               <div className="o-orders">
                 {o.orders.map((ord, i) => {
-                  const step = ord.status === "new" ? 0 : ord.status === "preparing" ? 1 : 2;
                   return (
                     <article key={ord.id} className="o-order">
                       <header>
@@ -154,14 +157,10 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
                           <li key={k}>
                             {l.qty}× {l.half_name ? `½ ${l.name} + ½ ${l.half_name}` : l.name}
                             {l.option ? ` (${l.option})` : ""}
+                            {l.special && <Bolt />}
                           </li>
                         ))}
                       </ul>
-                      <div className="o-track">
-                        {(["oStNew", "oStPrep", "oStReady"] as const).map((k, s) => (
-                          <div key={k} className={`${s <= step ? "on" : ""}${s === step && s < 2 ? " now" : ""}`}>{tr(k, L)}</div>
-                        ))}
-                      </div>
                     </article>
                   );
                 })}
@@ -183,7 +182,6 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
           {n > 0 && (
             <>
               <div className="o-total"><span>{tr("oTotal", L)}</span><strong className="fd">{money(total, L)}</strong></div>
-              <small>{tr("oPayHere", L)}</small>
               {gone && <p className="o-error">{tf("oErrGone", L, { name: o.itemById(gone.item)?.name ?? "" })}</p>}
               {error && <p className="o-error" role="alert">{error}</p>}
             </>
@@ -193,5 +191,14 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
         </div>
       )}
     </>
+  );
+}
+
+// Raio pequeno em champanhe ao lado do nome: a linha veio de uma oferta relâmpago.
+function Bolt() {
+  return (
+    <svg className="icon o-bolt" viewBox="0 0 24 24" aria-hidden>
+      <path d="M13 2L4 14h7l-1 8 9-12h-7z" />
+    </svg>
   );
 }

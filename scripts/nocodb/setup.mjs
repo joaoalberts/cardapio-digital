@@ -43,13 +43,14 @@ export const TABLES = {
   members: [text("restaurant_id"), text("user_id"), text("role"), created],
   categories: [
     id, text("restaurant_id"), text("name"), long("description"), num("position"),
-    bool("active"), text("available_from"), text("available_to"), bool("half_half"), created,
+    bool("active"), text("available_from"), text("available_to"), bool("half_half"), bool("special"), created,
   ],
   items: [
     id, text("restaurant_id"), text("category_id"), text("name"), long("description"),
     num("price_cents"), num("promo_price_cents"), json("price_options"), json("tags"),
     num("position"), bool("active"), bool("featured"), bool("hide_price"), num("serves"),
-    text("country"), created,
+    text("country"), num("special_every_h"), num("special_show_s"), json("special_days"),
+    text("special_from"), text("special_to"), num("special_limit"), created,
   ],
   media: [
     id, text("restaurant_id"), text("item_id"), text("category_id"), text("kind"),
@@ -64,6 +65,11 @@ export const TABLES = {
   orders: [
     id, text("restaurant_id"), text("table_id"), text("table_label"), text("status"), bool("open"),
     json("lines"), num("total_cents"), text("device_id"), text("client_ref"), created, date("status_at"),
+  ],
+  // Cada oferta relâmpago pega: o preço garantido vale só com este registro.
+  special_claims: [
+    id, text("restaurant_id"), text("table_id"), text("device_id"), text("item_id"), text("item_name"),
+    num("unit_cents"), num("qty_max"), date("expires_at"), text("order_id"), created,
   ],
   support_requests: [
     id, text("restaurant_id"), text("user_id"), text("subject"), text("whatsapp"),
