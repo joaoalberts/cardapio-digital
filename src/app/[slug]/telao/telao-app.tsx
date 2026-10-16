@@ -607,7 +607,8 @@ function Poster(p: PosterProps) {
           <b className="tl-n fd">{house.name}</b>
           {p.instagram && (
             <span className="tl-ig">
-              <IconIg />@{p.instagram}
+              <IconIg />
+              <span>@{p.instagram}</span>
             </span>
           )}
         </div>

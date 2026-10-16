@@ -161,6 +161,8 @@ span.tl-logo {
   font-size: calc(var(--u) * 4.6);
 }
 .tl-id {
+  /* ocupa o meio da marca e encolhe antes do relógio: nome e @ longos ganham reticência */
+  flex: 1 1 auto;
   min-width: 0;
 }
 .tl-n {
@@ -179,6 +181,13 @@ span.tl-logo {
   font-size: calc(var(--u) * 3.3);
   font-weight: 700;
   white-space: nowrap;
+  max-width: 100%;
+}
+.tl-ig span,
+.tl-qc span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tl-ig .tl-ico,
 .tl-qc .tl-ico {
@@ -349,6 +358,8 @@ span.tl-logo {
 }
 .tl-qcap {
   display: grid;
+  /* coluna presa à largura da legenda: o @ longo (nowrap) não alarga a coluna */
+  grid-template-columns: minmax(0, 1fr);
   justify-items: start;
   padding-bottom: calc(var(--u) * 0.6);
   min-width: 0;
@@ -372,12 +383,9 @@ span.tl-logo {
   margin-top: calc(var(--u) * 2.4);
   font-size: calc(var(--u) * 3.2);
   font-weight: 700;
+  min-width: 0;
   max-width: 100%;
   white-space: nowrap;
-}
-.tl-qc span {
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* ================= Coluna da esquerda ================= */
