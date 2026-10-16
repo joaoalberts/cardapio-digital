@@ -360,6 +360,11 @@
   width: 24px;
   height: 24px;
 }
+/* O selo do número (order.css) traz desfoque próprio; dentro da folha só ela desfoca.
+   O fundo translúcido do selo fica. */
+.cm .cmu-layer .o-cartbtn-n {
+  backdrop-filter: none;
+}
 .cm .cmu-x {
   width: 44px;
   height: 44px;
