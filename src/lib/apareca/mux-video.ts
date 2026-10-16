@@ -69,9 +69,32 @@ export async function deleteMuxAsset(assetId: string): Promise<void> {
   try {
     await muxRequest(`/assets/${assetId}`, { method: "DELETE" });
   } catch (e) {
-    if (/^Error: mux 404\b/.test(String(e))) return;
-    throw e;
+    if (!is404(e)) throw e;
+    // Sem o id no log; um 404 em série aponta token ou MUX_API_BASE errados.
+    console.warn("apareca: asset do Mux não encontrado ao apagar (404); contado como apagado");
   }
+}
+
+const is404 = (e: unknown) => /^Error: mux 404\b/.test(String(e));
+const UPLOAD_DONE = ["errored", "cancelled", "timed_out"];
+
+// Envio parado sem asset na linha: confere o upload no Mux antes de a linha sumir, para não ficar
+// mídia pública órfã. Virou asset → apaga o asset; ainda esperando → cancela; cancelado ou com
+// erro → nada a fazer. Lança se o Mux não confirmar (a linha fica para a próxima leitura).
+export async function releaseMuxUpload(uploadId: string): Promise<void> {
+  checkId(uploadId);
+  if (!muxEnabled()) throw new Error("mux desligado");
+  let up: { status: string; asset_id?: string };
+  try {
+    up = await muxRequest<{ status: string; asset_id?: string }>(`/uploads/${uploadId}`);
+  } catch (e) {
+    if (!is404(e)) throw e;
+    console.warn("apareca: upload do Mux não encontrado ao liberar (404); contado como liberado");
+    return;
+  }
+  if (up.asset_id) return deleteMuxAsset(up.asset_id);
+  if (UPLOAD_DONE.includes(up.status)) return;
+  await muxRequest(`/uploads/${uploadId}/cancel`, { method: "PUT" });
 }
 
 export function mp4Url(playbackId: string): string {

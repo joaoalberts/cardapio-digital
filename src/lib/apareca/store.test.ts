@@ -72,7 +72,9 @@ function tally(p: Partial<AparecaTallyRow> & { counts: AparecaTallyRow["counts"]
   return { id: crypto.randomUUID(), restaurant_id: RID, day: "2026-10-10", month: "2026-10", hours: [], created_at: "", ...p };
 }
 
-function deps(over: { now?: () => Date; deleteAsset?: (id: string) => Promise<void> } = {}) {
+function deps(
+  over: { now?: () => Date; deleteAsset?: (id: string) => Promise<void>; releaseUpload?: (id: string) => Promise<void> } = {},
+) {
   const deferred: (() => Promise<void>)[] = [];
   const deleteAsset = vi.fn(
     over.deleteAsset ??
@@ -80,13 +82,19 @@ function deps(over: { now?: () => Date; deleteAsset?: (id: string) => Promise<vo
         h.log.push(`mux:${id}`);
       }),
   );
+  const releaseUpload = vi.fn(
+    over.releaseUpload ??
+      (async (id: string) => {
+        h.log.push(`upload:${id}`);
+      }),
+  );
   const d = {
     db: h.db as unknown as import("./store").StoreDb,
-    mux: { deleteAsset },
+    mux: { deleteAsset, releaseUpload },
     now: over.now ?? (() => T0),
     defer: (fn: () => Promise<void>) => void deferred.push(fn),
   };
-  return { d, deferred, deleteAsset, runDeferred: () => Promise.all(deferred.splice(0).map((f) => f())) };
+  return { d, deferred, deleteAsset, releaseUpload, runDeferred: () => Promise.all(deferred.splice(0).map((f) => f())) };
 }
 
 const listCalls = (t: string) => h.db.list.mock.calls.filter((c) => c[0] === t).length;
@@ -192,6 +200,28 @@ describe("readSnapshot", () => {
     expect(deleteAsset).toHaveBeenCalledTimes(2);
     expect(h.store.apareca_videos).toHaveLength(0);
   });
+
+  it("leitura iniciada antes do fim do purge não apaga de novo nem grava outro tally", async () => {
+    const old = expired();
+    h.store.apareca_videos = [old];
+    const { d, deferred, runDeferred } = deps();
+    await S.readSnapshot(d, RID);
+    expect(deferred).toHaveLength(1);
+
+    // Leitura X começa enquanto o purge ainda não terminou e só volta depois dele.
+    let release!: (rows: unknown[]) => void;
+    h.db.list.mockImplementationOnce(() => new Promise((r) => (release = r as (rows: unknown[]) => void)));
+    S.forgetSnapshot(RID);
+    const x = S.readSnapshot(d, RID);
+    await runDeferred();
+    release([{ ...old }]);
+    const snap = await x;
+    expect(snap.videos).toEqual([]);
+    await runDeferred();
+
+    expect(h.log.filter((l) => l === "insert:apareca_tally")).toHaveLength(1);
+    expect(h.db.removeIds).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("purge", () => {
@@ -225,6 +255,30 @@ describe("purge", () => {
     expect(r).toEqual({ deleted: 1, failed: 1 });
     expect(h.store.apareca_videos.map((x) => x.id)).toEqual([a.id]);
     expect(h.store.apareca_tally[0].counts).toMatchObject({ sent: 1 });
+  });
+
+  it("envio parado sem asset: libera o upload no Mux antes de remover a linha", async () => {
+    const a = video({ status: "uploading", mux_asset_id: null, created_at: "2026-10-16T13:00:00.000Z" });
+    h.store.apareca_videos = [a];
+    const { d, releaseUpload, deleteAsset } = deps();
+    expect(await S.purge(d, [a])).toEqual({ deleted: 1, failed: 0 });
+    expect(releaseUpload).toHaveBeenCalledWith(a.mux_upload_id);
+    expect(deleteAsset).not.toHaveBeenCalled();
+    const order = h.log.filter((l) => /^(upload|insert|removeIds)/.test(l));
+    expect(order).toEqual([`upload:${a.mux_upload_id}`, "insert:apareca_tally", `removeIds:apareca_videos:${a.Id}`]);
+  });
+
+  it("envio parado: se o Mux não confirmar o upload, a linha fica e conta em failed", async () => {
+    const a = video({ status: "uploading", mux_asset_id: null, created_at: "2026-10-16T13:00:00.000Z" });
+    h.store.apareca_videos = [a];
+    const { d } = deps({
+      releaseUpload: async () => {
+        throw new Error("mux 500");
+      },
+    });
+    expect(await S.purge(d, [a])).toEqual({ deleted: 0, failed: 1 });
+    expect(h.store.apareca_videos).toHaveLength(1);
+    expect(h.db.insert).not.toHaveBeenCalled();
   });
 
   it("nunca apaga aprovado dentro do prazo, mesmo se pedirem", async () => {
@@ -327,6 +381,13 @@ describe("getAparecaHead", () => {
   it("slug inválido ou inexistente devolve null sem erro", async () => {
     expect(await S.getAparecaHead("../x")).toBeNull();
     expect(await S.getAparecaHead("nada")).toBeNull();
+  });
+});
+
+describe("aparecaTags", () => {
+  it("slug e rid têm prefixos distintos", () => {
+    expect(S.aparecaTags.slug("casa")).toBe("apareca:slug:casa");
+    expect(S.aparecaTags.rid(RID)).toBe(`apareca:rid:${RID}`);
   });
 });
 

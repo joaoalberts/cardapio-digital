@@ -113,16 +113,58 @@ describe("deleteMuxAsset", () => {
     await expect(deleteMuxAsset("as1")).rejects.toThrow(/mux 500/);
   });
 
-  it("asset que já não existe (404) conta como apagado", async () => {
+  it("asset que já não existe (404) conta como apagado e avisa no log sem o id", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { deleteMuxAsset } = await load();
     reply = () => ({ status: 404, body: {} });
     await expect(deleteMuxAsset("as1")).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0])).not.toContain("as1");
   });
 
   it("id fora do formato não vira caminho da API", async () => {
     const { deleteMuxAsset } = await load();
     await expect(deleteMuxAsset("../uploads")).rejects.toThrow();
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("releaseMuxUpload", () => {
+  const route = (up: unknown) => (c: Call) =>
+    c.url.includes("/uploads/") && c.method === "GET" ? { status: 200, body: { data: up } } : { status: 204 };
+
+  it("upload que já virou asset: apaga o asset", async () => {
+    reply = route({ status: "asset_created", asset_id: "as9" });
+    const { releaseMuxUpload } = await load();
+    await releaseMuxUpload("up1");
+    expect(calls.map((c) => `${c.method} ${c.url.replace(/^.*\/video\/v1/, "")}`)).toEqual([
+      "GET /uploads/up1",
+      "DELETE /assets/as9",
+    ]);
+  });
+
+  it("upload ainda esperando: cancela", async () => {
+    reply = route({ status: "waiting" });
+    const { releaseMuxUpload } = await load();
+    await releaseMuxUpload("up1");
+    expect(calls.map((c) => `${c.method} ${c.url.replace(/^.*\/video\/v1/, "")}`)).toEqual([
+      "GET /uploads/up1",
+      "PUT /uploads/up1/cancel",
+    ]);
+  });
+
+  it("upload cancelado ou com erro e sem asset: nada a fazer", async () => {
+    reply = route({ status: "timed_out" });
+    const { releaseMuxUpload } = await load();
+    await releaseMuxUpload("up1");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("consulta que falha lança (a linha fica para a próxima leitura)", async () => {
+    reply = () => ({ status: 500, body: {} });
+    const { releaseMuxUpload } = await load();
+    await expect(releaseMuxUpload("up1")).rejects.toThrow(/mux 500/);
+    await expect(releaseMuxUpload("../x")).rejects.toThrow();
   });
 });
 

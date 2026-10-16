@@ -4,6 +4,7 @@ import * as nocodb from "@/lib/db/nocodb";
 import { SLUG_PATTERN } from "@/lib/slug";
 import { toHead } from "@/lib/comunidade/votes";
 import { parseConfig } from "./config";
+import { releaseMuxUpload } from "./mux-video";
 import type { MonthUsage } from "./cost";
 import { isExpired, isStuckUpload, purgePlan } from "./retention";
 import type { AparecaHead, AparecaTallyRow, HouseVideoRow, VideoRow } from "./types";
@@ -12,17 +13,21 @@ import type { AparecaHead, AparecaTallyRow, HouseVideoRow, VideoRow } from "./ty
 // (as actions do painel chamam updateTag com aparecaTags), e o retrato da fila em memória
 // de cada instância, por SNAPSHOT_MS, para celular, TV e painel não baterem no NocoDB a cada consulta.
 
-export const aparecaTags = { slug: (s: string) => `apareca:${s}`, rid: (id: string) => `apareca:${id}` };
+export const aparecaTags = { slug: (s: string) => `apareca:slug:${s}`, rid: (id: string) => `apareca:rid:${id}` };
 
 const SNAPSHOT_MS = 5_000; // minha escolha (brief da T5)
 const USAGE_MS = 60_000;
+// Ids apagados há pouco: uma leitura que começou antes do fim do purge e volta depois dele
+// ainda traz a linha; ela é ignorada por este prazo (bem maior que SNAPSHOT_MS).
+const RECENT_MS = 30_000;
 const DEFAULT_TZ = "America/Sao_Paulo";
 
 export type StoreDb = Pick<typeof nocodb, "list" | "first" | "insert" | "removeIds">;
 export type Snapshot = { at: number; videos: VideoRow[] }; // sem vencidos
 export type StoreDeps = {
   db: StoreDb;
-  mux: { deleteAsset: (id: string) => Promise<void> };
+  // releaseUpload: opcional (padrão releaseMuxUpload); confere o upload de envio parado sem asset.
+  mux: { deleteAsset: (id: string) => Promise<void>; releaseUpload?: (uploadId: string) => Promise<void> };
   now?: () => Date;
   defer?: (fn: () => Promise<void>) => void; // after() na rota
 };
@@ -75,6 +80,15 @@ export async function getHouseVideos(rid: string): Promise<HouseVideoRow[]> {
 const snaps = new Map<string, { at: number; rows: Promise<VideoRow[]> }>();
 // Vídeos (id) com purge em andamento: duas leituras ao mesmo tempo não apagam o mesmo vencido duas vezes.
 const purging = new Set<string>();
+const recentlyGone = new Map<string, number>(); // id -> até quando ignorar
+
+function wasPurged(id: string, t: number): boolean {
+  const until = recentlyGone.get(id);
+  if (until === undefined) return false;
+  if (t < until) return true;
+  recentlyGone.delete(id);
+  return false;
+}
 const tzCache = new Map<string, string>();
 
 const gone = (v: VideoRow, now: Date) => isExpired(v, now) || isStuckUpload(v, now);
@@ -98,7 +112,7 @@ export async function readSnapshot(d: StoreDeps, rid: string): Promise<Snapshot>
   const toPurge: VideoRow[] = [];
   for (const v of rows) {
     if (!gone(v, now)) videos.push(v);
-    else if (!purging.has(v.id)) {
+    else if (!purging.has(v.id) && !wasPurged(v.id, t)) {
       purging.add(v.id);
       toPurge.push(v);
     }
@@ -133,11 +147,13 @@ async function timezones(db: StoreDb, rids: string[]): Promise<(rid: string) => 
 }
 
 // Apaga os vencidos: asset no Mux primeiro, depois o relatório (apareca_tally), depois a linha.
-// Asset que não apagou segura a linha (e fica fora do tally) para a próxima leitura tentar de novo.
+// Envio parado sem asset: o upload é conferido no Mux (releaseUpload) antes. Asset ou upload que não
+// se resolveu segura a linha (e fica fora do tally) para a próxima leitura tentar de novo.
 // Várias linhas de tally para o mesmo restaurante e dia são normais: quem lê sempre soma.
 export async function purge(d: StoreDeps, rows: VideoRow[]): Promise<{ deleted: number; failed: number }> {
   const now = (d.now ?? (() => new Date()))();
-  const candidates = rows.filter((v) => gone(v, now));
+  const t = now.getTime();
+  const candidates = rows.filter((v) => gone(v, now) && !wasPurged(v.id, t));
   if (!candidates.length) return { deleted: 0, failed: 0 };
 
   const ok: VideoRow[] = [];
@@ -146,6 +162,7 @@ export async function purge(d: StoreDeps, rows: VideoRow[]): Promise<{ deleted: 
     candidates.map(async (v) => {
       try {
         if (v.mux_asset_id) await d.mux.deleteAsset(v.mux_asset_id);
+        else if (v.mux_upload_id) await (d.mux.releaseUpload ?? releaseMuxUpload)(v.mux_upload_id);
         ok.push(v);
       } catch {
         failed += 1;
@@ -159,6 +176,8 @@ export async function purge(d: StoreDeps, rows: VideoRow[]): Promise<{ deleted: 
   const { tally } = purgePlan(ok, now, tz);
   if (tally.length) await d.db.insert("apareca_tally", tally);
   await d.db.removeIds("apareca_videos", ok.map((v) => v.Id));
+  for (const v of ok) recentlyGone.set(v.id, t + RECENT_MS);
+  for (const [id, until] of recentlyGone) if (until <= t) recentlyGone.delete(id);
   return { deleted: ok.length, failed };
 }
 
