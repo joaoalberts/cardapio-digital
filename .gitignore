@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# arquivos do driver local (STORAGE_DRIVER=local), só para teste
+/.local-blob/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

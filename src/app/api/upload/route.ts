@@ -3,11 +3,11 @@ import { isMember } from "@/lib/auth";
 import { putFile, storageEnabled } from "@/lib/storage";
 
 // Fotos, capas de vídeo e logos do painel: o navegador manda o arquivo já reduzido e
-// o servidor grava no Vercel Blob, na pasta do restaurante.
+// o servidor grava no Vercel Blob, na pasta do restaurante (com STORAGE_DRIVER=local, em .local-blob/).
 // A Vercel limita o corpo do pedido a 4,5 MB; as fotos chegam bem menores.
 const MAX_BYTES = 4_400_000;
 const TYPES = /^(image\/(png|jpeg|webp)|video\/(mp4|quicktime|webm))$/;
-const NAME = /^(items|categories|cover|logo)\/[\w.-]{1,80}$/;
+const NAME = /^(items|categories|cover|logo|comunidade)\/[\w.-]{1,80}$/;
 
 export async function POST(request: NextRequest) {
   const restaurantId = request.nextUrl.searchParams.get("restaurant") ?? "";

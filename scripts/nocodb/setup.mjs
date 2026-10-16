@@ -9,15 +9,13 @@
 // colunas de texto com o uid do pai (restaurant_id, category_id...). Assim os dados do
 // Supabase entram sem conversão e o isolamento por restaurante fica no código do app.
 
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 const API = process.env.NOCODB_URL ?? "https://app.nocodb.com";
 const TOKEN = process.env.NOCODB_API_TOKEN;
 const WORKSPACE = process.env.NOCODB_WORKSPACE ?? "wouavjse";
 const BASE_TITLE = process.env.NOCODB_BASE_TITLE ?? "Cardápio Digital";
-
-if (!TOKEN) {
-  console.error("Falta NOCODB_API_TOKEN");
-  process.exit(1);
-}
 
 const text = (name) => ({ column_name: name, title: name, uidt: "SingleLineText" });
 const long = (name) => ({ column_name: name, title: name, uidt: "LongText" });
@@ -38,7 +36,9 @@ export const TABLES = {
     text("font_theme"), text("timezone"), json("opening_hours"), long("description"),
     text("phone"), text("address"), text("instagram"), text("facebook"), text("wifi_name"),
     text("wifi_password"), json("payment_methods"), bool("show_hours"),
-    bool("show_payments"), bool("orders_enabled"), created,
+    bool("show_payments"), bool("orders_enabled"),
+    // Comunidade: interruptor (vazio = desligada) e a hora em que vira o dia ("HH:MM", vazio = "05:00").
+    bool("community_enabled"), text("community_day_start"), created,
   ],
   members: [text("restaurant_id"), text("user_id"), text("role"), created],
   categories: [
@@ -65,6 +65,8 @@ export const TABLES = {
   orders: [
     id, text("restaurant_id"), text("table_id"), text("table_label"), text("status"), bool("open"),
     json("lines"), num("total_cents"), text("device_id"), text("client_ref"), created, date("status_at"),
+    // Envio repetido ou oferta perdida: fechado sem ser um pedido de verdade (fora do placar).
+    bool("discarded"),
   ],
   // Cada oferta relâmpago pega: o preço garantido vale só com este registro.
   special_claims: [
@@ -74,6 +76,27 @@ export const TABLES = {
   support_requests: [
     id, text("restaurant_id"), text("user_id"), text("subject"), text("whatsapp"),
     long("message"), created,
+  ],
+  // Comunidade (Palco + Mural). device_id, table_id, tables_qr e tables_open nunca saem por rota pública.
+  community_polls: [
+    id, text("restaurant_id"), text("template"), long("question"), json("options"),
+    date("starts_at"), date("ends_at"), date("closed_at"), created,
+  ],
+  community_votes: [
+    id, text("restaurant_id"), text("poll_id"), text("option_id"), text("device_id"), text("table_id"), created,
+  ],
+  community_posts: [
+    id, text("restaurant_id"), text("item_id"), text("photo_path"), text("thumb_path"), text("source"),
+    text("status"), bool("on_tv"), date("hidden_at"), created,
+  ],
+  // O telão guarda o segredo; aqui fica só o SHA-256 dele.
+  community_tvs: [
+    id, text("restaurant_id"), text("label"), text("pair_code"), date("pair_expires_at"), text("secret_hash"),
+    date("paired_at"), date("last_seen_at"), bool("revoked"), created,
+  ],
+  // Funil somado em memória e gravado em lote (uma linha por instância a cada >= 30 s com movimento).
+  community_tally: [
+    id, text("restaurant_id"), text("day"), json("counts"), json("tables_qr"), json("tables_open"), created,
   ],
 };
 
@@ -88,6 +111,7 @@ async function api(path, init = {}) {
 }
 
 async function main() {
+  if (!TOKEN) throw new Error("Falta NOCODB_API_TOKEN");
   // NOCODB_SELF_HOSTED=1: NocoDB local (Docker), sem workspaces.
   const selfHosted = process.env.NOCODB_SELF_HOSTED === "1";
   const basesPath = selfHosted ? "/api/v2/meta/bases/" : `/api/v2/meta/workspaces/${WORKSPACE}/bases`;
@@ -124,7 +148,20 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(err.message);
-  process.exit(1);
-});
+// Só roda quando chamado direto (node scripts/nocodb/setup.mjs); importado pelos testes, não.
+// Comparar import.meta.url com `file://${argv[1]}` não serve aqui: o "á" e o espaço de
+// "Cardápio Digital" vêm codificados na URL.
+function calledDirectly() {
+  try {
+    return !!process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+}
+
+if (calledDirectly()) {
+  main().catch((err) => {
+    console.error(err.message);
+    process.exit(1);
+  });
+}

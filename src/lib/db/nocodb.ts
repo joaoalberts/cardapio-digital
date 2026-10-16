@@ -21,16 +21,25 @@ export type Table =
   | "dining_tables"
   | "orders"
   | "special_claims"
-  | "support_requests";
+  | "support_requests"
+  | "community_polls"
+  | "community_votes"
+  | "community_posts"
+  | "community_tvs"
+  | "community_tally";
 
 export type Row = Record<string, unknown>;
 // Igualdade em todas as colunas; null = coluna vazia.
 export type Where = Record<string, string | number | boolean | null>;
 
 // Colunas JSON e Checkbox voltam em formatos diferentes conforme o banco do NocoDB.
-const JSON_COLS = new Set(["languages", "opening_hours", "payment_methods", "price_options", "tags", "lines", "special_days"]);
+const JSON_COLS = new Set([
+  "languages", "opening_hours", "payment_methods", "price_options", "tags", "lines", "special_days",
+  "options", "counts", "tables_qr", "tables_open",
+]);
 const BOOL_COLS = new Set([
   "active", "featured", "hide_price", "auto", "show_hours", "show_payments", "half_half", "orders_enabled", "open", "special",
+  "community_enabled", "on_tv", "revoked", "discarded",
 ]);
 const NUM_COLS = new Set([
   "menu_version", "position", "price_cents", "promo_price_cents", "serves", "total_cents",
