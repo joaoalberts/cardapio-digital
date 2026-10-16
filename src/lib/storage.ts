@@ -56,7 +56,7 @@ export async function removeFiles(paths: (string | null | undefined)[]) {
     for (const p of paths) {
       const parts = typeof p === "string" && isLocalUrl(p) ? localUrlSegments(p) : null;
       const file = parts && localFile(parts);
-      if (file) await unlink(file).catch(() => undefined);
+      if (file) await unlink(/*turbopackIgnore: true*/ file).catch(() => undefined);
     }
     return;
   }
@@ -76,8 +76,12 @@ const LOCAL_TYPES: Record<string, string> = { webp: "image/webp", jpg: "image/jp
 
 const isLocalUrl = (p: string) => p.startsWith(LOCAL_PREFIX);
 
-// O comentário evita que o Turbopack rastreie o projeto inteiro por causa do process.cwd().
-const localRoot = () => path.resolve(process.env.LOCAL_BLOB_DIR || path.join(/*turbopackIgnore: true*/ process.cwd(), ".local-blob"));
+// Os comentários /*turbopackIgnore: true*/ aqui e nas chamadas de fs abaixo impedem que o
+// build rastreie o projeto inteiro (src/, public/, supabase/...) por causa dos caminhos
+// dinâmicos e coloque tudo nas funções da Vercel. Sem eles, o driver local, que é só para
+// teste, mudaria o que vai para produção no caminho do Blob.
+const localRoot = () =>
+  path.resolve(/*turbopackIgnore: true*/ process.env.LOCAL_BLOB_DIR || path.join(/*turbopackIgnore: true*/ process.cwd(), ".local-blob"));
 
 // Cada pedaço do caminho: não vazio, sem "." nem "..", sem barra, contrabarra, "%", "?", "#" ou NUL.
 const safeSegment = (s: string) => s !== "." && s !== ".." && /^[^/\\%?#\0]+$/.test(s);
@@ -86,7 +90,7 @@ const safeSegment = (s: string) => s !== "." && s !== ".." && /^[^/\\%?#\0]+$/.t
 function localFile(parts: string[]): string | null {
   if (!parts.length || !parts.every(safeSegment)) return null;
   const root = localRoot();
-  const file = path.resolve(root, ...parts);
+  const file = path.resolve(/*turbopackIgnore: true*/ root, ...parts);
   return file.startsWith(root + path.sep) ? file : null;
 }
 
@@ -103,8 +107,8 @@ async function putLocal(pathname: string, body: ArrayBuffer): Promise<string> {
   const parts = pathname.split("/");
   const file = localFile(parts);
   if (!file) throw new Error("arquivo local: caminho inválido");
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, new Uint8Array(body));
+  await mkdir(/*turbopackIgnore: true*/ path.dirname(file), { recursive: true });
+  await writeFile(/*turbopackIgnore: true*/ file, new Uint8Array(body));
   return LOCAL_PREFIX + parts.map(encodeURIComponent).join("/");
 }
 
@@ -114,7 +118,7 @@ export async function readLocalFile(parts: string[]): Promise<{ body: Uint8Array
   const type = LOCAL_TYPES[path.extname(parts[parts.length - 1] ?? "").slice(1).toLowerCase()];
   if (!file || !type) return null;
   try {
-    return { body: new Uint8Array(await readFile(file)), type };
+    return { body: new Uint8Array(await readFile(/*turbopackIgnore: true*/ file)), type };
   } catch {
     return null;
   }
