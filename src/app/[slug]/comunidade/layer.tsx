@@ -92,9 +92,10 @@ export function ComunidadeLayer() {
           {tabBtn("mural")}
         </div>
         <span className="cmu-sp" />
-        {/* inViewer: com a camada aberta o story está fechado, então o alvo do "voo" do
-            carrinho continua sendo o da capa; o "Pedir também" daqui voa até este botão. */}
-        <CartButton inViewer className="cmu-cart" />
+        {/* Fora da disputa do islandRef: a camada fica montada (escondida) com o story aberto
+            e, vindo depois dele na árvore, tomaria o alvo do "voo" do "Pedir agora" do story.
+            O "Pedir também" daqui voa até este botão direto (buy-button.tsx). */}
+        <CartButton island={false} className="cmu-cart" />
         <button className="cmu-x" onClick={() => setOpen(false)} aria-label={ct("closeAria", L)}>
           <IconClose />
         </button>
