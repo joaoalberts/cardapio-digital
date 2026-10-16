@@ -12,6 +12,7 @@ const NAV = [
   { href: "/painel/pedidos", label: "Pedidos", icon: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6" },
   { href: "/painel/cardapio", label: "Adicionar/Editar", icon: "M12 5v14M5 12h14" },
   { href: "/painel/especiais", label: "Produtos especiais", icon: "M13 2L4 14h7l-1 8 9-12h-7z" },
+  { href: "/painel/comunidade", label: "Comunidade", icon: "M21 12a8 8 0 01-11.6 7.1L4 20l1-4.3A8 8 0 1121 12z" },
   { href: "/painel/aparencia", label: "Aparência", icon: "M12 3a9 9 0 100 18c1 0 1.5-.7 1.5-1.5 0-1.2-1-1.6-1-2.6 0-.8.7-1.4 1.5-1.4H16a5 5 0 005-5c0-4-4-7.5-9-7.5zM7.5 12a1 1 0 100-2 1 1 0 000 2zM10.5 8a1 1 0 100-2 1 1 0 000 2zM15 8a1 1 0 100-2 1 1 0 000 2z" },
   { href: "/painel/mesas", label: "Mesas", icon: "M3 4h18v4H3zM4 8v12M20 8v12M4 14h16" },
   { href: "/painel/perfil", label: "Editar Perfil", icon: "M10 12a4 4 0 100-8 4 4 0 000 8zM3 21c0-4 3.1-7 7-7 1.3 0 2.5.3 3.5.9M17.5 14.5l3 3-4.5 4.5h-3v-3z" },
