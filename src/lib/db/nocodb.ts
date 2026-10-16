@@ -60,8 +60,9 @@ function token() {
 }
 
 // O NocoDB na nuvem aceita 5 pedidos por segundo por token; passou disso, bloqueia por
-// alguns segundos. Aqui cada instância do servidor manda no máximo 4 por segundo.
-const PER_SECOND = 4;
+// alguns segundos. Aqui cada instância do servidor manda no máximo 4 por segundo, ou
+// NOCODB_MAX_RPS (o NocoDB próprio, na VPS, não tem esse limite).
+const PER_SECOND = Number(process.env.NOCODB_MAX_RPS) || 4;
 const sent: number[] = [];
 async function slot() {
   for (;;) {
@@ -154,17 +155,20 @@ function whereParam(where: Where) {
 type ListOpts = { sort?: string; limit?: number };
 
 // Todas as linhas que batem com o filtro (de 1000 em 1000). Sem "sort", na ordem de criação.
+// O servidor pode devolver menos linhas que o pedido sem ser a última página: o offset anda
+// pelo que veio, e só isLastPage (ou página vazia) encerra.
 export async function list<T = Row>(table: Table, where: Where = {}, opts: ListOpts = {}): Promise<T[]> {
   const id = await tableId(table);
   const out: Row[] = [];
   const pageSize = Math.min(opts.limit ?? 1000, 1000);
-  for (let offset = 0; ; offset += pageSize) {
-    const q = new URLSearchParams({ limit: String(pageSize), offset: String(offset), sort: opts.sort ?? "Id" });
+  for (;;) {
+    const q = new URLSearchParams({ limit: String(pageSize), offset: String(out.length), sort: opts.sort ?? "Id" });
     const w = whereParam(where);
     if (w) q.set("where", w);
     const page = await call<{ list: Row[]; pageInfo?: { isLastPage?: boolean } }>(`/api/v2/tables/${id}/records?${q}`, { table });
     out.push(...page.list.map(normalize));
-    if (page.pageInfo?.isLastPage !== false || page.list.length < pageSize) break;
+    if (!page.list.length) break;
+    if (page.pageInfo ? page.pageInfo.isLastPage === true : page.list.length < pageSize) break;
     if (opts.limit && out.length >= opts.limit) break;
   }
   return (opts.limit ? out.slice(0, opts.limit) : out) as T[];

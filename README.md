@@ -14,6 +14,7 @@ https://claude.ai/code/artifact/1aeaa1c6-07e6-46d1-94bd-3fa7d1ff32c6
 base. O app só fala com o NocoDB pelo servidor (`src/lib/db/nocodb.ts`), e cada ação
 confere se quem chamou é membro do restaurante (`src/lib/auth`). O NocoDB na nuvem aceita
 5 pedidos por segundo por token; o app se segura em 4 por instância e espera quando passa.
+Num NocoDB próprio, sem esse limite, `NOCODB_MAX_RPS` sobe o teto (ex.: 20).
 
 ## Rodar localmente
 
