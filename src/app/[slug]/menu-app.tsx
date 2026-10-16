@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- fotos do cardápio ocupam a tela toda e já vêm em tamanho certo do Storage */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { preconnect } from "react-dom";
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from "react";
 import { fetchPublicMenu } from "@/lib/menu/client";
 import { DEFAULT_FONT_THEME, isFontTheme } from "@/lib/menu/font-themes";
@@ -9,8 +10,10 @@ import { inWindow, statusLabel, type StatusLabel } from "@/lib/menu/hours";
 import { countryLabel, tagLabel } from "@/lib/menu/tags";
 import { paymentLabel } from "@/lib/menu/payments";
 import { LANG_FLAG, LANG_NAME, pickLanguage, t as tr, type StringKey } from "@/lib/menu/i18n";
-import { formatPrice, mediaUrl, posterSrc, thumbSrc, videoSrc } from "@/lib/menu/media";
-import { useAutoplay, useHls } from "@/lib/menu/use-hls";
+import { CARD_W, formatPrice, mediaUrl, photoSrc, posterSrc, STORY_W, THUMB_W, thumbSrc, videoSrc } from "@/lib/menu/media";
+import { sizedSrc } from "@/lib/images/sized";
+import { preloadHls, useAutoplay, useHls, warmVideo } from "@/lib/menu/use-hls";
+import { openStartGate, useStartGate } from "@/lib/menu/start-gate";
 import type { MenuCategory, MenuItem, MenuMedia, PublicMenu } from "@/lib/menu/types";
 import { Flag } from "./flag";
 import { OrderProvider, useOrder } from "./order/order-context";
@@ -95,6 +98,46 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   const sheetNow = useRef(false); // espelho local: o ref do provider só atualiza depois dos efeitos deste componente
   const sheetOpenNow = order.sheet !== null;
   useEffect(() => syncMenu(menu), [menu, syncMenu]);
+  // Vídeos e capas vêm do Mux: a conexão já abre junto com a página. O player de vídeo
+  // carrega quando o celular fica livre, antes do primeiro toque num story.
+  preconnect("https://stream.mux.com", { crossOrigin: "anonymous" });
+  preconnect("https://image.mux.com");
+  // Abertura: o banner vem primeiro; o resto (vídeos dos cards, player, listas de vídeo)
+  // espera ele tocar. Sem banner em vídeo, ou se ele demorar, libera logo. Se a pessoa
+  // já rolar ou tocar na tela, libera na hora (ela quer ver os cards).
+  const gate = useStartGate();
+  const hasHeroVideo = !!(initialMenu.restaurant.cover?.kind === "video" || (!initialMenu.restaurant.cover && initialMenu.restaurant.cover_video_path));
+  useEffect(() => {
+    const t = setTimeout(openStartGate, hasHeroVideo ? 3500 : 300);
+    const now = () => openStartGate();
+    addEventListener("scroll", now, { passive: true, once: true });
+    addEventListener("pointerdown", now, { passive: true, once: true });
+    return () => {
+      clearTimeout(t);
+      removeEventListener("scroll", now);
+      removeEventListener("pointerdown", now);
+    };
+  }, [hasHeroVideo]);
+  useEffect(() => {
+    if (!gate) return;
+    const idle = window.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 1500));
+    idle(() => preloadHls());
+  }, [gate]);
+  // Primeiro prato de cada categoria em vídeo: conexão aberta antes do toque no card.
+  const firstVideos = useMemo(
+    () =>
+      visibleCats(menu, null)
+        .slice(0, 12)
+        .map((c) => c.items[0]?.media[0])
+        .filter((m): m is MenuMedia => m?.kind === "video")
+        .map((m) => videoSrc(m)),
+    [menu],
+  );
+  useEffect(() => {
+    if (!gate) return;
+    const idle = window.requestIdleCallback ?? ((f: () => void) => setTimeout(f, 2500));
+    idle(() => firstVideos.forEach(warmVideo));
+  }, [firstVideos, gate]);
   // Relógio do horário das categorias: começa depois da primeira pintura e anda a cada minuto.
   const [now, setNow] = useState<number | null>(null);
   // Oferta relâmpago: o produto especial sorteado entra como story extra na categoria
@@ -923,8 +966,12 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
     for (const item of want) {
       const m = item?.media[0];
       if (!m) continue;
-      warm(posterSrc(m));
-      if (m.kind === "photo") warm(mediaUrl(m.storage_path));
+      // Os mesmos endereços que o StoryMedia usa (miniatura por baixo, foto grande por cima).
+      warm(posterSrc(m, THUMB_W));
+      if (m.kind === "photo") {
+        warm(photoSrc(m, THUMB_W));
+        warm(photoSrc(m, STORY_W));
+      } else warmVideo(videoSrc(m));
     }
     // idxKey resume view.idx sem disparar a cada novo array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -939,10 +986,10 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   const coverVideo = banner ? (banner.kind === "video" ? videoSrc(banner, "card") : null) : mediaUrl(restaurant.cover_video_path);
   const coverImage = banner
     ? banner.kind === "photo"
-      ? mediaUrl(banner.storage_path)
-      : posterSrc(banner)
-    : (mediaUrl(restaurant.cover_image_path) ?? thumbSrc(cats[0]?.items[0]));
-  const logo = mediaUrl(restaurant.logo_path);
+      ? photoSrc(banner, STORY_W)
+      : posterSrc(banner, STORY_W)
+    : (sizedSrc(mediaUrl(restaurant.cover_image_path), STORY_W) ?? thumbSrc(cats[0]?.items[0], STORY_W));
+  const logo = sizedSrc(mediaUrl(restaurant.logo_path), THUMB_W);
   const near = (i: number) => view.open && (Math.abs(i - view.cur) <= 1 || Math.abs(i - view.target) <= 1);
   const style = { "--accent": restaurant.brand_color ?? undefined } as CSSProperties;
 
@@ -1267,7 +1314,8 @@ function CategoryCard({
 }) {
   // Foto ou vídeo da categoria (painel > editar categoria); sem ela, o primeiro prato.
   const cover: MenuMedia | null | undefined = cat.cover;
-  const th = cover ? (cover.kind === "photo" ? (posterSrc(cover) ?? mediaUrl(cover.storage_path)) : posterSrc(cover)) : thumbSrc(cat.items[0]);
+  // Card ocupa a largura do celular: foto na resolução cheia (CARD_W).
+  const th = cover ? (cover.kind === "photo" ? (posterSrc(cover, CARD_W) ?? photoSrc(cover, CARD_W)) : posterSrc(cover, CARD_W)) : thumbSrc(cat.items[0], CARD_W);
   return (
     <button className={`card${cat.id === FEATURED_ID ? " feat" : ""}`} ref={refCb} data-i={index} onClick={onOpen}>
       {cover?.kind === "video" ? (
@@ -1425,9 +1473,19 @@ function LoopVideo({
     },
     [ref],
   );
-  const live = active ? src : null;
+  // Cards esperam o banner começar (start-gate.ts); o banner (eager) não espera ninguém.
+  const gate = useStartGate();
+  const live = active && (eager || gate) ? src : null;
+  useEffect(() => {
+    const v = own.current;
+    if (!v || !eager) return;
+    if (!v.paused && v.currentTime > 0) openStartGate();
+    v.addEventListener("playing", openStartGate, { once: true });
+    return () => v.removeEventListener("playing", openStartGate);
+  }, [eager]);
   useAutoplay(own);
-  useHls(own, live, true);
+  // Perto da tela: lista lida e pronto para começar; baixa os trechos só quando aparece.
+  useHls(own, live, true, shown);
   useEffect(() => {
     const v = own.current;
     if (!v) return;
@@ -1476,7 +1534,7 @@ function LoopVideo({
       playsInline
       loop
       // Já carregado antes de aparecer (uma tela de folga), para começar sem esperar.
-      preload={shown ? "auto" : active ? "metadata" : "none"}
+      preload={!live ? "none" : shown ? "auto" : "metadata"}
       autoPlay={eager}
       data-loop={eager ? undefined : ""}
     />
@@ -1567,7 +1625,7 @@ function StoryMedia({ item, live, onEnded }: { item: MenuItem; live: boolean; on
   const vidRef = useRef<HTMLVideoElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const [ready, setReady] = useState(false);
-  const src = m ? (m.kind === "video" ? (live ? videoSrc(m) : null) : mediaUrl(m.storage_path)) : null;
+  const src = m ? (m.kind === "video" ? (live ? videoSrc(m) : null) : photoSrc(m, STORY_W)) : null;
   const hls = !!src && src.includes(".m3u8");
   useAutoplay(vidRef);
   useLayoutEffect(() => {
@@ -1582,7 +1640,8 @@ function StoryMedia({ item, live, onEnded }: { item: MenuItem; live: boolean; on
     if (!live && isVid) setReady(false);
   }, [live, isVid]);
   if (!m) return null;
-  const low = posterSrc(m);
+  // Miniatura (a mesma da lista, quase sempre já baixada) enquanto a grande chega.
+  const low = posterSrc(m, THUMB_W) ?? (m.kind === "photo" ? photoSrc(m, THUMB_W) : null);
   const hi = `hi${ready ? " on" : ""}`;
   return (
     <>

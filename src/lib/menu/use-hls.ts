@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 // Safari (Mac e iPhone/iPad) toca HLS direto e melhor que qualquer biblioteca.
 // O Chrome novo também diz que toca, mas falha em alguns casos; nele vai o hls.js.
@@ -106,13 +106,77 @@ export function useAutoplay(vidRef: React.RefObject<HTMLVideoElement | null>) {
   }, [vidRef]);
 }
 
+// Deixa o player pronto antes do primeiro toque num vídeo (fora do Safari, que não usa).
+let hlsWarm: Promise<unknown> | null = null;
+export function preloadHls() {
+  if (hlsWarm || typeof window === "undefined" || apple()) return;
+  hlsWarm = import("hls.js").catch(() => (hlsWarm = null));
+}
+
+// Antes de o vídeo aparecer, lê as listas dele (alguns KB, o Mux não deixa guardar) só
+// para abrir de antemão a conexão com os servidores de onde os trechos vêm. Assim o
+// primeiro trecho não espera a conexão nova (3 idas e voltas a menos no celular).
+const warmedVideos = new Set<string>();
+const opened = new Set<string>();
+function openOrigin(origin: string) {
+  if (opened.has(origin)) return;
+  opened.add(origin);
+  const l = document.createElement("link");
+  l.rel = "preconnect";
+  l.href = origin;
+  l.crossOrigin = "anonymous";
+  document.head.appendChild(l);
+}
+const originsIn = (text: string) => [...new Set([...text.matchAll(/https:\/\/[^/\s"]+/g)].map((m) => m[0]))];
+export function warmVideo(src: string | null) {
+  if (!src || !src.includes(".m3u8") || warmedVideos.has(src) || typeof window === "undefined") return;
+  warmedVideos.add(src);
+  const get = (u: string) => fetch(u, { priority: "low" } as RequestInit).then((r) => (r.ok ? r.text() : ""));
+  get(src)
+    .then((master) => {
+      originsIn(master).forEach(openOrigin);
+      const variant = master.split("\n").find((l) => l.startsWith("https://"));
+      return variant ? get(variant) : "";
+    })
+    .then((list) => originsIn(list).forEach(openOrigin))
+    .catch(() => warmedVideos.delete(src));
+}
+
+// Velocidade da internet medida no último vídeo: os próximos já começam na qualidade
+// que ela aguenta (no 5G, direto em alta), sem passar pela qualidade baixa de novo.
+let lastBandwidth = 0;
+
+// Primeiro vídeo da visita (velocidade ainda desconhecida): começa perto de 720p, que já
+// é nítido no celular e baixa bem mais rápido que o Full HD; sobe sozinho até o máximo.
+export function startLevelFor(levels: { height?: number }[], target = 720): number {
+  if (!levels.length) return -1;
+  let best = 0;
+  levels.forEach((l, i) => {
+    const h = l.height ?? 0;
+    const bh = levels[best].height ?? 0;
+    if (h >= target ? bh < target || h < bh : bh < target && h > bh) best = i;
+  });
+  return best;
+}
+
 // Vídeo do Mux (HLS): o Safari toca direto; nos outros navegadores entra o hls.js.
 // Os dois trocam de qualidade conforme a internet e o tamanho do vídeo na tela, para
 // começar rápido e não travar.
 // `loop`: vídeo curto que repete (capa e categorias). Guarda o vídeo inteiro no buffer
 // para a volta ao começo não baixar de novo nem dar o tranco do recomeço.
-export function useHls(vidRef: React.RefObject<HTMLVideoElement | null>, src: string | null, loop = false) {
+// `load` falso: o vídeo fica pronto (lista lida, capa na tela) mas não baixa trechos;
+// os cards perto da tela, mas fora dela, esperam assim e só baixam quando aparecem.
+export function useHls(vidRef: React.RefObject<HTMLVideoElement | null>, src: string | null, loop = false, load = true) {
   const hls = !!src && src.includes(".m3u8");
+  const playerRef = useRef<import("hls.js").default | undefined>(undefined);
+  const loadRef = useRef(load);
+  useEffect(() => {
+    loadRef.current = load;
+    const p = playerRef.current;
+    if (!p) return;
+    if (load) p.startLoad();
+    else p.stopLoad();
+  }, [load]);
   useEffect(() => {
     const v = vidRef.current;
     if (!v || !hls || !src) return;
@@ -136,13 +200,23 @@ export function useHls(vidRef: React.RefObject<HTMLVideoElement | null>, src: st
       player = new Hls({
         capLevelToPlayerSize: true,
         startLevel: -1,
-        abrEwmaDefaultEstimate: 2_000_000,
+        // Sem medida ainda, supõe uma internet de celular boa (5 Mbit/s).
+        abrEwmaDefaultEstimate: lastBandwidth || 5_000_000,
         maxBufferLength: loop ? 30 : 12,
         backBufferLength: loop ? Infinity : 10,
+        autoStartLoad: loadRef.current,
       });
+      playerRef.current = player;
       player.loadSource(src);
       player.attachMedia(v);
-      player.on(Hls.Events.MANIFEST_PARSED, () => tryPlay(v));
+      player.on(Hls.Events.MANIFEST_PARSED, (_e, d) => {
+        // Velocidade já medida: o player escolhe sozinho pela medida (startLevel -1).
+        if (player && !lastBandwidth) player.startLevel = startLevelFor(d.levels);
+        tryPlay(v);
+      });
+      player.on(Hls.Events.FRAG_LOADED, () => {
+        if (player?.bandwidthEstimate) lastBandwidth = player.bandwidthEstimate;
+      });
       // Queda de rede ou trecho com defeito: tenta de novo em vez de ficar parado.
       player.on(Hls.Events.ERROR, (_e, d) => {
         if (!d.fatal || !player) return;
@@ -153,6 +227,7 @@ export function useHls(vidRef: React.RefObject<HTMLVideoElement | null>, src: st
     return () => {
       gone = true;
       player?.destroy();
+      playerRef.current = undefined;
     };
   }, [vidRef, hls, src, loop]);
 }
