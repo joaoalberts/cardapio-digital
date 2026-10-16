@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { startTransition, useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 import type { FunnelKey, PollTemplate } from "@/lib/comunidade/types";
 import { extOf, IMAGE_TYPES, shrinkImage } from "@/lib/images/shrink";
 import { uploadFile } from "@/lib/upload-client";
@@ -85,21 +85,34 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 export function ComunidadeEditor({ data }: { data: EditorData }) {
   const router = useRouter();
-  const [toast, setToast] = useState<string | null>(null);
+  // Cada aviso é um objeto novo: o mesmo texto duas vezes seguidas reinicia o prazo.
+  const [toast, setToast] = useState<{ msg: string } | null>(null);
 
-  const flash = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast((t) => (t === msg ? null : t)), 2600);
-  };
-  // Roda uma action; deu certo, avisa e recarrega os dados da página.
+  const flash = (msg: string) => setToast({ msg });
+  // O prazo do aviso conta de quando ele aparece: um aviso que espera o refresh não some antes.
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(id);
+  }, [toast]);
+
+  // Deu certo: pede os dados novos e avisa junto. Chamado dentro da transição de quem pediu,
+  // o aviso, o fim do "pendente" e o estado otimista saem na mesma pintura em que os dados
+  // novos chegam, e não quando a action responde (no NocoDB da nuvem o refresh leva segundos).
+  const saved = (ok: string) =>
+    startTransition(() => {
+      flash(ok);
+      router.refresh();
+    });
+  // Roda uma action. Quem chama faz isso dentro de startTransition (com useOptimistic ou o
+  // isPending de useTransition), para o controle ficar no valor novo até o refresh chegar.
   const run = async (fn: () => Promise<Res>, ok: string): Promise<boolean> => {
     const res = await fn().catch(() => ({ error: "Não foi possível salvar. Tente de novo." }));
     if (res.error) {
       flash(res.error);
       return false;
     }
-    flash(ok);
-    router.refresh();
+    saved(ok);
     return true;
   };
 
@@ -111,13 +124,13 @@ export function ComunidadeEditor({ data }: { data: EditorData }) {
         </p>
       )}
       <MainCard data={data} run={run} />
-      <PollsCard data={data} run={run} onToast={flash} />
-      <PostsCard data={data} run={run} onToast={flash} />
+      <PollsCard data={data} run={run} saved={saved} />
+      <PostsCard data={data} run={run} saved={saved} />
       <TvCard data={data} run={run} />
       <ScoreCard data={data} />
       {toast && (
         <div className="ap-toast" role="status">
-          {toast}
+          {toast.msg}
         </div>
       )}
     </div>
@@ -125,23 +138,24 @@ export function ComunidadeEditor({ data }: { data: EditorData }) {
 }
 
 type Run = (fn: () => Promise<Res>, ok: string) => Promise<boolean>;
+type Saved = (ok: string) => void;
 
 // ---------- Interruptor, Instagram e hora do dia ----------
 
 function MainCard({ data, run }: { data: EditorData; run: Run }) {
-  const [pending, setPending] = useState<boolean | null>(null);
-  const [busy, setBusy] = useState(false);
+  // O interruptor fica no valor novo até o refresh trazer data.enabled; se a action falhar,
+  // volta sozinho ao valor do banco.
+  const [on, setOn] = useOptimistic(data.enabled);
+  const [busy, startToggle] = useTransition();
+  const [saving, startSave] = useTransition();
   const [dayStart, setDay] = useState(data.dayStart);
-  const on = pending ?? data.enabled;
 
-  const toggle = async () => {
-    const next = !on;
-    setPending(next);
-    setBusy(true);
-    await run(() => setCommunityEnabled(data.restaurantId, next), next ? "Comunidade ligada." : "Comunidade desligada.");
-    setBusy(false);
-    setPending(null);
-  };
+  const toggle = () =>
+    startToggle(async () => {
+      const next = !on;
+      setOn(next);
+      await run(() => setCommunityEnabled(data.restaurantId, next), next ? "Comunidade ligada." : "Comunidade desligada.");
+    });
 
   return (
     <section className="ap-card">
@@ -184,8 +198,12 @@ function MainCard({ data, run }: { data: EditorData; run: Run }) {
           </span>
           <button
             className="btn outline"
-            disabled={dayStart === data.dayStart || !dayStart}
-            onClick={() => run(() => setDayStart(data.restaurantId, dayStart), "Hora do dia salva.")}
+            disabled={saving || dayStart === data.dayStart || !dayStart}
+            onClick={() =>
+              startSave(async () => {
+                await run(() => setDayStart(data.restaurantId, dayStart), "Hora do dia salva.");
+              })
+            }
           >
             Salvar
           </button>
@@ -198,10 +216,9 @@ function MainCard({ data, run }: { data: EditorData; run: Run }) {
 
 // ---------- Enquetes ----------
 
-function PollsCard({ data, run, onToast }: { data: EditorData; run: Run; onToast: (m: string) => void }) {
+function PollsCard({ data, run, saved }: { data: EditorData; run: Run; saved: Saved }) {
   const [models, setModels] = useState(false);
   const [form, setForm] = useState<PollTemplate | null>(null);
-  const router = useRouter();
   const { open, scheduled, closed } = data.polls;
   const none = !open.length && !scheduled.length && !closed.length;
 
@@ -239,11 +256,12 @@ function PollsCard({ data, run, onToast }: { data: EditorData; run: Run; onToast
           template={form}
           data={data}
           onClose={(created) => {
+            // Criada: chamado dentro da transição do modal, que fica em "Criando…" até a
+            // lista nova chegar; o modal fecha junto com a enquete aparecendo em "Agora".
             setForm(null);
             if (created) {
               setModels(false);
-              onToast("Enquete criada.");
-              router.refresh();
+              saved("Enquete criada.");
             }
           }}
         />
@@ -282,10 +300,11 @@ function PollGroup({ title, polls, restaurantId, run }: { title: string; polls: 
   );
 }
 
-// Botão discreto que pede confirmação antes de uma ação que não dá para desfazer.
-function Confirm({ label, ask, yes, onYes }: { label: string; ask: string; yes: string; onYes: () => Promise<unknown> }) {
+// Botão discreto que pede confirmação antes de uma ação que não dá para desfazer. Deu certo,
+// a linha fica em "Um instante…" até o refresh tirá-la da lista; deu errado, volta na hora.
+function Confirm({ label, ask, yes, onYes }: { label: string; ask: string; yes: string; onYes: () => Promise<boolean> }) {
   const [asking, setAsking] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, startYes] = useTransition();
   if (!asking)
     return (
       <span className="cp-acts">
@@ -300,12 +319,12 @@ function Confirm({ label, ask, yes, onYes }: { label: string; ask: string; yes: 
       <button
         className="cp-link danger"
         disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          await onYes();
-          setBusy(false);
-          setAsking(false);
-        }}
+        onClick={() =>
+          startYes(async () => {
+            if (await onYes()) startTransition(() => setAsking(false));
+            else setAsking(false);
+          })
+        }
       >
         {busy ? "Um instante…" : yes}
       </button>
@@ -333,28 +352,28 @@ function PollModal({ template, data, onClose }: { template: PollTemplate; data: 
   const [later, setLater] = useState(false);
   const [start, setStart] = useState("");
   const [minutes, setMinutes] = useState<PollMinutes>(10);
-  const [busy, setBusy] = useState(false);
+  const [busy, startSaving] = useTransition();
   const [err, setErr] = useState<string | null>(null);
 
   const setOpt = (k: number, patch: Partial<OptState>) => setOpts((s) => s.map((o, i) => (i === k ? { ...o, ...patch } : o)));
   const pick = (k: number, v: string) => (v === TEXT ? setOpt(k, { mode: "text", item_id: "" }) : setOpt(k, { mode: "dish", item_id: v }));
 
-  const save = async () => {
+  const save = () => {
     setErr(null);
     if (later && !start) return setErr("Escolha a hora de início.");
-    setBusy(true);
-    const res = await createPoll(data.restaurantId, {
-      template,
-      question,
-      options: opts.map((o) =>
-        o.mode === "dish" ? { item_id: o.item_id || null, label: dishes.get(o.item_id)?.name ?? "" } : { item_id: null, label: o.label },
-      ),
-      start: later ? start : null,
-      minutes,
-    }).catch(() => ({ error: "Não foi possível salvar. Tente de novo." }));
-    setBusy(false);
-    if (res.error) return setErr(res.error);
-    onClose(true);
+    startSaving(async () => {
+      const res = await createPoll(data.restaurantId, {
+        template,
+        question,
+        options: opts.map((o) =>
+          o.mode === "dish" ? { item_id: o.item_id || null, label: dishes.get(o.item_id)?.name ?? "" } : { item_id: null, label: o.label },
+        ),
+        start: later ? start : null,
+        minutes,
+      }).catch(() => ({ error: "Não foi possível salvar. Tente de novo." }));
+      if (res.error) return setErr(res.error);
+      startTransition(() => onClose(true));
+    });
   };
 
   return (
@@ -470,40 +489,49 @@ function PollModal({ template, data, onClose }: { template: PollTemplate; data: 
 
 // ---------- Fotos da casa ----------
 
-function PostsCard({ data, run, onToast }: { data: EditorData; run: Run; onToast: (m: string) => void }) {
-  const router = useRouter();
+type PostPatch = { id: string; onTv?: boolean; hidden?: boolean };
+
+function PostsCard({ data, run, saved }: { data: EditorData; run: Run; saved: Saved }) {
   const file = useRef<HTMLInputElement>(null);
   const [dish, setDish] = useState("");
   const [tv, setTv] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, startSend] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const rid = data.restaurantId;
+  // "No telão" e "Ocultar" mudam a linha na hora e ficam assim até o refresh trazer o banco.
+  const [posts, patchPost] = useOptimistic(data.posts, (list, p: PostPatch) => list.map((x) => (x.id === p.id ? { ...x, ...p } : x)));
+  const [, startPost] = useTransition();
+  const patch = (p: PostPatch, fn: () => Promise<Res>, ok: string) =>
+    startPost(async () => {
+      patchPost(p);
+      await run(fn, ok);
+    });
 
   // Foto até 1.600 px e miniatura até 480 px, reduzidas aqui no navegador; as duas vão para
   // a pasta comunidade do restaurante. Se gravar o post falhar, os arquivos são apagados.
-  const send = async (f: File) => {
+  // O botão fica em "Enviando…" até a foto nova aparecer na lista.
+  const send = (f: File) => {
     setErr(null);
     if (!IMAGE_TYPES.test(f.type)) return setErr("Use uma foto (PNG, JPG ou WebP).");
-    setBusy(true);
-    const sent: string[] = [];
-    try {
-      const [full, small] = await Promise.all([shrinkImage(f, 1600, 0.85, "image/jpeg"), shrinkImage(f, 480, 0.8, "image/jpeg")]);
-      const id = uuid();
-      sent.push(await uploadFile(rid, `comunidade/${id}-full.${extOf(full)}`, full));
-      sent.push(await uploadFile(rid, `comunidade/${id}-thumb.${extOf(small)}`, small));
-      const res = await addHousePost(rid, { item_id: dish, photo_url: sent[0], thumb_url: sent[1], on_tv: tv });
-      if (res.error) throw new Error(res.error);
-      sent.length = 0;
-      onToast("Foto publicada no Mural.");
-      setTv(false);
-      router.refresh();
-    } catch (e) {
-      if (sent.length) await discardFiles(rid, sent).catch(() => undefined);
-      setErr(e instanceof Error && e.message.length > 12 ? e.message : "Não foi possível enviar a foto. Tente de novo.");
-    } finally {
-      setBusy(false);
-      if (file.current) file.current.value = "";
-    }
+    startSend(async () => {
+      const sent: string[] = [];
+      try {
+        const [full, small] = await Promise.all([shrinkImage(f, 1600, 0.85, "image/jpeg"), shrinkImage(f, 480, 0.8, "image/jpeg")]);
+        const id = uuid();
+        sent.push(await uploadFile(rid, `comunidade/${id}-full.${extOf(full)}`, full));
+        sent.push(await uploadFile(rid, `comunidade/${id}-thumb.${extOf(small)}`, small));
+        const res = await addHousePost(rid, { item_id: dish, photo_url: sent[0], thumb_url: sent[1], on_tv: tv });
+        if (res.error) throw new Error(res.error);
+        sent.length = 0;
+        startTransition(() => setTv(false));
+        saved("Foto publicada no Mural.");
+      } catch (e) {
+        if (sent.length) await discardFiles(rid, sent).catch(() => undefined);
+        setErr(e instanceof Error && e.message.length > 12 ? e.message : "Não foi possível enviar a foto. Tente de novo.");
+      } finally {
+        if (file.current) file.current.value = "";
+      }
+    });
   };
 
   return (
@@ -543,7 +571,7 @@ function PostsCard({ data, run, onToast }: { data: EditorData; run: Run; onToast
           hidden
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) void send(f);
+            if (f) send(f);
           }}
         />
         <button className="btn primary cp-new" disabled={!dish || busy} onClick={() => file.current?.click()}>
@@ -558,9 +586,9 @@ function PostsCard({ data, run, onToast }: { data: EditorData; run: Run; onToast
         )}
       </div>
 
-      {data.posts.length ? (
+      {posts.length ? (
         <ul className="cp-posts">
-          {data.posts.map((p) => (
+          {posts.map((p) => (
             <li key={p.id} className={p.hidden ? "hidden" : undefined}>
               <img src={p.thumb} alt="" loading="lazy" />
               <b>{p.dish}</b>
@@ -572,14 +600,17 @@ function PostsCard({ data, run, onToast }: { data: EditorData; run: Run; onToast
                   <input
                     type="checkbox"
                     checked={p.onTv}
-                    onChange={(e) => run(() => setPostTv(rid, p.id, e.target.checked), e.target.checked ? "Foto liberada para o telão." : "Foto fora do telão.")}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      patch({ id: p.id, onTv: on }, () => setPostTv(rid, p.id, on), on ? "Foto liberada para o telão." : "Foto fora do telão.");
+                    }}
                   />
                   <span>no telão</span>
                 </label>
               )}
               <span className="cp-post-acts">
                 {!p.hidden && (
-                  <button className="cp-link" onClick={() => run(() => hidePost(rid, p.id), "Foto ocultada.")}>
+                  <button className="cp-link" onClick={() => patch({ id: p.id, hidden: true }, () => hidePost(rid, p.id), "Foto ocultada.")}>
                     Ocultar
                   </button>
                 )}
@@ -599,22 +630,24 @@ function PostsCard({ data, run, onToast }: { data: EditorData; run: Run; onToast
 
 function TvCard({ data, run }: { data: EditorData; run: Run }) {
   const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, startPair] = useTransition();
   const [ok, setOk] = useState<string | null>(null);
   const labels = new Set(data.tvs.map((t) => t.label));
   let label = "TV do salão";
   for (let n = 2; labels.has(label); n++) label = `TV do salão ${n}`;
   const clean = code.replace(/\s+/g, "");
 
-  const pair = async () => {
+  // "Pareando…" até a TV aparecer na lista; o "pareada agora" sai junto com ela.
+  const pair = () => {
     setOk(null);
-    setBusy(true);
     const name = label;
-    if (await run(() => pairTv(data.restaurantId, clean, name), `${name} pareada.`)) {
-      setOk(name);
-      setCode("");
-    }
-    setBusy(false);
+    startPair(async () => {
+      if (await run(() => pairTv(data.restaurantId, clean, name), `${name} pareada.`))
+        startTransition(() => {
+          setOk(name);
+          setCode("");
+        });
+    });
   };
 
   return (
