@@ -3,7 +3,7 @@ import type { MenuCategory, MenuItem, PublicMenu } from "@/lib/menu/types";
 import {
   BALLOON_MIN_BAND, balloonMode, balloonNeed, buyState, clockSkew, clockText, houseHighlight, leaderOf, localTime,
   muralColumns, pollDelay, pollTiming, questionText, refFrom, relativeTime, shownPcts,
-  backoff, pollChime, TV_POLL_MS, TV_RELOAD_MS, tvMode, tvReloadDue,
+  backoff, pollChime, TV_POLL_MS, TV_RELOAD_MS, tvMode, tvQuestionLong, tvReloadDue,
 } from "./client-logic";
 import type { PublicOption, PublicPoll, PublicState } from "./types";
 
@@ -269,5 +269,21 @@ describe("pollChime", () => {
     expect(pollChime("p1", tvState({ poll: tvPoll({ closed: true }) }))).toEqual({ open: null, chime: false });
     expect(pollChime("p1", tvState())).toEqual({ open: null, chime: false });
     expect(pollChime("p1", null)).toEqual({ open: null, chime: false });
+  });
+});
+
+describe("tvQuestionLong", () => {
+  // Medidas do Chromium a 62 px (line-height 1,04): uma linha 64,5 px, duas 129 px.
+  it("passa a 46 px só quando a pergunta quebra em mais de uma linha a 62 px", () => {
+    expect(tvQuestionLong(64.5, 62)).toBe(false);
+    expect(tvQuestionLong(65, 62)).toBe(false); // arredondamento da medida
+    expect(tvQuestionLong(129, 62)).toBe(true); // "Welches Dessert gewinnt heute?" (30 letras)
+    expect(tvQuestionLong(193.4, 62)).toBe(true);
+  });
+  it("sem medida (elemento ainda sem tamanho): fica nos 62 px", () => {
+    expect(tvQuestionLong(0, 62)).toBe(false);
+    expect(tvQuestionLong(Number.NaN, 62)).toBe(false);
+    expect(tvQuestionLong(129, 0)).toBe(false);
+    expect(tvQuestionLong(129, Number.NaN)).toBe(false);
   });
 });

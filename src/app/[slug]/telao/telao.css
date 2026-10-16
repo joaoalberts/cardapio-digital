@@ -303,15 +303,29 @@
   background: conic-gradient(var(--o-lime) var(--tl-ring), rgba(255, 255, 255, 0.16) 0);
   mask: radial-gradient(farthest-side, transparent calc(100% - 5.5px), #000 calc(100% - 5px));
 }
-.tl-poll h2 {
+.tl-poll h2,
+.tl-poll .tl-qm {
   font-family: var(--tl-title);
   font-weight: 400;
   font-size: 62px;
   line-height: 1.04;
-  margin: 10px 0 22px;
   text-wrap: balance;
 }
-/* Pergunta longa: duas linhas menores, para as barras não descerem sobre o aviso do QR. */
+.tl-poll h2 {
+  margin: 10px 0 22px;
+}
+/* Fantasma invisível da pergunta, sempre a 62 px e com a largura do h2: o cliente mede a
+   altura dele e liga .long quando passa de uma linha (useLongQuestion). */
+.tl-poll .tl-qm {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  visibility: hidden;
+  pointer-events: none;
+}
+/* Pergunta que passa de uma linha a 62 px: até duas linhas de 46 px, para as barras não
+   descerem sobre o aviso do QR. */
 .tl-poll h2.long {
   font-size: 46px;
   display: -webkit-box;

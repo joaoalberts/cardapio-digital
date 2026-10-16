@@ -186,6 +186,15 @@ export function tvMode(s: PublicState | null): TvMode {
   return "idle";
 }
 
+// Pergunta do telão: 62 px numa linha; se quebra em mais de uma, passa a 46 px (.long) para
+// as barras não descerem sobre o aviso do QR. Decide pela altura medida a 62 px, não pelo
+// número de letras: a largura muda com a língua, com as letras e com a fonte. Uma linha tem
+// cerca de 1,04 × o tamanho da fonte; duas, 2,08. Sem medida, fica nos 62 px.
+export function tvQuestionLong(height: number, fontPx: number): boolean {
+  if (!(height > 0) || !(fontPx > 0)) return false;
+  return height > fontPx * 1.5;
+}
+
 // A página do telão recarrega sozinha a cada 3 h, nunca no meio de uma enquete aberta.
 export const TV_RELOAD_MS = 3 * 60 * 60_000;
 export function tvReloadDue(loadedAt: number, now: number, pollOpen: boolean): boolean {

@@ -1,10 +1,12 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- logo, capa e fotos dos pratos já vêm no tamanho certo */
 
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type SyntheticEvent } from "react";
+import {
+  Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type SyntheticEvent,
+} from "react";
 import {
   backoff, clockSkew, clockText, houseHighlight, leaderOf, localTime, pollChime, pollTiming, questionText, TV_POLL_MS, tvMode,
-  tvReloadDue,
+  tvQuestionLong, tvReloadDue,
 } from "@/lib/comunidade/client-logic";
 import { ct, ctf, type CmuKey } from "@/lib/comunidade/i18n";
 import { sha256Hex } from "@/lib/comunidade/sha256";
@@ -496,6 +498,35 @@ function useItems(menu: PublicMenu) {
   }, [menu]);
 }
 
+// Pergunta longa (.long, 46 px) quando ela passa de uma linha a 62 px. Mede um fantasma
+// invisível com a mesma largura, sempre a 62 px, para a medida não depender da própria
+// .long. useLayoutEffect decide antes da primeira pintura; o ResizeObserver mede de novo
+// quando a fonte do título termina de carregar e a quebra muda.
+function useLongQuestion(q: string) {
+  const ghost = useRef<HTMLSpanElement>(null);
+  const [long, setLong] = useState(false);
+  useLayoutEffect(() => {
+    const el = ghost.current;
+    if (!el) return;
+    const check = () => setLong(tvQuestionLong(el.offsetHeight, parseFloat(getComputedStyle(el).fontSize)));
+    check();
+    if (typeof ResizeObserver === "function") {
+      const ro = new ResizeObserver(check);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+    // TV sem ResizeObserver: confere de novo quando as fontes terminarem de carregar.
+    let alive = true;
+    void document.fonts?.ready.then(() => {
+      if (alive) check();
+    });
+    return () => {
+      alive = false;
+    };
+  }, [q]);
+  return { ghost, long };
+}
+
 function PollPanel({ poll, lang, menu, seed, skew, paused }: { poll: PublicPoll; lang: string; menu: PublicMenu; seed: number; skew: number; paused: boolean }) {
   const items = useItems(menu);
   // O relógio anda por segundo só com a enquete aberta e a rede no ar (reconectando, congela).
@@ -504,6 +535,7 @@ function PollPanel({ poll, lang, menu, seed, skew, paused }: { poll: PublicPoll;
   const pcts = Object.fromEntries(poll.options.map((o) => [o.id, o.pct]));
   const lead = poll.closed ? (poll.winner ?? leaderOf(pcts)) : leaderOf(pcts);
   const q = questionText(poll, lang);
+  const { ghost, long } = useLongQuestion(q);
   const tag: CmuKey = poll.closed ? "tvClosed" : paused ? "tvPaused" : "tvLive";
 
   // As barras nascem em 0 e crescem até o valor (duas pinturas: a transição precisa do 0).
@@ -535,7 +567,10 @@ function PollPanel({ poll, lang, menu, seed, skew, paused }: { poll: PublicPoll;
           </span>
         )}
       </div>
-      <h2 className={q.length > 30 ? "long" : undefined}>{q}</h2>
+      <h2 className={long ? "long" : undefined}>{q}</h2>
+      <span className="tl-qm" ref={ghost} aria-hidden>
+        {q}
+      </span>
       <div className="tl-bars">
         {poll.options.map((o) => {
           const item = o.item_id ? items.get(o.item_id) : undefined;
