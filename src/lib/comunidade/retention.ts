@@ -3,6 +3,7 @@
 // - tally (funil) com mais de 90 dias;
 // - fotos da casa ocultadas há mais de 7 dias (arquivo e linha); post approved nunca sai;
 // - TVs pendentes (sem paired_at) com o código vencido.
+// Vale para todo restaurante, com a Comunidade ligada ou não (ver runRetention).
 // O plano é puro e testado; a varredura recebe o banco e o armazenamento de fora.
 // Data vazia ou ilegível nunca conta como vencida: na dúvida, a linha fica.
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -57,7 +58,7 @@ export function cronAuth(header: string | null, secret: string | undefined): "ok
 type Where = Record<string, string | number | boolean | null>;
 type RetentionTable = "community_votes" | "community_tally" | "community_posts" | "community_tvs";
 export type RetentionDb = {
-  list<T>(t: RetentionTable | "restaurants", w: Where): Promise<T[]>;
+  list<T>(t: RetentionTable, w: Where): Promise<T[]>;
   removeIds(t: RetentionTable, ids: number[]): Promise<void>;
 };
 export type RetentionDeps = {
@@ -67,20 +68,18 @@ export type RetentionDeps = {
   now?: () => Date;
 };
 export type RetentionReport = {
-  restaurants: number;
   failed: number;
   deleted: { votes: number; tallies: number; posts: number; tvs: number };
 };
 
 type Raw = Record<string, unknown> & { Id: number; id: string };
+const NONE = { votes: [], tallies: [], posts: [], tvs: [] };
 
-// Linhas do restaurante, conferidas de novo aqui além do filtro do banco, com o Id do
-// NocoDB (é por ele que se apaga).
-async function rowsOf<T>(d: RetentionDeps, t: RetentionTable, w: Where & { restaurant_id: string }): Promise<(T & Raw)[]> {
+// Linhas com o uid e o Id do NocoDB (é por ele que se apaga); o resto é descartado.
+async function rowsOf<T>(d: RetentionDeps, t: RetentionTable, w: Where = {}): Promise<(T & Raw)[]> {
   const rows = await d.db.list<Record<string, unknown>>(t, w);
   return rows.filter(
-    (r): r is T & Raw =>
-      r.restaurant_id === w.restaurant_id && typeof r.id === "string" && !!r.id && typeof r.Id === "number" && Number.isInteger(r.Id),
+    (r): r is T & Raw => typeof r.id === "string" && !!r.id && typeof r.Id === "number" && Number.isInteger(r.Id),
   );
 }
 
@@ -89,55 +88,75 @@ const idsOf = (rows: Raw[], uids: string[]) => {
   return rows.filter((r) => gone.has(r.id)).map((r) => r.Id);
 };
 
-async function sweepRestaurant(d: RetentionDeps, rid: string, now: Date): Promise<RetentionReport["deleted"]> {
-  const mine = { restaurant_id: rid };
-  const votes = await rowsOf<VoteRow>(d, "community_votes", mine);
-  const tallies = await rowsOf<TallyRow>(d, "community_tally", mine);
-  const posts = await rowsOf<PostRow>(d, "community_posts", { ...mine, status: "hidden" });
-  const tvs = await rowsOf<TvRow>(d, "community_tvs", mine);
-  const plan = retentionPlan({ votes, tallies, posts, tvs, now });
-
-  // Fotos primeiro: se o NocoDB falhar depois, a linha oculta fica e a próxima rodada tenta
-  // de novo; ao contrário, sobraria um arquivo que ninguém mais acha. Só arquivo da pasta
-  // do restaurante vai para o removeFiles.
-  const files = plan.posts
-    .flatMap((p) => [p.photo_path, p.thumb_path])
-    .filter((p): p is string => typeof p === "string" && !!p && d.ownsFile(rid, p));
-  if (files.length) await d.removeFiles(files);
-
-  const postIds = idsOf(posts, plan.posts.map((p) => p.id));
-  const voteIds = idsOf(votes, plan.votes);
-  const tallyIds = idsOf(tallies, plan.tallies);
-  const tvIds = idsOf(tvs, plan.tvs);
-  if (postIds.length) await d.db.removeIds("community_posts", postIds);
-  if (voteIds.length) await d.db.removeIds("community_votes", voteIds);
-  if (tallyIds.length) await d.db.removeIds("community_tally", tallyIds);
-  if (tvIds.length) await d.db.removeIds("community_tvs", tvIds);
-  return { votes: voteIds.length, tallies: tallyIds.length, posts: postIds.length, tvs: tvIds.length };
+// Votos, tally e TVs: uma consulta pela tabela inteira, o plano e um removeIds (que o
+// nocodb.ts manda em lotes de 100).
+async function sweep<T>(d: RetentionDeps, t: RetentionTable, pick: (rows: (T & Raw)[]) => string[]): Promise<number> {
+  const rows = await rowsOf<T>(d, t);
+  const ids = idsOf(rows, pick(rows));
+  if (ids.length) await d.db.removeIds(t, ids);
+  return ids.length;
 }
 
-// Percorre os restaurantes com a Comunidade ligada, um de cada vez (o NocoDB aceita poucos
-// pedidos por segundo). Um restaurante que falha não para os outros e conta em failed.
-// Nada aqui invalida cache: post oculto, TV pendente e votos antigos não estão na leitura
-// pública.
-export async function runRetention(d: RetentionDeps): Promise<RetentionReport> {
-  const now = d.now?.() ?? new Date();
-  const rests = await d.db.list<Record<string, unknown>>("restaurants", { community_enabled: true });
-  const report: RetentionReport = { restaurants: 0, failed: 0, deleted: { votes: 0, tallies: 0, posts: 0, tvs: 0 } };
-  for (const r of rests) {
-    const rid = r.id;
-    if (typeof rid !== "string" || !UUID.test(rid)) continue;
-    report.restaurants++;
+// Fotos da casa ocultas, agrupadas pelo restaurante da própria linha. Arquivo primeiro: se
+// o NocoDB falhar depois, a linha oculta fica e a próxima rodada tenta de novo; ao
+// contrário, sobraria um arquivo que ninguém mais acha. Só arquivo da pasta do restaurante
+// da linha vai para o removeFiles; restaurant_id que não é uuid não remove arquivo nenhum
+// (com id vazio, o ownsFile aceitaria qualquer caminho começado por "/"), mas a linha sai.
+// Um restaurante cujo armazenamento falha não segura os outros.
+async function sweepPosts(d: RetentionDeps, now: Date, fail: (what: string, e: unknown) => void): Promise<number> {
+  const rows = await rowsOf<PostRow>(d, "community_posts", { status: "hidden" });
+  const gone = new Set(retentionPlan({ ...NONE, posts: rows, now }).posts.map((p) => p.id));
+  const byRestaurant = new Map<string, (PostRow & Raw)[]>();
+  for (const p of rows) {
+    if (!gone.has(p.id)) continue;
+    const rid = typeof p.restaurant_id === "string" ? p.restaurant_id : "";
+    byRestaurant.set(rid, [...(byRestaurant.get(rid) ?? []), p]);
+  }
+  let deleted = 0;
+  for (const [rid, posts] of byRestaurant) {
+    const valid = UUID.test(rid);
     try {
-      const n = await sweepRestaurant(d, rid, now);
-      report.deleted.votes += n.votes;
-      report.deleted.tallies += n.tallies;
-      report.deleted.posts += n.posts;
-      report.deleted.tvs += n.tvs;
+      const files = valid
+        ? posts
+            .flatMap((p) => [p.photo_path, p.thumb_path])
+            .filter((p): p is string => typeof p === "string" && !!p && d.ownsFile(rid, p))
+        : [];
+      if (files.length) await d.removeFiles(files);
+      await d.db.removeIds("community_posts", posts.map((p) => p.Id));
+      deleted += posts.length;
     } catch (e) {
-      report.failed++;
-      console.error(`retenção da Comunidade: restaurante ${rid}:`, e instanceof Error ? e.message : e);
+      fail(`fotos da casa do restaurante ${valid ? rid : "sem id válido"}`, e);
     }
   }
+  return deleted;
+}
+
+// Varre cada tabela da Comunidade inteira, uma vez, sem passar pela lista de restaurantes:
+// o prazo vale para todo dado já coletado, inclusive de restaurante que desligou a
+// Comunidade ou nem existe mais (spec, Privacidade: "o voto é anônimo e apagado em 30
+// dias"). São 4 consultas (mais as páginas de 1.000), qualquer que seja o número de
+// restaurantes, o que cabe no limite de pedidos por segundo do NocoDB. Uma tabela que falha
+// não para as outras e conta em failed. Nada aqui invalida cache: post oculto, TV pendente
+// e votos antigos não estão na leitura pública.
+export async function runRetention(d: RetentionDeps): Promise<RetentionReport> {
+  const now = d.now?.() ?? new Date();
+  const report: RetentionReport = { failed: 0, deleted: { votes: 0, tallies: 0, posts: 0, tvs: 0 } };
+  const fail = (what: string, e: unknown) => {
+    report.failed++;
+    console.error(`retenção da Comunidade: ${what}:`, e instanceof Error ? e.message : e);
+  };
+  const step = async (what: string, key: keyof RetentionReport["deleted"], run: () => Promise<number>) => {
+    try {
+      report.deleted[key] = await run();
+    } catch (e) {
+      fail(what, e);
+    }
+  };
+  await step("votos", "votes", () => sweep<VoteRow>(d, "community_votes", (votes) => retentionPlan({ ...NONE, votes, now }).votes));
+  await step("tally", "tallies", () =>
+    sweep<TallyRow>(d, "community_tally", (tallies) => retentionPlan({ ...NONE, tallies, now }).tallies),
+  );
+  await step("fotos da casa", "posts", () => sweepPosts(d, now, fail));
+  await step("telões pendentes", "tvs", () => sweep<TvRow>(d, "community_tvs", (tvs) => retentionPlan({ ...NONE, tvs, now }).tvs));
   return report;
 }

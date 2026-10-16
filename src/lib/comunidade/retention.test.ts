@@ -153,7 +153,7 @@ describe("retentionPlan: prazos", () => {
 type Where = Record<string, string | number | boolean | null>;
 type Raw = Record<string, unknown>;
 
-function fakeDb(tables: Record<string, Raw[]>, opts: { ignoreWhere?: boolean; failFor?: string } = {}) {
+function fakeDb(tables: Record<string, Raw[]>, opts: { failTable?: string } = {}) {
   let nextId = 1;
   const store: Record<string, Raw[]> = {};
   for (const [t, rows] of Object.entries(tables)) store[t] = rows.map((r) => ({ Id: nextId++, uid: r.id, ...r }));
@@ -163,9 +163,8 @@ function fakeDb(tables: Record<string, Raw[]>, opts: { ignoreWhere?: boolean; fa
   const db: RetentionDb = {
     async list(t, w) {
       lists.push({ t, w });
-      if (opts.failFor && w.restaurant_id === opts.failFor) throw new Error("nocodb GET: 500");
-      const rows = store[t] ?? [];
-      return (opts.ignoreWhere && t !== "restaurants" ? rows : rows.filter((r) => match(r, w))).map((r) => ({ ...r })) as never;
+      if (opts.failTable === t) throw new Error("nocodb GET: 500");
+      return (store[t] ?? []).filter((r) => match(r, w)).map((r) => ({ ...r })) as never;
     },
     async removeIds(t, ids) {
       log.push(`db:${t}:${ids.length}`);
@@ -177,53 +176,79 @@ function fakeDb(tables: Record<string, Raw[]>, opts: { ignoreWhere?: boolean; fa
 }
 
 const restaurant = (id: string, enabled = true): Raw => ({ id, slug: `r-${id.slice(-2)}`, community_enabled: enabled });
+const housePost = (rid: string, hidden_at: string, name: string) =>
+  post("hidden", hidden_at, {
+    restaurant_id: rid,
+    photo_path: `/api/arquivos-locais/${rid}/comunidade/${name}.webp`,
+    thumb_path: `/api/arquivos-locais/${rid}/comunidade/${name}-p.webp`,
+  });
 
-describe("runRetention: varredura por restaurante", () => {
+describe("runRetention: varredura de cada tabela", () => {
   const files = () => {
     const removed: string[][] = [];
-    const log: string[] = [];
     return {
       removed,
-      log,
       removeFiles: async (paths: string[]) => {
         removed.push(paths);
-        log.push(`files:${paths.length}`);
       },
     };
   };
   const ownsFile = (rid: string, p: string) => p.startsWith(`/api/arquivos-locais/${rid}/`);
+  const R3 = U(3);
 
-  it("só percorre restaurantes com community_enabled e apaga só o que o plano manda", async () => {
+  it("apaga o vencido de todo restaurante: Comunidade ligada, desligada ou restaurante que nem existe mais", async () => {
+    // R1 ligada, R2 desligada depois de juntar votos e fotos, R3 sem linha em restaurants.
     const oldVote = vote(ago(31 * DAY));
     const newVote = vote(ago(DAY));
-    const oldTally = tally(ago(91 * DAY));
-    const hidden = post("hidden", ago(8 * DAY));
-    const expired = tv();
-    const paired = tv({ paired_at: ago(DAY), pair_code: null });
     const offVote = vote(ago(400 * DAY), { restaurant_id: R2 });
-    const { db, lists, left } = fakeDb({
+    const orphanVote = vote(ago(31 * DAY), { restaurant_id: R3 });
+    const offTally = tally(ago(91 * DAY), { restaurant_id: R2 });
+    const newTally = tally(ago(DAY));
+    const hidden = housePost(R1, ago(8 * DAY), "a");
+    const offHidden = housePost(R2, ago(8 * DAY), "b");
+    const offApproved = post("approved", null, { restaurant_id: R2, created_at: ago(900 * DAY) });
+    const offExpired = tv({ restaurant_id: R2 });
+    const paired = tv({ paired_at: ago(DAY), pair_code: null });
+    const { db, left } = fakeDb({
       restaurants: [restaurant(R1), restaurant(R2, false)],
-      community_votes: [oldVote, newVote, offVote],
-      community_tally: [oldTally],
-      community_posts: [hidden],
-      community_tvs: [expired, paired],
+      community_votes: [oldVote, newVote, offVote, orphanVote],
+      community_tally: [offTally, newTally],
+      community_posts: [hidden, offHidden, offApproved],
+      community_tvs: [offExpired, paired],
     });
     const f = files();
     const report = await runRetention({ db, removeFiles: f.removeFiles, ownsFile, now: () => NOW });
 
-    expect(lists[0]).toEqual({ t: "restaurants", w: { community_enabled: true } });
-    expect(lists.filter((l) => l.t !== "restaurants").every((l) => l.w.restaurant_id === R1)).toBe(true);
-    expect(left("community_votes")).toEqual([newVote.id, offVote.id]);
-    expect(left("community_tally")).toEqual([]);
-    expect(left("community_posts")).toEqual([]);
+    expect(left("community_votes")).toEqual([newVote.id]);
+    expect(left("community_tally")).toEqual([newTally.id]);
+    expect(left("community_posts")).toEqual([offApproved.id]);
     expect(left("community_tvs")).toEqual([paired.id]);
-    expect(f.removed).toEqual([[hidden.photo_path, hidden.thumb_path]]);
-    expect(report).toEqual({ restaurants: 1, failed: 0, deleted: { votes: 1, tallies: 1, posts: 1, tvs: 1 } });
+    expect(f.removed).toEqual([
+      [hidden.photo_path, hidden.thumb_path],
+      [offHidden.photo_path, offHidden.thumb_path],
+    ]);
+    expect(report).toEqual({ failed: 0, deleted: { votes: 3, tallies: 1, posts: 2, tvs: 1 } });
+  });
+
+  it("uma consulta por tabela, sem passar pelos restaurantes, por mais restaurantes que existam", async () => {
+    const many = Array.from({ length: 30 }, (_, k) => U(200 + k));
+    const { db, lists } = fakeDb({
+      restaurants: many.map((rid) => restaurant(rid)),
+      community_votes: many.map((rid) => vote(ago(31 * DAY), { restaurant_id: rid })),
+    });
+    const report = await runRetention({ db, removeFiles: files().removeFiles, ownsFile, now: () => NOW });
+    expect(lists).toEqual([
+      { t: "community_votes", w: {} },
+      { t: "community_tally", w: {} },
+      { t: "community_posts", w: { status: "hidden" } },
+      { t: "community_tvs", w: {} },
+    ]);
+    expect(report.deleted.votes).toBe(30);
   });
 
   it("apaga a foto e a miniatura antes da linha do post", async () => {
     const hidden = post("hidden", ago(8 * DAY));
-    const { db, log } = fakeDb({ restaurants: [restaurant(R1)], community_posts: [hidden] });
+    const { db, log } = fakeDb({ community_posts: [hidden] });
     const f = files();
     // Um log só, na ordem das chamadas.
     const order: string[] = [];
@@ -240,72 +265,78 @@ describe("runRetention: varredura por restaurante", () => {
     expect(log).toEqual(["db:community_posts:1"]);
   });
 
-  it("arquivo fora da pasta do restaurante não vai para o removeFiles, mas a linha sai", async () => {
+  it("só vai para o removeFiles o arquivo da pasta do restaurante da própria linha, mas a linha sai", async () => {
     const odd = post("hidden", ago(8 * DAY), {
       photo_path: `/api/arquivos-locais/${R2}/comunidade/x.webp`,
       thumb_path: `/api/arquivos-locais/${R1}/comunidade/x-p.webp`,
     });
-    const { db, left } = fakeDb({ restaurants: [restaurant(R1)], community_posts: [odd] });
+    const { db, left } = fakeDb({ community_posts: [odd] });
     const f = files();
     await runRetention({ db, removeFiles: f.removeFiles, ownsFile, now: () => NOW });
     expect(f.removed).toEqual([[odd.thumb_path]]);
     expect(left("community_posts")).toEqual([]);
   });
 
-  it("linha de outro restaurante que escapar do filtro nunca é apagada nem tem arquivo removido", async () => {
-    const mine = vote(ago(31 * DAY));
-    const theirs = vote(ago(31 * DAY), { restaurant_id: R2 });
-    const theirPost = post("hidden", ago(30 * DAY), {
-      restaurant_id: R2,
-      photo_path: `/api/arquivos-locais/${R2}/comunidade/y.webp`,
-      thumb_path: `/api/arquivos-locais/${R2}/comunidade/y-p.webp`,
+  it("post com restaurant_id que não é uuid: a linha sai, nenhum arquivo é removido", async () => {
+    // Com restaurant_id vazio, "/api/arquivos-locais//..." passaria no ownsFile.
+    const blank = post("hidden", ago(8 * DAY), {
+      restaurant_id: "",
+      photo_path: "/api/arquivos-locais//comunidade/x.webp",
+      thumb_path: "/api/arquivos-locais//comunidade/x-p.webp",
     });
-    const { db, left } = fakeDb(
-      { restaurants: [restaurant(R1)], community_votes: [mine, theirs], community_posts: [theirPost] },
-      { ignoreWhere: true },
-    );
+    const junk = post("hidden", ago(8 * DAY), {
+      restaurant_id: "abc,(x)",
+      photo_path: "/api/arquivos-locais/abc,(x)/comunidade/y.webp",
+      thumb_path: "/api/arquivos-locais/abc,(x)/comunidade/y-p.webp",
+    });
+    const { db, left } = fakeDb({ community_posts: [blank, junk] });
     const f = files();
     const report = await runRetention({ db, removeFiles: f.removeFiles, ownsFile, now: () => NOW });
-    expect(left("community_votes")).toEqual([theirs.id]);
-    expect(left("community_posts")).toEqual([theirPost.id]);
     expect(f.removed).toEqual([]);
-    expect(report.deleted).toEqual({ votes: 1, tallies: 0, posts: 0, tvs: 0 });
+    expect(left("community_posts")).toEqual([]);
+    expect(report).toEqual({ failed: 0, deleted: { votes: 0, tallies: 0, posts: 2, tvs: 0 } });
   });
 
-  it("restaurante que falha não para os outros e entra em failed", async () => {
-    const R3 = U(3);
-    const v2 = vote(ago(31 * DAY), { restaurant_id: R3 });
-    const { db, left } = fakeDb({ restaurants: [restaurant(R1), restaurant(R3)], community_votes: [vote(ago(31 * DAY)), v2] }, { failFor: R1 });
+  it("uma tabela que falha não para as outras e conta em failed", async () => {
+    const v = vote(ago(31 * DAY));
+    const t = tally(ago(91 * DAY));
+    const { db, left } = fakeDb({ community_votes: [v], community_tally: [t], community_tvs: [tv()] }, { failTable: "community_votes" });
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const report = await runRetention({ db, removeFiles: files().removeFiles, ownsFile, now: () => NOW });
     spy.mockRestore();
-    expect(report.failed).toBe(1);
-    expect(report.restaurants).toBe(2);
-    expect(report.deleted.votes).toBe(1);
-    expect(left("community_votes")).toHaveLength(1);
-    expect(left("community_votes")).not.toContain(v2.id);
+    expect(report).toEqual({ failed: 1, deleted: { votes: 0, tallies: 1, posts: 0, tvs: 1 } });
+    expect(left("community_votes")).toEqual([v.id]);
+    expect(left("community_tally")).toEqual([]);
   });
 
-  it("restaurante com id que não é uuid é pulado sem consulta", async () => {
-    const { db, lists } = fakeDb({ restaurants: [restaurant("abc,(x)")] });
-    const report = await runRetention({ db, removeFiles: files().removeFiles, ownsFile, now: () => NOW });
-    expect(lists.map((l) => l.t)).toEqual(["restaurants"]);
-    expect(report).toEqual({ restaurants: 0, failed: 0, deleted: { votes: 0, tallies: 0, posts: 0, tvs: 0 } });
+  it("arquivos de um restaurante que falham não seguram os dos outros; a linha dele fica para a próxima rodada", async () => {
+    const mine = housePost(R1, ago(8 * DAY), "a");
+    const theirs = housePost(R2, ago(8 * DAY), "b");
+    const { db, left } = fakeDb({ community_posts: [mine, theirs] });
+    const removeFiles = async (paths: string[]) => {
+      if (paths.some((p) => p.includes(R1))) throw new Error("blob delete: 500");
+    };
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const report = await runRetention({ db, removeFiles, ownsFile, now: () => NOW });
+    spy.mockRestore();
+    expect(left("community_posts")).toEqual([mine.id]);
+    expect(report).toEqual({ failed: 1, deleted: { votes: 0, tallies: 0, posts: 1, tvs: 0 } });
   });
 
   it("sem nada vencido, nenhum removeIds nem removeFiles", async () => {
     const { db, log } = fakeDb({
-      restaurants: [restaurant(R1)],
       community_votes: [vote(ago(DAY))],
       community_posts: [post("approved", null)],
       community_tvs: [tv({ pair_expires_at: noco(now + MIN) })],
     });
     const f = files();
-    await runRetention({ db, removeFiles: f.removeFiles, ownsFile, now: () => NOW });
+    const report = await runRetention({ db, removeFiles: f.removeFiles, ownsFile, now: () => NOW });
     expect(log).toEqual([]);
     expect(f.removed).toEqual([]);
+    expect(report).toEqual({ failed: 0, deleted: { votes: 0, tallies: 0, posts: 0, tvs: 0 } });
   });
 });
+
 
 describe("cronAuth", () => {
   it("sem CRON_SECRET (ou vazia) nunca roda aberta", () => {
@@ -347,7 +378,7 @@ describe("GET /api/cron/comunidade", () => {
 
   beforeEach(() => {
     h.list.mockReset();
-    h.list.mockImplementation(async (t: string) => (t === "restaurants" ? [restaurant(R1)] : []));
+    h.list.mockImplementation(async () => []);
     h.removeIds.mockClear();
     h.removeFiles.mockClear();
   });
@@ -383,24 +414,25 @@ describe("GET /api/cron/comunidade", () => {
     expect(h.list).not.toHaveBeenCalled();
   });
 
-  it("senha certa: varre, apaga e devolve só os números", async () => {
+  it("senha certa: varre, apaga (mesmo de restaurante com a Comunidade desligada) e devolve só os números", async () => {
     vi.stubEnv("CRON_SECRET", SECRET);
     vi.stubEnv("COMMUNITY_OFF", "");
-    const old = { Id: 7, ...vote(ago(31 * DAY)) };
-    h.list.mockImplementation(async (t: string) => (t === "restaurants" ? [restaurant(R1)] : t === "community_votes" ? [old] : []));
+    const old = { Id: 7, ...vote(ago(31 * DAY), { restaurant_id: R2 }) };
+    h.list.mockImplementation(async (t: string) => (t === "community_votes" ? [old] : []));
     const res = await call(`Bearer ${SECRET}`);
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
-    expect(await res.json()).toEqual({ ok: true, restaurants: 1, failed: 0, deleted: { votes: 1, tallies: 0, posts: 0, tvs: 0 } });
+    expect(await res.json()).toEqual({ ok: true, failed: 0, deleted: { votes: 1, tallies: 0, posts: 0, tvs: 0 } });
     expect(h.removeIds).toHaveBeenCalledWith("community_votes", [7]);
+    expect(h.list.mock.calls.map(([t]) => t)).not.toContain("restaurants");
   });
 
-  it("falha num restaurante ou na lista de restaurantes: 500", async () => {
+  it("falha numa tabela ou em todas: 500 com a contagem", async () => {
     vi.stubEnv("CRON_SECRET", SECRET);
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     h.list.mockImplementation(async (t: string) => {
-      if (t === "restaurants") return [restaurant(R1)];
-      throw new Error("nocodb GET: 500");
+      if (t === "community_votes") throw new Error("nocodb GET: 500");
+      return [];
     });
     const one = await call(`Bearer ${SECRET}`);
     expect(one.status).toBe(500);
@@ -408,7 +440,7 @@ describe("GET /api/cron/comunidade", () => {
     h.list.mockRejectedValue(new Error("nocodb GET: 500"));
     const all = await call(`Bearer ${SECRET}`);
     expect(all.status).toBe(500);
-    expect(await all.json()).toEqual({ ok: false });
+    expect(await all.json()).toEqual({ ok: false, failed: 4, deleted: { votes: 0, tallies: 0, posts: 0, tvs: 0 } });
     spy.mockRestore();
   });
 });
