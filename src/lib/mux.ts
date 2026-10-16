@@ -8,7 +8,7 @@ const API = process.env.MUX_API_BASE ?? "https://api.mux.com/video/v1"; // base 
 
 export const muxEnabled = () => !!(process.env.MUX_TOKEN_ID && process.env.MUX_TOKEN_SECRET);
 
-async function mux<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
+export async function muxRequest<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
   const auth = Buffer.from(`${process.env.MUX_TOKEN_ID}:${process.env.MUX_TOKEN_SECRET}`).toString("base64");
   const res = await fetch(`${API}${path}`, {
     method: init?.method ?? "GET",
@@ -45,7 +45,7 @@ export async function createUpload(origin: string, passthrough: string) {
   let last: unknown;
   for (const [q, mp4] of tries) {
     try {
-      return await mux<Upload>("/uploads", { method: "POST", body: settings(q, mp4) });
+      return await muxRequest<Upload>("/uploads", { method: "POST", body: settings(q, mp4) });
     } catch (e) {
       last = e;
       // Chave errada ou sem permissão: não adianta tentar outra qualidade.
@@ -79,10 +79,10 @@ export type VideoState =
   | { status: "failed" };
 
 export async function videoState(uploadId: string): Promise<VideoState> {
-  const up = await mux<{ status: string; asset_id?: string }>(`/uploads/${uploadId}`);
+  const up = await muxRequest<{ status: string; asset_id?: string }>(`/uploads/${uploadId}`);
   if (["errored", "cancelled", "timed_out"].includes(up.status)) return { status: "failed" };
   if (!up.asset_id) return { status: "processing" };
-  const asset = await mux<Asset>(`/assets/${up.asset_id}`);
+  const asset = await muxRequest<Asset>(`/assets/${up.asset_id}`);
   if (asset.status === "errored") return { status: "failed" };
   const pb = asset.playback_ids?.find((p) => p.policy === "public");
   if (asset.status !== "ready" || !pb) return { status: "processing", assetId: up.asset_id };
@@ -90,7 +90,7 @@ export async function videoState(uploadId: string): Promise<VideoState> {
   let mp4 = found.mp4;
   // Vídeo enviado antes do MP4 leve existir (ou conta que não aceitou no envio): pede agora.
   if (found.missing) {
-    mp4 = await mux(`/assets/${up.asset_id}/static-renditions`, { method: "POST", body: { resolution: MP4_RES } }).then(
+    mp4 = await muxRequest(`/assets/${up.asset_id}/static-renditions`, { method: "POST", body: { resolution: MP4_RES } }).then(
       () => null,
       () => "",
     );
@@ -99,5 +99,5 @@ export async function videoState(uploadId: string): Promise<VideoState> {
 }
 
 export async function deleteAsset(assetId: string) {
-  await mux(`/assets/${assetId}`, { method: "DELETE" }).catch(() => {});
+  await muxRequest(`/assets/${assetId}`, { method: "DELETE" }).catch(() => {});
 }
