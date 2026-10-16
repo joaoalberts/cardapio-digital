@@ -16,8 +16,9 @@ import { useComunidade } from "./provider";
 
 // Palco da casa (ficha: telas 06 a 10, 13 e 14). Cartão da casa "ao vivo agora" (com o selo
 // "no telão" quando há telão), a enquete com voto em 1 toque e as barras em % depois, o tempo
-// com anel; encerrada, a vencedora com "Pedir também" (sem votos, o destaque da casa); sem
-// enquete, a próxima e o destaque. Quem não tem mesa vê o resultado e o aviso do QR da mesa.
+// com anel; encerrada, a vencedora, com "Pedir também" só quando ligada a um prato (sem
+// votos, o destaque da casa); sem enquete, a próxima e o destaque. Quem não tem mesa vê o
+// resultado e o aviso do QR da mesa.
 
 const TIP_KEY = "cmu-dica-vista";
 

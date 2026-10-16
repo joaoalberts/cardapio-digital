@@ -86,9 +86,12 @@ describe("houseHighlight", () => {
 });
 
 describe("buyState (Foco 3: prato removido não quebra)", () => {
-  const on = { enabled: true, pick: false, inCart: 0 };
+  const on = { linked: true, enabled: true, pick: false, inCart: 0 };
   it("prato que não está mais no cardápio → indisponível", () => {
     expect(buyState(undefined, on)).toBe("unavailable");
+  });
+  it("sem prato ligado (opção da enquete só com o texto da casa) → some, não vira indisponível", () => {
+    expect(buyState(undefined, { ...on, linked: false })).toBe("hidden");
   });
   it("preço escondido, pedido desligado ou meio a meio em curso → some", () => {
     expect(buyState(item("a", { hide_price: true }), on)).toBe("hidden");

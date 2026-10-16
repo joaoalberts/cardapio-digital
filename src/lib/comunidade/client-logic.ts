@@ -42,9 +42,14 @@ export function houseHighlight(menu: PublicMenu, now: Date): MenuItem | null {
 export type BuyState = "hidden" | "unavailable" | "in_cart" | "buy";
 
 // Mesma regra do "Pedir" do story: some sem pedido ligado (sem mesa), com preço escondido ou
-// no meio da escolha da outra metade. Prato que saiu do cardápio vira "indisponível".
-export function buyState(item: MenuItem | undefined, o: { enabled: boolean; pick: boolean; inCart: number }): BuyState {
-  if (!o.enabled || o.pick) return "hidden";
+// no meio da escolha da outra metade. linked = há um prato ligado (opção da enquete só com o
+// texto da casa, como no modelo Música, não tem): sem prato ligado, o botão some. Prato
+// ligado que saiu do cardápio vira "indisponível".
+export function buyState(
+  item: MenuItem | undefined,
+  o: { linked: boolean; enabled: boolean; pick: boolean; inCart: number },
+): BuyState {
+  if (!o.linked || !o.enabled || o.pick) return "hidden";
   if (!item) return "unavailable";
   if (item.hide_price) return "hidden";
   return o.inCart > 0 ? "in_cart" : "buy";

@@ -15,6 +15,8 @@ import { useComunidade } from "./provider";
 // fecha a camada e abre a folha do prato, que leva a origem até o pedido.
 // source = de onde veio o toque (enquete ou post). Sem source (destaque da casa sem enquete
 // nem post), a linha entra sem origem: não há o que atribuir.
+// itemId null = nada ligado (opção da enquete só com o texto da casa): o botão some. O
+// "indisponível" desligado fica só para um prato ligado que saiu do cardápio.
 
 export type BuySource = { kind: "palco" | "mural"; ref: string } | null;
 
@@ -23,7 +25,7 @@ export function BuyButton({ itemId, source, big = false }: { itemId: string | nu
   const c = useComunidade();
   const btn = useRef<HTMLButtonElement>(null);
   const item = itemId ? o.itemById(itemId) : undefined;
-  const st = buyState(item, { enabled: o.enabled, pick: !!o.pick, inCart: item ? o.inCart(item.id) : 0 });
+  const st = buyState(item, { linked: !!itemId, enabled: o.enabled, pick: !!o.pick, inCart: item ? o.inCart(item.id) : 0 });
   if (st === "hidden") return null;
   const L = o.lang;
   const cls = `cmu-also${big ? " big" : ""}`;
