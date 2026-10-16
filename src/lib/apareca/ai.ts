@@ -5,18 +5,24 @@ import type { AparecaHead } from "./types";
 // para a TV. Desligada por padrão: só liga com o interruptor do restaurante (apareca_ai_allowed),
 // a chave e sem o desligamento geral; a ANTHROPIC_API_KEY das traduções sozinha não liga nada.
 // Qualquer erro, prazo ou resposta fora do formato lança: quem chama manda o vídeo para a equipe.
-// Formato da chamada (Messages API, imagem com source {type: "url"}) e o id do modelo conferidos
-// em platform.claude.com/docs (vision e models/overview) em 16/10/2026: claude-haiku-4-5 é válido.
+// Formato da chamada (Messages API, imagem com source {type: "url"}) e o modelo conferidos em
+// platform.claude.com/docs (vision, models/haiku-5-5 e o guia de migração) em 16/10/2026:
+// claude-haiku-5-5 existe e tem pensamento adaptativo ligado por padrão (esforço padrão medium);
+// o pensamento conta no max_tokens, então a chamada pede esforço "low" e deixa folga no max_tokens
+// para o texto não sair vazio. Os Haiku 4.x não aceitam effort: para eles, o campo não vai.
 
 export const AI_TIMEOUT_MS = 30_000;
-export const AI_FRAMES_S = [0.5, 3, 5.5];
-export const AI_MODEL_DEFAULT = "claude-haiku-4-5";
+// Um quadro por segundo do clipe de 6 s (decisão do controlador na correção 1 da T9); quem chama
+// limita cada um à duração real do vídeo.
+export const AI_FRAMES_S = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
+export const AI_MODEL_DEFAULT = "claude-haiku-5-5";
+const AI_MAX_TOKENS = 2_000; // pensamento + JSON curto
 const API = "https://api.anthropic.com/v1/messages";
 const REASON_MAX = 500;
 
 export const AI_RULES = [
   "Você modera vídeos de 6 segundos que clientes de um restaurante enviam para passar na TV do salão,",
-  "vista por todos, inclusive crianças. Você recebe 3 quadros do mesmo vídeo.",
+  "vista por todos, inclusive crianças. Você recebe quadros do mesmo vídeo, um por segundo.",
   "Reprove se qualquer quadro tiver: nudez ou conteúdo sexual; gestos obscenos; violência;",
   "armas; drogas ou seu uso; discurso de ódio ou símbolos de ódio; texto ofensivo escrito na imagem;",
   "menores de idade sem contexto (sozinhos, sem um adulto ou um contexto familiar no restaurante).",
@@ -50,6 +56,27 @@ export function parseVerdict(text: string): Verdict | null {
   return { aprovado, motivo: motivo.trim().slice(0, REASON_MAX) };
 }
 
+// Modelos sem o parâmetro effort (Haiku 4.x e anteriores, Claude 3): o campo daria 400.
+const takesEffort = (model: string) => !/^claude-(haiku-4|3)/.test(model);
+
+function requestBody(frames: string[], model: string) {
+  return {
+    model,
+    max_tokens: AI_MAX_TOKENS,
+    ...(takesEffort(model) ? { output_config: { effort: "low" } } : {}),
+    system: AI_RULES,
+    messages: [
+      {
+        role: "user",
+        content: [
+          ...frames.map((url) => ({ type: "image", source: { type: "url", url } })),
+          { type: "text", text: `Estes são ${frames.length} quadros do vídeo. Pode passar na TV?` },
+        ],
+      },
+    ],
+  };
+}
+
 export async function moderateFrames(
   frames: string[],
   o: { key: string; model: string; fetch?: typeof fetch; timeoutMs?: number },
@@ -68,20 +95,7 @@ export async function moderateFrames(
     const res = await (o.fetch ?? fetch)(API, {
       method: "POST",
       headers: { "x-api-key": o.key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({
-        model: o.model,
-        max_tokens: 300,
-        system: AI_RULES,
-        messages: [
-          {
-            role: "user",
-            content: [
-              ...frames.map((url) => ({ type: "image", source: { type: "url", url } })),
-              { type: "text", text: "Estes são os 3 quadros do vídeo. Pode passar na TV?" },
-            ],
-          },
-        ],
-      }),
+      body: JSON.stringify(requestBody(frames, o.model)),
       signal: ctrl.signal,
     });
     if (!res.ok) throw new Error(`ia ${res.status}`);

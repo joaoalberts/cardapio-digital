@@ -15,7 +15,7 @@ const T0 = new Date("2026-10-16T22:00:00.000Z");
 describe("onAssetReady", () => {
   it("Foco 1: 30 s → rejected com deleteAsset e motivo interno; 6,4 s → pending", () => {
     expect(onAssetReady({ duration_s: 30 }, "manual", false)).toEqual({
-      status: "rejected", by: "ia", reason: "duração acima de 7 s", deleteAsset: true,
+      status: "rejected", by: null, reason: "duração acima de 7 s", deleteAsset: true,
     });
     expect(onAssetReady({ duration_s: 6.4 }, "manual", false)).toEqual({ status: "pending" });
   });
@@ -25,8 +25,13 @@ describe("onAssetReady", () => {
     }
     expect(onAssetReady({ duration_s: 7 }, "manual", false)).toEqual({ status: "pending" });
   });
-  it("duração inválida (NaN, infinita) reprova", () => {
-    expect(onAssetReady({ duration_s: Number.NaN }, "manual", false).status).toBe("rejected");
+  it("item 6: duração 0 ou desconhecida → pending (equipe), nunca ai_review", () => {
+    for (const duration_s of [0, -1, Number.NaN]) {
+      expect(onAssetReady({ duration_s }, "automatico", true)).toEqual({ status: "pending" });
+      expect(onAssetReady({ duration_s }, "hibrido", true)).toEqual({ status: "pending" });
+    }
+  });
+  it("duração infinita reprova", () => {
     expect(onAssetReady({ duration_s: Number.POSITIVE_INFINITY }, "automatico", true).status).toBe("rejected");
   });
   it("híbrido/automático sem IA → pending; com IA → ai_review; manual com IA → pending", () => {
@@ -65,10 +70,11 @@ describe("applyVerdict", () => {
 
 describe("resolveStuck", () => {
   const at = (ms: number) => new Date(T0.getTime() + ms);
-  it("ai_review há 31 s → pending; há 29 s → null", () => {
+  it("item 5: prazo da IA + 15 s: ai_review há 46 s → pending; há 44 s (veredito ainda pode chegar) → null", () => {
     const v = { status: "ai_review" as const, decided_at: T0.toISOString() };
-    expect(resolveStuck(v, at(31_000))).toBe("pending");
-    expect(resolveStuck(v, at(29_000))).toBeNull();
+    expect(resolveStuck(v, at(46_000))).toBe("pending");
+    expect(resolveStuck(v, at(44_000))).toBeNull();
+    expect(resolveStuck(v, at(31_000))).toBeNull();
   });
   it("ai_review sem carimbo (ou inválido) → pending", () => {
     expect(resolveStuck({ status: "ai_review", decided_at: null }, T0)).toBe("pending");
@@ -134,10 +140,15 @@ function mk(fetchImpl: () => Promise<Response>, over: Partial<ModerationDeps> = 
 const say = (text: string) => async () => new Response(JSON.stringify({ content: [{ type: "text", text }] }));
 const row = () => rows[0] as unknown as VideoRow;
 
+const applyRows = async (_t: string, ps: Row[]) => {
+  for (const p of ps) Object.assign(rows.find((x) => x.Id === p.Id) ?? {}, p);
+};
+
 beforeEach(() => {
   rows = [];
   now = T0;
   vi.clearAllMocks();
+  db.updateRows.mockImplementation(applyRows);
 });
 
 describe("runModeration", () => {
@@ -175,8 +186,8 @@ describe("runModeration", () => {
     expect(deleteAsset).toHaveBeenCalledWith("asset1");
     const body = JSON.parse(String((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body));
     const urls = body.messages[0].content.filter((c: { type: string }) => c.type === "image").map((c: { source: { url: string } }) => c.source.url);
-    expect(urls).toHaveLength(3);
-    for (const [k, t] of [0.5, 3, 5.5].entries()) expect(urls[k]).toContain(`/pb1/thumbnail.jpg?time=${t}`);
+    expect(urls).toHaveLength(6);
+    for (const [k, t] of [0.5, 1.5, 2.5, 3.5, 4.5, 5.5].entries()) expect(urls[k]).toContain(`/pb1/thumbnail.jpg?time=${t}&`);
   });
 
   it("apagar o asset falhou: a linha continua rejected (a retenção apaga depois)", async () => {
@@ -257,14 +268,133 @@ describe("runModeration", () => {
     expect(row().status).toBe("approved");
   });
 
-  it("ai_review já parado há mais de 30 s → pending sem chamar a IA", async () => {
+  it("ai_review já parado há mais de 45 s → pending sem chamar a IA", async () => {
     const v = vrow();
     rows = [{ ...v }];
-    now = new Date(T0.getTime() + 31_000);
+    now = new Date(T0.getTime() + 46_000);
     const { d, fetch } = mk(say('{"aprovado":true,"motivo":""}'));
     await runModeration(d, v, mkHead());
     expect(fetch).not.toHaveBeenCalled();
     expect(row().status).toBe("pending");
+  });
+
+  it("item 3: vídeo curto usa os quadros que couberem (até duração − 0,2 s), no mínimo 1", async () => {
+    for (const [ms, want] of [
+      [2_000, [0.5, 1.5, 1.8]],
+      [5_000, [0.5, 1.5, 2.5, 3.5, 4.5, 4.8]],
+      [6_400, [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]],
+      [300, [0.1]],
+      [100, [0]],
+    ] as [number, number[]][]) {
+      const v = vrow({ duration_ms: ms });
+      rows = [{ ...v }];
+      const { d, fetch } = mk(say('{"aprovado":true,"motivo":""}'));
+      await runModeration(d, v, mkHead());
+      const body = JSON.parse(String((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body));
+      const times = body.messages[0].content
+        .filter((c: { type: string }) => c.type === "image")
+        .map((c: { source: { url: string } }) => Number(new URL(c.source.url).searchParams.get("time")));
+      expect(times, `${ms} ms`).toEqual(want);
+    }
+  });
+
+  it("item 6: duração 0 ou desconhecida → pending sem chamar a IA", async () => {
+    for (const duration_ms of [0, null]) {
+      const v = vrow({ duration_ms });
+      rows = [{ ...v }];
+      const { d, fetch } = mk(say('{"aprovado":true,"motivo":""}'));
+      await runModeration(d, v, mkHead());
+      expect(fetch).not.toHaveBeenCalled();
+      expect(row().status).toBe("pending");
+    }
+  });
+
+  it("item 1: o restaurante virou manual durante a chamada → o aprovado da IA termina pending", async () => {
+    const v = vrow();
+    rows = [{ ...v }];
+    const freshHead = vi.fn(async () => mkHead({ mode: "manual" }));
+    const { d } = mk(say('{"aprovado":true,"motivo":""}'), { freshHead });
+    await runModeration(d, v, mkHead({ mode: "automatico" }));
+    expect(freshHead).toHaveBeenCalledWith(RID);
+    expect(row()).toMatchObject({ status: "pending", decided_by: null });
+  });
+
+  it("item 1: IA desligada no restaurante durante a chamada, ou leitura falhou → pending", async () => {
+    for (const freshHead of [
+      vi.fn(async () => mkHead({}, { ai_allowed: false })),
+      vi.fn(async () => null),
+      vi.fn(async () => {
+        throw new Error("nocodb 500");
+      }),
+    ]) {
+      const v = vrow();
+      rows = [{ ...v }];
+      const { d, deleteAsset } = mk(say('{"aprovado":false,"motivo":"arma"}'), { freshHead });
+      await runModeration(d, v, mkHead({ mode: "automatico" }));
+      expect(row()).toMatchObject({ status: "pending", decided_by: null });
+      expect(deleteAsset).not.toHaveBeenCalled();
+    }
+  });
+
+  it("item 1: híbrido virou automático durante a chamada → o aprovado vale como automático", async () => {
+    const v = vrow();
+    rows = [{ ...v }];
+    const { d } = mk(say('{"aprovado":true,"motivo":""}'), { freshHead: async () => mkHead({ mode: "automatico" }) });
+    await runModeration(d, v, mkHead({ mode: "hibrido" }));
+    expect(row()).toMatchObject({ status: "approved", decided_by: "ia" });
+  });
+
+  it("item 4: a equipe reprova entre a releitura e a gravação da IA → a reprovação da equipe prevalece", async () => {
+    const v = vrow();
+    rows = [{ ...v }];
+    const { d, deleteAsset } = mk(say('{"aprovado":true,"motivo":""}'));
+    const teamAt = new Date(T0.getTime() + 5_000).toISOString();
+    // O PATCH da equipe chega ao banco logo depois do da IA (corrida entre os dois pedidos).
+    db.updateRows.mockImplementation(async (_t: string, ps: Row[]) => {
+      for (const p of ps) Object.assign(rows.find((x) => x.Id === p.Id) ?? {}, p);
+      if (ps[0]?.status === "approved" && ps[0]?.decided_by === "ia") {
+        Object.assign(rows[0], { status: "rejected", decided_by: "equipe", decided_at: teamAt, ai_reason: null });
+      }
+    });
+    now = new Date(T0.getTime() + 1_000);
+    await runModeration(d, v, mkHead());
+    expect(row()).toMatchObject({ status: "rejected", decided_by: "equipe", decided_at: teamAt });
+    const last = db.updateRows.mock.calls.at(-1)?.[1] as Row[];
+    expect(last[0]).toMatchObject({ status: "rejected", decided_by: "equipe", decided_at: teamAt }); // regravado
+    expect(deleteAsset).not.toHaveBeenCalled(); // a equipe apaga pelo painel
+  });
+
+  it("item 4: a IA reprova e a equipe aprova no meio → fica aprovado e o asset não é apagado", async () => {
+    const v = vrow();
+    rows = [{ ...v }];
+    const { d, deleteAsset } = mk(say('{"aprovado":false,"motivo":"arma"}'));
+    const teamAt = new Date(T0.getTime() + 5_000).toISOString();
+    db.updateRows.mockImplementation(async (_t: string, ps: Row[]) => {
+      for (const p of ps) Object.assign(rows.find((x) => x.Id === p.Id) ?? {}, p);
+      if (ps[0]?.status === "rejected" && ps[0]?.decided_by === "ia") {
+        Object.assign(rows[0], { status: "approved", decided_by: "equipe", decided_at: teamAt, ai_reason: null });
+      }
+    });
+    await runModeration(d, v, mkHead());
+    expect(row()).toMatchObject({ status: "approved", decided_by: "equipe" });
+    expect(deleteAsset).not.toHaveBeenCalled();
+  });
+
+  it("item 4: outra gravação da IA aprovou por cima da reprovação → volta para rejected", async () => {
+    const v = vrow();
+    rows = [{ ...v }];
+    const { d, deleteAsset } = mk(say('{"aprovado":false,"motivo":"arma"}'));
+    let once = true;
+    db.updateRows.mockImplementation(async (_t: string, ps: Row[]) => {
+      for (const p of ps) Object.assign(rows.find((x) => x.Id === p.Id) ?? {}, p);
+      if (once && ps[0]?.status === "rejected") {
+        once = false;
+        Object.assign(rows[0], { status: "approved", decided_by: "ia", ai_reason: null }); // instância atrasada
+      }
+    });
+    await runModeration(d, v, mkHead());
+    expect(row()).toMatchObject({ status: "rejected", decided_by: "ia", ai_reason: "arma" });
+    expect(deleteAsset).toHaveBeenCalledWith("asset1");
   });
 
   it("sem playback id → pending sem chamar a IA", async () => {

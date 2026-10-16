@@ -1,11 +1,13 @@
 // Chamada à IA do Apareça sem rede: a IA só liga com o interruptor do restaurante E a chave E sem
 // o desligamento geral; resposta fora do formato vira erro (Foco 4); a chamada leva as 3 imagens
 // por URL, o modelo pedido e as regras no system; erro da API e demora viram exceção.
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { AI_FRAMES_S, AI_RULES, AI_TIMEOUT_MS, aiAvailable, moderateFrames, parseVerdict } from "./ai";
+import { AI_FRAMES_S, AI_MODEL_DEFAULT, AI_RULES, AI_TIMEOUT_MS, aiAvailable, aiModel, moderateFrames, parseVerdict } from "./ai";
+
+afterEach(() => vi.unstubAllEnvs());
 
 const FRAMES = ["https://image.mux.com/pb/thumbnail.jpg?time=0.5", "https://image.mux.com/pb/thumbnail.jpg?time=3", "https://image.mux.com/pb/thumbnail.jpg?time=5.5"];
 
@@ -14,12 +16,22 @@ function reply(text: string, status = 200) {
 }
 
 describe("constantes", () => {
-  it("prazo de 30 s, quadros em 0,5 s, 3 s e 5,5 s e regras com os temas da spec", () => {
+  it("prazo de 30 s, um quadro por segundo (0,5 a 5,5 s) e regras com os temas da spec", () => {
     expect(AI_TIMEOUT_MS).toBe(30_000);
-    expect(AI_FRAMES_S).toEqual([0.5, 3, 5.5]);
+    expect(AI_FRAMES_S).toEqual([0.5, 1.5, 2.5, 3.5, 4.5, 5.5]);
     for (const t of ["nudez", "gestos obscenos", "violência", "armas", "drogas", "discurso de ódio", "texto ofensivo", "menores"]) {
       expect(AI_RULES.toLowerCase()).toContain(t);
     }
+  });
+});
+
+describe("aiModel", () => {
+  it("padrão claude-haiku-5-5; APARECA_AI_MODEL troca; vazio cai no padrão", () => {
+    vi.stubEnv("APARECA_AI_MODEL", "");
+    expect(AI_MODEL_DEFAULT).toBe("claude-haiku-5-5");
+    expect(aiModel()).toBe("claude-haiku-5-5");
+    vi.stubEnv("APARECA_AI_MODEL", "claude-haiku-4-5");
+    expect(aiModel()).toBe("claude-haiku-4-5");
   });
 });
 
@@ -77,6 +89,38 @@ describe("moderateFrames", () => {
     expect(body.system).toBe(AI_RULES);
     const images = body.messages[0].content.filter((c: { type: string }) => c.type === "image");
     expect(images).toEqual(FRAMES.map((url) => ({ type: "image", source: { type: "url", url } })));
+  });
+
+  it("corpo para o Haiku 5.5: esforço low, max_tokens com folga para o pensamento, sem amostragem nem prefill", async () => {
+    const fetch = vi.fn(async () => reply('{"aprovado":true,"motivo":""}'));
+    await moderateFrames(FRAMES, { key: "k", model: "claude-haiku-5-5", fetch: fetch as unknown as typeof globalThis.fetch });
+    const body = JSON.parse(String((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body));
+    expect(body.model).toBe("claude-haiku-5-5");
+    expect(body.output_config).toEqual({ effort: "low" });
+    expect(body.max_tokens).toBeGreaterThanOrEqual(1_024);
+    expect(body).not.toHaveProperty("thinking");
+    for (const k of ["temperature", "top_p", "top_k"]) expect(body).not.toHaveProperty(k);
+    expect(body.messages.at(-1).role).toBe("user");
+  });
+
+  it("corpo para o Haiku 4.5 (via APARECA_AI_MODEL): sem output_config, que daria 400", async () => {
+    const fetch = vi.fn(async () => reply('{"aprovado":true,"motivo":""}'));
+    await moderateFrames(FRAMES, { key: "k", model: "claude-haiku-4-5", fetch: fetch as unknown as typeof globalThis.fetch });
+    const body = JSON.parse(String((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body));
+    expect(body.model).toBe("claude-haiku-4-5");
+    expect(body).not.toHaveProperty("output_config");
+  });
+
+  it("resposta com bloco de pensamento antes do texto: lê o bloco de texto", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({
+      content: [{ type: "thinking", thinking: "", signature: "s" }, { type: "text", text: '{"aprovado":false,"motivo":"arma"}' }],
+    })));
+    expect(await moderateFrames(FRAMES, { key: "k", model: "m", fetch: fetch as unknown as typeof globalThis.fetch })).toEqual({ aprovado: false, motivo: "arma" });
+  });
+
+  it("só pensamento, sem texto (max_tokens no meio do pensamento) → lança", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ content: [{ type: "thinking", thinking: "" }], stop_reason: "max_tokens" })));
+    await expect(moderateFrames(FRAMES, { key: "k", model: "m", fetch: fetch as unknown as typeof globalThis.fetch })).rejects.toThrow();
   });
 
   it("529 da API → lança", async () => {

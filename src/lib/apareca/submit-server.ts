@@ -8,7 +8,7 @@ import { estimateUsd } from "./cost";
 import { runModeration, type ModerationDeps } from "./moderation";
 import { assetInfo, createAparecaUpload, deleteMuxAsset } from "./mux-video";
 import { aparecaOff } from "./off";
-import { forgetSnapshot, getAparecaHead, getHouseVideos, monthUsage, type StoreDeps } from "./store";
+import { forgetSnapshot, getAparecaHead, getHouseVideos, monthUsage, readAparecaHeadFresh, type StoreDeps } from "./store";
 import type { SubmitDeps } from "./submit";
 
 // Dependências reais das rotas do cliente: NocoDB, Mux, cache do Next e after() para o que
@@ -19,7 +19,15 @@ const aiKey = () => process.env.ANTHROPIC_API_KEY || undefined;
 const aiOn = (head: Parameters<typeof aiAvailable>[0]) => aiAvailable(head, { key: aiKey(), off: aparecaOff() });
 
 function moderationDeps(): ModerationDeps {
-  return { db, deleteAsset: deleteMuxAsset, key: aiKey(), model: aiModel(), off: aparecaOff, forget: forgetSnapshot };
+  return {
+    db,
+    deleteAsset: deleteMuxAsset,
+    key: aiKey(),
+    model: aiModel(),
+    off: aparecaOff,
+    forget: forgetSnapshot,
+    freshHead: readAparecaHeadFresh,
+  };
 }
 
 // Mês do teto no fuso de Brasília (os restaurantes são daqui; o tally usa o fuso de cada casa).

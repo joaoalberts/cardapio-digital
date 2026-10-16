@@ -69,6 +69,12 @@ export async function getAparecaHead(slug: string): Promise<AparecaHead | null> 
   return toAparecaHead(await nocodb.first<Raw>("restaurants", { slug: s }));
 }
 
+// Cabeça lida direto do banco, sem cache, pelo id do restaurante: a moderação da IA confere o modo
+// e o interruptor de agora antes de gravar o veredito (a cabeça em cache pode ter até 60 s).
+export async function readAparecaHeadFresh(rid: string): Promise<AparecaHead | null> {
+  return toAparecaHead(await nocodb.first<Raw>("restaurants", { uid: rid }));
+}
+
 // Todos os institucionais da casa (inclusive inativos e em preparo), por posição: quem usa filtra.
 export async function getHouseVideos(rid: string): Promise<HouseVideoRow[]> {
   "use cache";

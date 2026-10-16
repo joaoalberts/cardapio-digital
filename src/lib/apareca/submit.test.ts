@@ -9,6 +9,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
 vi.mock("@/lib/db/nocodb", () => ({ list: vi.fn(), first: vi.fn(), insert: vi.fn(), removeIds: vi.fn() }));
 
+import { purgePlan } from "./retention";
 import { forgetSnapshot } from "./store";
 import {
   countDownload, downloadTarget, myStatus, publicHead, startSubmission, type SubmitDeps, type SubmitLimits,
@@ -413,7 +414,10 @@ describe("myStatus", () => {
     const r = await myStatus(d, SLUG, ask(v));
     await runDeferred();
     expect(r).toEqual({ state: "not_shown", position: null, eta_ms: null, first_shown_at: null, download: null });
-    expect(videos()[0]).toMatchObject({ status: "rejected", decided_by: "ia", ai_reason: "duração acima de 7 s", mux_asset_id: "assetLong" });
+    expect(videos()[0]).toMatchObject({ status: "rejected", decided_by: null, ai_reason: "duração acima de 7 s", mux_asset_id: "assetLong" });
+    // Item 2 da correção 1: regra do sistema não conta como reprovação da IA no relatório.
+    const { tally } = purgePlan([{ ...videos()[0], expires_at: "2026-10-16T21:00:00.000Z" }], T0, () => "America/Sao_Paulo");
+    expect(tally[0].counts).toMatchObject({ rejected: 1, ai_rejected: 0 });
     expect(deleteAsset).toHaveBeenCalledWith("assetLong");
     const statuses = db.updateRows.mock.calls.flatMap((c) => (c[1] as Row[]).map((p) => p.status));
     expect(statuses).not.toContain("pending");
@@ -429,6 +433,16 @@ describe("myStatus", () => {
     assetInfo.mockResolvedValue({ status: "ready", assetId: "assetLong", playbackId: "pbLong", durationS: 120, mp4: false });
     expect(await myStatus(d, SLUG, ask(v))).toMatchObject({ state: "not_shown" });
     expect(videos()[0].status).toBe("rejected");
+  });
+
+  it("item 6: duração 0 (o Mux não informou) com IA e modo automático → pending, nunca ai_review", async () => {
+    head = mkHead({ mode: "automatico" }, { ai_allowed: true });
+    const v = video({ status: "uploading" });
+    tables.apareca_videos = [v];
+    const { d, assetInfo } = mk({ aiOn: () => true });
+    assetInfo.mockResolvedValue({ status: "ready", assetId: "a0", playbackId: "pb0", durationS: 0, mp4: false });
+    await myStatus(d, SLUG, ask(v));
+    expect(videos()[0].status).toBe("pending");
   });
 
   it("IA disponível e modo híbrido → ai_review com decided_at e onReady chamado", async () => {

@@ -133,9 +133,9 @@ describe("readSnapshot", () => {
     expect(listCalls("apareca_videos")).toBe(3);
   });
 
-  it("aplica resolveStuck: ai_review há mais de 30 s aparece pending; há menos, continua ai_review", async () => {
-    const stuck = video({ status: "ai_review", decided_by: null, decided_at: "2026-10-16T14:59:29.000Z" });
-    const fresh = video({ status: "ai_review", decided_by: null, decided_at: "2026-10-16T14:59:31.000Z" });
+  it("aplica resolveStuck: ai_review há mais de 45 s aparece pending; há menos, continua ai_review", async () => {
+    const stuck = video({ status: "ai_review", decided_by: null, decided_at: "2026-10-16T14:59:14.000Z" });
+    const fresh = video({ status: "ai_review", decided_by: null, decided_at: "2026-10-16T14:59:16.000Z" });
     h.store.apareca_videos = [stuck, fresh];
     const { d } = deps();
     const snap = await S.readSnapshot(d, RID);
@@ -391,6 +391,19 @@ describe("getAparecaHead", () => {
   it("slug inválido ou inexistente devolve null sem erro", async () => {
     expect(await S.getAparecaHead("../x")).toBeNull();
     expect(await S.getAparecaHead("nada")).toBeNull();
+  });
+});
+
+describe("readAparecaHeadFresh", () => {
+  it("lê o restaurante pelo uid direto do banco a cada chamada (sem memória), com o modo de agora", async () => {
+    h.store.restaurants = [
+      { uid: RID, id: RID, slug: "casa", name: "Casa", apareca_allowed: true, apareca_ai_allowed: true, apareca_config: { mode: "automatico" } },
+    ];
+    expect((await S.readAparecaHeadFresh(RID))?.config.mode).toBe("automatico");
+    h.store.restaurants[0].apareca_config = { mode: "manual" };
+    expect((await S.readAparecaHeadFresh(RID))?.config.mode).toBe("manual");
+    expect(h.db.first).toHaveBeenCalledWith("restaurants", { uid: RID });
+    expect(await S.readAparecaHeadFresh(RID2)).toBeNull();
   });
 });
 
