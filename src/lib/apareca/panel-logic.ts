@@ -37,6 +37,33 @@ export function alertPattern(): number[] {
   return [150, 80, 150];
 }
 
+// Estado do aviso entre consultas. primed false = a carga inicial falhou: a primeira consulta boa
+// só guarda o newest (os vídeos que já estavam na fila não são "novos"). O newest nunca volta para
+// trás quando o pendente mais novo é aprovado ou reprovado.
+export type AlertState = { newest: string | null; primed: boolean };
+export function alertStep(prev: AlertState, items: QueueItem[]): AlertState & { ring: boolean } {
+  if (!prev.primed) return { newest: newestOf(items) ?? prev.newest, primed: true, ring: false };
+  if (hasNew(prev.newest, items)) return { newest: newestOf(items), primed: true, ring: true };
+  return { newest: prev.newest, primed: true, ring: false };
+}
+
+// Consultas da fila: no máximo uma automática por vez (busy), e só a resposta do pedido mais novo
+// vale (current). bump() invalida as que estão em andamento (ação local mais nova que elas).
+export function latestOnly() {
+  let seq = 0;
+  const open = new Set<number>();
+  return {
+    begin: () => {
+      open.add(++seq);
+      return seq;
+    },
+    end: (n: number) => void open.delete(n),
+    current: (n: number) => n === seq,
+    busy: () => open.size > 0,
+    bump: () => void ++seq,
+  };
+}
+
 export type QueueContext = {
   tables: Map<string, string>; // uid da mesa -> nome
   zones: Zone[];
@@ -80,6 +107,7 @@ export const TEAM_ERRORS = {
   gone: "Este vídeo não está mais na fila.",
   decided: "Este vídeo já foi decidido. A lista foi atualizada.",
   fail: "Não foi possível salvar. Tente de novo.",
+  ai_rejected: "A análise automática reprovou este vídeo; a lista foi atualizada.",
 };
 
 export type DecideDeps = {
@@ -108,6 +136,12 @@ export async function teamDecide(d: DecideDeps, rid: string, id: string, action:
   await d.db.updateRows("apareca_videos", [{ Id: v.Id, ...mine }]);
   const after = await d.db.first<VideoRow>("apareca_videos", where);
   if (after && after.decided_by === "ia" && after.status !== mine.status) {
+    // A IA reprovou no meio: o asset já foi (ou está sendo) apagado e o vídeo não tem como tocar.
+    // Aprovar por cima deixaria um "approved" sem vídeo; a equipe vê o aviso e a lista atualizada.
+    if (action === "approve" && (after.status === "rejected" || after.status === "removed")) {
+      d.forget?.(rid);
+      return { error: TEAM_ERRORS.ai_rejected };
+    }
     await d.db.updateRows("apareca_videos", [{ Id: v.Id, ...mine }]);
   }
   d.forget?.(rid);

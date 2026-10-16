@@ -2,6 +2,12 @@
    grandes por vídeo. Segue o visual do painel (cartões brancos, botões dourados). Classes app-
    escopadas em .ap .app-fila. Anima só transform e opacity. */
 .ap .app-fila {
+  /* Contraste (WCAG AA, 4,5:1): texto escuro sobre o verde e o dourado (5,8:1 e 5,8:1), cinza
+     #666 no fundo cinza do painel e no cartão branco (5,1:1 e 5,7:1), dourado escuro no botão
+     "Ativar aviso" (6,2:1). O --muted do painel (#8b8b8b) fica abaixo disso. */
+  --app-ink: #1a1a1a;
+  --app-muted: #666666;
+  --app-gold-text: #7a5218;
   max-width: 1100px;
 
   & .app-band {
@@ -36,7 +42,7 @@
     padding: 0 16px;
     border-radius: 999px;
     border: 1.5px solid var(--gold);
-    color: var(--gold-dark);
+    color: var(--app-gold-text);
     font-weight: 600;
   }
   & .app-sound svg {
@@ -50,10 +56,10 @@
   }
   & .app-sound.on {
     background: var(--gold);
-    color: #fff;
+    color: var(--app-ink);
   }
   & .app-hint {
-    color: var(--muted);
+    color: var(--app-muted);
     font-size: 13px;
   }
 
@@ -66,14 +72,14 @@
     padding: 0 7px;
     border-radius: 999px;
     background: var(--gold);
-    color: #fff;
+    color: var(--app-ink);
     font-size: 14px;
     font-weight: 700;
     vertical-align: 2px;
   }
   & .app-empty {
     margin: 0;
-    color: var(--muted);
+    color: var(--app-muted);
     font-size: 14px;
   }
 
@@ -114,7 +120,7 @@
     gap: 2px;
     min-width: 0;
     font-size: 14px;
-    color: var(--muted);
+    color: var(--app-muted);
   }
   & .app-meta b {
     color: var(--fg);
@@ -145,7 +151,7 @@
   }
   & .app-btn-yes {
     background: var(--green);
-    color: #fff;
+    color: var(--app-ink);
   }
   & .app-btn-no {
     background: #fff;

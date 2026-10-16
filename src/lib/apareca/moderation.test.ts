@@ -397,6 +397,23 @@ describe("runModeration", () => {
     expect(deleteAsset).toHaveBeenCalledWith("asset1");
   });
 
+  it("correção T10: data da equipe no formato do NocoDB (espaço, +00:00) mais nova que a da IA → a equipe é regravada", async () => {
+    const v = vrow();
+    rows = [{ ...v }];
+    const { d } = mk(say('{"aprovado":false,"motivo":"arma"}'));
+    // A equipe também reprovou, 5 s depois; o NocoDB devolve a data sem "T" e sem milissegundos.
+    const teamAt = "2026-10-16 22:00:05+00:00";
+    db.updateRows.mockImplementation(async (_t: string, ps: Row[]) => {
+      for (const p of ps) Object.assign(rows.find((x) => x.Id === p.Id) ?? {}, p);
+      if (ps[0]?.status === "rejected" && ps[0]?.decided_by === "ia") {
+        Object.assign(rows[0], { status: "rejected", decided_by: "equipe", decided_at: teamAt, ai_reason: null });
+      }
+    });
+    await runModeration(d, v, mkHead());
+    const last = db.updateRows.mock.calls.at(-1)?.[1] as Row[];
+    expect(last[0]).toMatchObject({ status: "rejected", decided_by: "equipe", decided_at: teamAt });
+  });
+
   it("sem playback id → pending sem chamar a IA", async () => {
     const v = vrow({ mux_playback_id: null });
     rows = [{ ...v }];

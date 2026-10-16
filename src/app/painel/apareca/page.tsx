@@ -25,10 +25,10 @@ const EMPTY: QueueResult = { items: [], newest: null, warn: "ok" };
 async function Apareca() {
   const { restaurant } = await currentRestaurant();
   const r = restaurant as typeof restaurant & { logo_path: string | null; community_enabled?: unknown };
-  const initial = await listQueue(r.id).catch(() => EMPTY);
+  const initial = await listQueue(r.id).catch(() => null);
   return (
     <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/apareca" title="Apareça na TV">
-      <Fila rid={r.id} initial={initial} communityOn={r.community_enabled === true} />
+      <Fila rid={r.id} initial={initial ?? EMPTY} initialOk={initial !== null} communityOn={r.community_enabled === true} />
     </PanelShell>
   );
 }

@@ -74,6 +74,9 @@ function framesFor(duration_s: number): number[] {
   return ts.length ? ts : [0];
 }
 
+// O NocoDB devolve "AAAA-MM-DD HH:MM:SS+00:00" (espaço no lugar do T): compara pelo instante, não
+// pelo texto. Data ilegível = NaN, e a comparação dá false.
+const dateMs = (iso: string | null) => (iso ? Date.parse(iso.trim().replace(" ", "T")) : Number.NaN);
 const clock = (d: ModerationDeps) => (d.now ?? (() => new Date()))();
 const reread = (d: ModerationDeps, v: VideoRow) => d.db.first<VideoRow>("apareca_videos", { uid: v.id });
 
@@ -127,7 +130,7 @@ export async function runModeration(d: ModerationDeps, v: VideoRow, head: Aparec
   const after = await reread(d, v);
   if (!after) return;
   const team = after.decided_by === "equipe";
-  const conflict = after.status !== mine.status || (team && (after.decided_at ?? "") > stamp);
+  const conflict = after.status !== mine.status || (team && dateMs(after.decided_at) > dateMs(stamp));
   let final: VideoStatus = mine.status;
   if (conflict) {
     if (team || after.status === "rejected" || after.status === "removed" || mine.status !== "rejected") {

@@ -61,7 +61,7 @@ vi.mock("@/lib/apareca/store", () => ({
 }));
 
 import { approveVideo, rejectVideo, removeFromTv } from "@/app/painel/apareca/actions";
-import { alertPattern, hasNew, newestOf, queueItems, type QueueItem } from "./panel-logic";
+import { alertPattern, alertStep, hasNew, latestOnly, newestOf, queueItems, TEAM_ERRORS, type QueueItem } from "./panel-logic";
 
 const RID = "00000000-0000-4000-8000-000000000001";
 const OTHER = "00000000-0000-4000-8000-000000000002";
@@ -112,6 +112,48 @@ describe("hasNew", () => {
   it("newestOf: o pendente mais novo", () => {
     expect(newestOf([item({ created_at: t2 }), item({ created_at: t1 }), item({ status: "approved", created_at: "2026-10-17T00:00:00.000Z" })])).toBe(t2);
     expect(newestOf([])).toBeNull();
+  });
+});
+
+describe("alertStep", () => {
+  const t1 = "2026-10-16T22:00:00.000Z";
+  const t2 = "2026-10-16T22:00:05.000Z";
+  it("primeira leitura que falhou: a primeira consulta boa só define o newest, sem tocar", () => {
+    const s = alertStep({ newest: null, primed: false }, [item({ created_at: t1 }), item({ id: "y", created_at: t2 })]);
+    expect(s).toEqual({ newest: t2, primed: true, ring: false });
+  });
+  it("depois de pronta: vídeo novo toca e avança o newest; o mesmo não toca", () => {
+    expect(alertStep({ newest: t1, primed: true }, [item({ created_at: t2 })])).toEqual({ newest: t2, primed: true, ring: true });
+    expect(alertStep({ newest: t2, primed: true }, [item({ created_at: t2 })])).toEqual({ newest: t2, primed: true, ring: false });
+  });
+  it("o pendente mais novo foi aprovado: o newest não volta para trás (não toca de novo)", () => {
+    expect(alertStep({ newest: t2, primed: true }, [item({ created_at: t1 })])).toEqual({ newest: t2, primed: true, ring: false });
+  });
+  it("carga inicial boa e vazia: o primeiro vídeo que chega toca", () => {
+    expect(alertStep({ newest: null, primed: true }, [item({ created_at: t1 })]).ring).toBe(true);
+  });
+});
+
+describe("latestOnly", () => {
+  it("só a resposta do último pedido vale; uma em andamento bloqueia a consulta automática", () => {
+    const q = latestOnly();
+    expect(q.busy()).toBe(false);
+    const a = q.begin();
+    expect(q.busy()).toBe(true);
+    const b = q.begin(); // run() pede uma leitura nova depois da ação
+    q.end(b);
+    expect(q.current(b)).toBe(true);
+    expect(q.busy()).toBe(true); // a ainda não voltou
+    q.end(a);
+    expect(q.current(a)).toBe(false); // resposta antiga: descartada
+    expect(q.busy()).toBe(false);
+  });
+  it("bump invalida o que já estava em andamento (ação local mais nova que a consulta)", () => {
+    const q = latestOnly();
+    const a = q.begin();
+    q.bump();
+    q.end(a);
+    expect(q.current(a)).toBe(false);
   });
 });
 
@@ -226,6 +268,17 @@ describe("decisão da equipe (actions)", () => {
     expect(fake.updates).toHaveLength(2);
     expect(fake.rows[0]).toMatchObject({ status: "rejected", decided_by: "equipe" });
     expect(mux.deleted).toEqual(["asset1"]);
+  });
+  it("aprovar enquanto a IA reprovou (asset já apagado): não regrava approved e devolve aviso", async () => {
+    fake.rows = [video({ status: "ai_review" })];
+    fake.onUpdate = (n) => {
+      if (n === 1) Object.assign(fake.rows[0], { status: "rejected", decided_by: "ia", decided_at: "2026-10-16 22:00:30+00:00" });
+    };
+    expect(await approveVideo(RID, VID)).toEqual({ error: TEAM_ERRORS.ai_rejected });
+    expect(TEAM_ERRORS.ai_rejected).toBe("A análise automática reprovou este vídeo; a lista foi atualizada.");
+    expect(fake.updates).toHaveLength(1);
+    expect(fake.rows[0]).toMatchObject({ status: "rejected", decided_by: "ia" });
+    expect(store.forgot).toContain(RID);
   });
   it("sem sobrescrita da IA, grava uma vez só", async () => {
     fake.rows = [video()];

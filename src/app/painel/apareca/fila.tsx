@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { alertPattern, hasNew, type QueueItem } from "@/lib/apareca/panel-logic";
+import { alertPattern, alertStep, latestOnly, type AlertState, type QueueItem } from "@/lib/apareca/panel-logic";
 import { useHls } from "@/lib/menu/use-hls";
 import { approveVideo, listQueue, rejectVideo, removeFromTv, type QueueResult } from "./actions";
 
@@ -67,7 +67,8 @@ function Clip({ item }: { item: QueueItem }) {
   );
 }
 
-export function Fila({ rid, initial, communityOn }: { rid: string; initial: QueueResult; communityOn: boolean }) {
+// initialOk false: a leitura no servidor falhou; a primeira consulta boa não toca o aviso.
+export function Fila({ rid, initial, initialOk, communityOn }: { rid: string; initial: QueueResult; initialOk: boolean; communityOn: boolean }) {
   const [items, setItems] = useState(initial.items);
   const [warn, setWarn] = useState(initial.warn);
   const [err, setErr] = useState<string | null>(null);
@@ -77,41 +78,59 @@ export function Fila({ rid, initial, communityOn }: { rid: string; initial: Queu
   const [soundOn, setSoundOn] = useState(false);
   const audio = useRef<AudioContext | null>(null);
   // A resposta do servidor na abertura da página é a "primeira carga": não toca som.
-  const newest = useRef(initial.newest);
+  const alert = useRef<AlertState>({ newest: initial.newest, primed: initialOk });
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const queries = useRef(latestOnly());
 
-  const load = useCallback(async () => {
-    let r: QueueResult;
-    try {
-      r = await listQueue(rid);
-    } catch {
-      setErr(LOAD_FAIL);
-      return;
-    }
-    setErr(null);
-    if (hasNew(newest.current, r.items)) {
-      newest.current = r.newest;
-      if (audio.current) chime(audio.current);
-      if (audio.current) navigator.vibrate?.(alertPattern());
-    }
-    setItems(r.items);
-    setWarn(r.warn);
-    setNow(Date.now());
-  }, [rid]);
+  // auto: consulta do relógio (pula se já há uma em andamento). Sem auto: leitura depois de uma
+  // ação, que sempre vai. Em qualquer caso, só a resposta do pedido mais novo chega à tela.
+  const load = useCallback(
+    async (auto = false) => {
+      const q = queries.current;
+      if (auto && q.busy()) return;
+      const n = q.begin();
+      let r: QueueResult;
+      try {
+        r = await listQueue(rid);
+      } catch {
+        if (q.current(n)) setErr(LOAD_FAIL);
+        return;
+      } finally {
+        q.end(n);
+      }
+      if (!q.current(n)) return;
+      setErr(null);
+      const step = alertStep(alert.current, r.items);
+      alert.current = { newest: step.newest, primed: step.primed };
+      if (step.ring && audio.current) {
+        chime(audio.current);
+        navigator.vibrate?.(alertPattern());
+      }
+      setItems(r.items);
+      setWarn(r.warn);
+      setNow(Date.now());
+    },
+    [rid],
+  );
 
   // 10 s com a aba visível; escondida, não consulta. Ao voltar à aba, consulta na hora.
+  // Um timer só: cada rodada limpa o anterior antes de marcar o próximo.
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const loop = async () => {
+    const schedule = () => {
       clearTimeout(timer);
-      if (document.visibilityState === "visible") await load();
-      if (!cancelled) timer = setTimeout(loop, POLL_MS);
+      if (!cancelled) timer = setTimeout(tick, POLL_MS);
+    };
+    const tick = async () => {
+      clearTimeout(timer);
+      if (document.visibilityState === "visible") await load(true);
+      schedule();
     };
     const onVisible = () => {
-      if (document.visibilityState === "visible") void loop();
+      if (document.visibilityState === "visible") void tick();
     };
-    timer = setTimeout(loop, POLL_MS);
+    schedule();
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
@@ -133,6 +152,7 @@ export function Fila({ rid, initial, communityOn }: { rid: string; initial: Queu
     async (id: string, act: typeof approveVideo, approved = false) => {
       try {
         const r = await act(rid, id);
+        queries.current.bump(); // consulta que saiu antes da ação traria a lista velha
         if (r.error) setErr(r.error);
         else
           setItems((list) =>
