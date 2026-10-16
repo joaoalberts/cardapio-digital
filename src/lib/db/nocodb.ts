@@ -1,4 +1,5 @@
 import "server-only";
+import { countCall } from "./call-counter";
 
 // Banco do app no NocoDB (base "Cardápio Digital", criada por scripts/nocodb/setup.mjs).
 // Só o servidor fala com ele, com NOCODB_API_TOKEN; o isolamento por restaurante fica
@@ -69,9 +70,11 @@ async function slot() {
   }
 }
 
-async function call<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+// table: só rótulo do contador de teste (NOCODB_COUNT=1, call-counter.ts).
+async function call<T>(path: string, init: { method?: string; body?: unknown; table?: string } = {}): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     await slot();
+    countCall(init.method ?? "GET", init.table ?? "?");
     const res = await fetch(API + path, {
       method: init.method ?? "GET",
       headers: { "xc-token": token(), "content-type": "application/json" },
@@ -93,6 +96,7 @@ let tableIds: Promise<Map<string, string>> | null = null;
 async function tableId(table: Table) {
   tableIds ??= call<{ list: { id: string; title: string; table_name: string }[] }>(
     `/api/v2/meta/bases/${BASE}/tables`,
+    { table: "meta" },
   ).then((r) => new Map(r.list.flatMap((t) => [[t.title, t.id], [t.table_name, t.id]] as [string, string][])));
   const ids = await tableIds.catch((e) => {
     tableIds = null;
@@ -153,7 +157,7 @@ export async function list<T = Row>(table: Table, where: Where = {}, opts: ListO
     const q = new URLSearchParams({ limit: String(pageSize), offset: String(offset), sort: opts.sort ?? "Id" });
     const w = whereParam(where);
     if (w) q.set("where", w);
-    const page = await call<{ list: Row[]; pageInfo?: { isLastPage?: boolean } }>(`/api/v2/tables/${id}/records?${q}`);
+    const page = await call<{ list: Row[]; pageInfo?: { isLastPage?: boolean } }>(`/api/v2/tables/${id}/records?${q}`, { table });
     out.push(...page.list.map(normalize));
     if (page.pageInfo?.isLastPage !== false || page.list.length < pageSize) break;
     if (opts.limit && out.length >= opts.limit) break;
@@ -171,7 +175,7 @@ export async function count(table: Table, where: Where) {
   const q = new URLSearchParams();
   const w = whereParam(where);
   if (w) q.set("where", w);
-  const r = await call<{ count: number }>(`/api/v2/tables/${id}/records/count?${q}`);
+  const r = await call<{ count: number }>(`/api/v2/tables/${id}/records/count?${q}`, { table });
   return Number(r.count);
 }
 
@@ -187,7 +191,7 @@ export async function insert<T extends Row>(table: Table, rows: T[]): Promise<(T
   })) as Row[];
   if (table === "translations") full.forEach((r) => delete r.created_at);
   for (let k = 0; k < full.length; k += 100) {
-    await call(`/api/v2/tables/${id}/records`, { method: "POST", body: full.slice(k, k + 100).map(encode) });
+    await call(`/api/v2/tables/${id}/records`, { method: "POST", body: full.slice(k, k + 100).map(encode), table });
   }
   return full.map((r) => ({ ...r, id: r.uid })) as (T & { uid: string; id: string })[];
 }
@@ -207,6 +211,7 @@ export async function update(table: Table, where: Where, patch: Row) {
     await call(`/api/v2/tables/${id}/records`, {
       method: "PATCH",
       body: rows.slice(k, k + 100).map((r) => ({ ...body, Id: r.Id })),
+      table,
     });
   }
   return rows.length;
@@ -217,7 +222,7 @@ export async function updateRows(table: Table, rows: ({ Id: number } & Row)[]) {
   if (!rows.length) return;
   const id = await tableId(table);
   for (let k = 0; k < rows.length; k += 100) {
-    await call(`/api/v2/tables/${id}/records`, { method: "PATCH", body: rows.slice(k, k + 100).map(encode) });
+    await call(`/api/v2/tables/${id}/records`, { method: "PATCH", body: rows.slice(k, k + 100).map(encode), table });
   }
 }
 
@@ -231,6 +236,6 @@ export async function removeIds(table: Table, ids: number[]) {
   if (!ids.length) return;
   const id = await tableId(table);
   for (let k = 0; k < ids.length; k += 100) {
-    await call(`/api/v2/tables/${id}/records`, { method: "DELETE", body: ids.slice(k, k + 100).map((Id) => ({ Id })) });
+    await call(`/api/v2/tables/${id}/records`, { method: "DELETE", body: ids.slice(k, k + 100).map((Id) => ({ Id })), table });
   }
 }
