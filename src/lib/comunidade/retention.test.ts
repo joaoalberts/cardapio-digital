@@ -5,19 +5,18 @@ import { NextRequest } from "next/server";
 import {
   HIDDEN_POST_RETENTION_MS,
   TALLY_RETENTION_MS,
-  VOTE_RETENTION_MS,
   cronAuth,
   retentionPlan,
   runRetention,
   type RetentionDb,
 } from "./retention";
-import type { PostRow, TallyRow, TvRow, VoteRow } from "./types";
+import type { PollRow, PostRow, TallyRow, TvRow, VoteRow } from "./types";
 
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
-const NOW = new Date("2026-10-16T09:00:00Z");
+const NOW = new Date("2026-10-16T09:00:00Z"); // 06:00 em São Paulo (a hora do cron)
 const now = NOW.getTime();
 const iso = (ms: number) => new Date(ms).toISOString();
 // O NocoDB devolve as datas assim, com espaço e fuso "+00:00".
@@ -79,28 +78,114 @@ const tv = (over: Partial<TvRow> = {}): TvRow => ({
 });
 const empty = { votes: [], tallies: [], posts: [], tvs: [], now: NOW };
 
+// Enquete da noite de ontem, encerrada às 23h de São Paulo (02:00Z de hoje).
+const P_DONE = U(50);
+const poll = (id: string, over: Partial<PollRow> = {}): PollRow => ({
+  id,
+  restaurant_id: R1,
+  template: "custom",
+  question: "Qual sai primeiro?",
+  options: [
+    { id: "a", label: "A", item_id: null },
+    { id: "b", label: "B", item_id: null },
+    { id: "c", label: "C", item_id: null },
+  ],
+  starts_at: iso(now - 8 * HOUR),
+  ends_at: iso(now - 7 * HOUR),
+  closed_at: null,
+  created_at: iso(now - 9 * HOUR),
+  ...over,
+});
+// O dia da Comunidade de hoje (São Paulo, 05:00) começou às 08:00Z, 1 h antes do NOW.
+const DAY_FROM = now - HOUR;
+
 describe("retentionPlan: prazos", () => {
-  it("as constantes são 30, 90 e 7 dias", () => {
-    expect(VOTE_RETENTION_MS).toBe(30 * DAY);
+  it("as constantes do tally e do post oculto são 90 e 7 dias", () => {
     expect(TALLY_RETENTION_MS).toBe(90 * DAY);
     expect(HIDDEN_POST_RETENTION_MS).toBe(7 * DAY);
   });
 
-  it("voto: 29 d 23 h fica, 30 d 1 h sai; exatamente 30 dias ainda fica", () => {
-    const keep = vote(ago(29 * DAY + 23 * HOUR));
-    const edge = vote(ago(30 * DAY));
-    const gone = vote(ago(30 * DAY + HOUR));
-    const plan = retentionPlan({ ...empty, votes: [keep, edge, gone] });
-    expect(plan.votes).toEqual([gone.id]);
+  it("voto (1 dia, Decisão do João 16/10): 1 min antes da virada do dia sai; na virada e depois fica", () => {
+    const polls = [poll(P_DONE)];
+    const before = vote(noco(DAY_FROM - MIN));
+    const edge = vote(noco(DAY_FROM));
+    const after = vote(noco(DAY_FROM + MIN));
+    const plan = retentionPlan({ ...empty, polls, votes: [before, edge, after] });
+    expect(plan.votes).toEqual([before.id]);
   });
 
   it("voto: data em ISO também vale; data vazia, ilegível ou no futuro nunca sai", () => {
-    const isoOld = vote(iso(now - 31 * DAY));
+    const isoOld = vote(iso(DAY_FROM - HOUR));
     const blank = vote("");
     const junk = vote("ontem");
     const future = vote(noco(now + DAY));
-    const plan = retentionPlan({ ...empty, votes: [isoOld, blank, junk, future] });
+    const plan = retentionPlan({ ...empty, polls: [poll(P_DONE)], votes: [isoOld, blank, junk, future] });
     expect(plan.votes).toEqual([isoOld.id]);
+  });
+
+  it("a virada é a do restaurante do voto (fuso e day_start); sem restaurante conhecido, 05:00 em São Paulo", () => {
+    // R2 vira às 07:00: às 06:00 ainda é o dia que começou ontem às 07:00 (10:00Z de ontem).
+    const r2From = now - 23 * HOUR;
+    const pollR2 = poll(U(51), { restaurant_id: R2, starts_at: iso(r2From - 3 * HOUR), ends_at: iso(r2From - 2 * HOUR) });
+    const r2Old = vote(noco(r2From - MIN), { restaurant_id: R2, poll_id: pollR2.id });
+    const r2Kept = vote(noco(r2From + MIN), { restaurant_id: R2, poll_id: pollR2.id });
+    // R1 em Lisboa (vira às 05:00 de lá = 04:00Z): o voto das 05:00Z já é de hoje.
+    const lisbon = vote(noco(now - 4 * HOUR), { poll_id: P_DONE });
+    const R3 = U(3);
+    const pollR3 = poll(U(52), { restaurant_id: R3 });
+    const orphanOld = vote(noco(DAY_FROM - MIN), { restaurant_id: R3, poll_id: pollR3.id });
+    const orphanKept = vote(noco(DAY_FROM + MIN), { restaurant_id: R3, poll_id: pollR3.id });
+    const plan = retentionPlan({
+      ...empty,
+      polls: [poll(P_DONE, { starts_at: iso(now - 6 * HOUR), ends_at: iso(now - 3 * HOUR) }), pollR2, pollR3],
+      clocks: [
+        { id: R1, timezone: "Europe/Lisbon", day_start: "05:00" },
+        { id: R2, timezone: "America/Sao_Paulo", day_start: "07:00" },
+      ],
+      votes: [r2Old, r2Kept, lisbon, orphanOld, orphanKept],
+    });
+    expect(plan.votes).toEqual([r2Old.id, orphanOld.id]);
+  });
+
+  it("antes de apagar, grava o resultado final da enquete encerrada, contado com todos os votos dela", () => {
+    // 2 votos em a antes da virada e 1 em b depois (a enquete cruzou a virada e já encerrou).
+    const crossing = poll(P_DONE, { starts_at: iso(DAY_FROM - 30 * MIN), ends_at: iso(DAY_FROM + 30 * MIN) });
+    const v1 = vote(noco(DAY_FROM - 20 * MIN), { device_id: U(61), option_id: "a" });
+    const v2 = vote(noco(DAY_FROM - 10 * MIN), { device_id: U(62), option_id: "a" });
+    const v3 = vote(noco(DAY_FROM + 10 * MIN), { device_id: U(63), option_id: "b" });
+    const plan = retentionPlan({ ...empty, polls: [crossing], votes: [v1, v2, v3] });
+    expect(plan.votes).toEqual([v1.id, v2.id]);
+    expect(plan.results).toEqual([{ poll_id: P_DONE, result: { a: 67, b: 33, c: 0, has_votes: true, winner: "a" } }]);
+  });
+
+  it("enquete que já tem result não é regravada; enquete apagada perde os votos sem result", () => {
+    const done = poll(P_DONE, { result: { a: 100, b: 0, c: 0, has_votes: true, winner: "a" } });
+    const v1 = vote(noco(DAY_FROM - HOUR));
+    const gone = vote(noco(DAY_FROM - HOUR), { poll_id: U(59) });
+    const plan = retentionPlan({ ...empty, polls: [done], votes: [v1, gone] });
+    expect(plan.votes).toEqual([v1.id, gone.id]);
+    expect(plan.results).toEqual([]);
+  });
+
+  it("enquete ainda aberta (cruzou a virada e não encerrou): os votos ficam até ela encerrar", () => {
+    const open = poll(P_DONE, { starts_at: iso(DAY_FROM - 30 * MIN), ends_at: iso(now + 30 * MIN) });
+    const v1 = vote(noco(DAY_FROM - 20 * MIN));
+    const plan = retentionPlan({ ...empty, polls: [open], votes: [v1] });
+    expect(plan.votes).toEqual([]);
+    expect(plan.results).toEqual([]);
+    // Encerrada pela casa (closed_at), sai e grava o result.
+    const closed = { ...open, closed_at: iso(now - 5 * MIN) };
+    const plan2 = retentionPlan({ ...empty, polls: [closed], votes: [v1] });
+    expect(plan2.votes).toEqual([v1.id]);
+    expect(plan2.results).toEqual([{ poll_id: P_DONE, result: { a: 100, b: 0, c: 0, has_votes: true, winner: "a" } }]);
+  });
+
+  it("enquete de outro restaurante com o mesmo id não serve de resultado para o voto", () => {
+    const foreign = poll(P_DONE, { restaurant_id: R2 });
+    const v1 = vote(noco(DAY_FROM - HOUR));
+    const plan = retentionPlan({ ...empty, polls: [foreign], votes: [v1] });
+    expect(plan.votes).toEqual([v1.id]);
+    expect(plan.results).toEqual([]);
   });
 
   it("tally: 89 d 23 h fica, 90 d 1 h sai", () => {
@@ -144,7 +229,7 @@ describe("retentionPlan: prazos", () => {
   });
 
   it("nada a apagar: listas vazias", () => {
-    expect(retentionPlan(empty)).toEqual({ votes: [], tallies: [], posts: [], tvs: [] });
+    expect(retentionPlan(empty)).toEqual({ votes: [], results: [], tallies: [], posts: [], tvs: [] });
   });
 });
 
@@ -153,7 +238,7 @@ describe("retentionPlan: prazos", () => {
 type Where = Record<string, string | number | boolean | null>;
 type Raw = Record<string, unknown>;
 
-function fakeDb(tables: Record<string, Raw[]>, opts: { failTable?: string } = {}) {
+function fakeDb(tables: Record<string, Raw[]>, opts: { failTable?: string; failUpdate?: boolean } = {}) {
   let nextId = 1;
   const store: Record<string, Raw[]> = {};
   for (const [t, rows] of Object.entries(tables)) store[t] = rows.map((r) => ({ Id: nextId++, uid: r.id, ...r }));
@@ -170,9 +255,18 @@ function fakeDb(tables: Record<string, Raw[]>, opts: { failTable?: string } = {}
       log.push(`db:${t}:${ids.length}`);
       store[t] = (store[t] ?? []).filter((r) => !ids.includes(r.Id as number));
     },
+    async updateRows(t, rows) {
+      log.push(`update:${t}:${rows.length}`);
+      if (opts.failUpdate) throw new Error("nocodb PATCH: 500");
+      for (const row of rows) {
+        const r = (store[t] ?? []).find((x) => x.Id === row.Id);
+        if (r) Object.assign(r, row);
+      }
+    },
   };
   const left = (t: string) => (store[t] ?? []).map((r) => r.id);
-  return { db, log, lists, left };
+  const row = (t: string, id: string) => (store[t] ?? []).find((r) => r.id === id);
+  return { db, log, lists, left, row };
 }
 
 const restaurant = (id: string, enabled = true): Raw => ({ id, slug: `r-${id.slice(-2)}`, community_enabled: enabled });
@@ -199,7 +293,7 @@ describe("runRetention: varredura de cada tabela", () => {
   it("apaga o vencido de todo restaurante: Comunidade ligada, desligada ou restaurante que nem existe mais", async () => {
     // R1 ligada, R2 desligada depois de juntar votos e fotos, R3 sem linha em restaurants.
     const oldVote = vote(ago(31 * DAY));
-    const newVote = vote(ago(DAY));
+    const newVote = vote(noco(DAY_FROM + MIN));
     const offVote = vote(ago(400 * DAY), { restaurant_id: R2 });
     const orphanVote = vote(ago(31 * DAY), { restaurant_id: R3 });
     const offTally = tally(ago(91 * DAY), { restaurant_id: R2 });
@@ -230,7 +324,7 @@ describe("runRetention: varredura de cada tabela", () => {
     expect(report).toEqual({ failed: 0, deleted: { votes: 3, tallies: 1, posts: 2, tvs: 1 } });
   });
 
-  it("uma consulta por tabela, sem passar pelos restaurantes, por mais restaurantes que existam", async () => {
+  it("uma consulta por tabela (mais enquetes e restaurantes, para o result e a virada do dia), por mais restaurantes que existam", async () => {
     const many = Array.from({ length: 30 }, (_, k) => U(200 + k));
     const { db, lists } = fakeDb({
       restaurants: many.map((rid) => restaurant(rid)),
@@ -239,6 +333,8 @@ describe("runRetention: varredura de cada tabela", () => {
     const report = await runRetention({ db, removeFiles: files().removeFiles, ownsFile, now: () => NOW });
     expect(lists).toEqual([
       { t: "community_votes", w: {} },
+      { t: "community_polls", w: {} },
+      { t: "restaurants", w: {} },
       { t: "community_tally", w: {} },
       { t: "community_posts", w: { status: "hidden" } },
       { t: "community_tvs", w: {} },
@@ -323,9 +419,49 @@ describe("runRetention: varredura de cada tabela", () => {
     expect(report).toEqual({ failed: 1, deleted: { votes: 0, tallies: 0, posts: 1, tvs: 0 } });
   });
 
+  it("grava o result da enquete encerrada antes de apagar os votos e avisa o cache do restaurante", async () => {
+    const done = poll(P_DONE);
+    const v1 = vote(noco(DAY_FROM - HOUR), { device_id: U(61), option_id: "b" });
+    const v2 = vote(noco(DAY_FROM - HOUR), { device_id: U(62), option_id: "b" });
+    const { db, log, left, row } = fakeDb({ restaurants: [restaurant(R1)], community_polls: [done], community_votes: [v1, v2] });
+    const touched: string[] = [];
+    const report = await runRetention({ db, removeFiles: files().removeFiles, ownsFile, now: () => NOW, revalidate: (rid) => touched.push(rid) });
+    expect(log).toEqual(["update:community_polls:1", "db:community_votes:2"]);
+    expect(row("community_polls", P_DONE)?.result).toEqual({ a: 0, b: 100, c: 0, has_votes: true, winner: "b" });
+    expect(left("community_votes")).toEqual([]);
+    expect(touched).toEqual([R1]);
+    expect(report).toEqual({ failed: 0, deleted: { votes: 2, tallies: 0, posts: 0, tvs: 0 } });
+  });
+
+  it("o result do banco (JSON em texto) também conta como já gravado", async () => {
+    const done = { ...poll(P_DONE), result: JSON.stringify({ a: 100, b: 0, c: 0, has_votes: true, winner: "a" }) };
+    const v1 = vote(noco(DAY_FROM - HOUR));
+    const { db, log } = fakeDb({ community_polls: [done as unknown as Raw], community_votes: [v1] });
+    await runRetention({ db, removeFiles: files().removeFiles, ownsFile, now: () => NOW });
+    expect(log).toEqual(["db:community_votes:1"]);
+  });
+
+  it("result que não grava: os votos daquela enquete ficam para a próxima rodada; os outros saem", async () => {
+    const done = poll(P_DONE);
+    const v1 = vote(noco(DAY_FROM - HOUR));
+    const orphan = vote(noco(DAY_FROM - HOUR), { poll_id: U(59) });
+    const { db, left } = fakeDb({ community_polls: [done], community_votes: [v1, orphan] }, { failUpdate: true });
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const report = await runRetention({ db, removeFiles: files().removeFiles, ownsFile, now: () => NOW });
+    spy.mockRestore();
+    expect(left("community_votes")).toEqual([v1.id]);
+    expect(report).toEqual({ failed: 1, deleted: { votes: 1, tallies: 0, posts: 0, tvs: 0 } });
+  });
+
+  it("sem votos, nem lê enquetes e restaurantes", async () => {
+    const { db, lists } = fakeDb({});
+    await runRetention({ db, removeFiles: files().removeFiles, ownsFile, now: () => NOW });
+    expect(lists.map((l) => l.t)).toEqual(["community_votes", "community_tally", "community_posts", "community_tvs"]);
+  });
+
   it("sem nada vencido, nenhum removeIds nem removeFiles", async () => {
     const { db, log } = fakeDb({
-      community_votes: [vote(ago(DAY))],
+      community_votes: [vote(noco(DAY_FROM + MIN))],
       community_posts: [post("approved", null)],
       community_tvs: [tv({ pair_expires_at: noco(now + MIN) })],
     });
@@ -361,9 +497,12 @@ describe("cronAuth", () => {
 const h = vi.hoisted(() => ({
   list: vi.fn<(t: string, w?: unknown) => Promise<unknown[]>>(async () => []),
   removeIds: vi.fn<(t: string, ids: number[]) => Promise<void>>(async () => {}),
+  updateRows: vi.fn<(t: string, rows: unknown[]) => Promise<void>>(async () => {}),
+  revalidateTag: vi.fn<(tag: string, profile: string) => void>(() => {}),
   removeFiles: vi.fn<(paths: unknown[]) => Promise<void>>(async () => {}),
 }));
-vi.mock("@/lib/db/nocodb", () => ({ list: h.list, removeIds: h.removeIds }));
+vi.mock("@/lib/db/nocodb", () => ({ list: h.list, removeIds: h.removeIds, updateRows: h.updateRows }));
+vi.mock("next/cache", () => ({ revalidateTag: h.revalidateTag }));
 // A rota usa só a remoção estrita; a comum, que engole erro, faria a linha sair com o
 // arquivo ainda lá.
 vi.mock("@/lib/storage", () => ({
@@ -429,7 +568,20 @@ describe("GET /api/cron/comunidade", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(await res.json()).toEqual({ ok: true, failed: 0, deleted: { votes: 1, tallies: 0, posts: 0, tvs: 0 } });
     expect(h.removeIds).toHaveBeenCalledWith("community_votes", [7]);
-    expect(h.list.mock.calls.map(([t]) => t)).not.toContain("restaurants");
+  });
+
+  it("grava o result e invalida o cache do conteúdo do restaurante (comunidade:<id>)", async () => {
+    vi.stubEnv("CRON_SECRET", SECRET);
+    vi.stubEnv("COMMUNITY_OFF", "");
+    h.updateRows.mockClear();
+    h.revalidateTag.mockClear();
+    const p = { Id: 3, uid: P_DONE, ...poll(P_DONE) };
+    const v = { Id: 8, ...vote(noco(DAY_FROM - HOUR)) };
+    h.list.mockImplementation(async (t: string) => (t === "community_votes" ? [v] : t === "community_polls" ? [p] : []));
+    const res = await call(`Bearer ${SECRET}`);
+    expect(res.status).toBe(200);
+    expect(h.updateRows).toHaveBeenCalledWith("community_polls", [{ Id: 3, result: { a: 100, b: 0, c: 0, has_votes: true, winner: "a" } }]);
+    expect(h.revalidateTag).toHaveBeenCalledWith(`comunidade:${R1}`, "max");
   });
 
   it("falha numa tabela ou em todas: 500 com a contagem", async () => {

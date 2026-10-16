@@ -27,7 +27,7 @@ describe("setup.mjs: esquema da Comunidade", () => {
   it("community_polls", () => {
     expect(cols("community_polls")).toEqual({
       uid: TEXT, restaurant_id: TEXT, template: TEXT, question: LONG, options: JSONT,
-      starts_at: DATE, ends_at: DATE, closed_at: DATE, created_at: DATE,
+      starts_at: DATE, ends_at: DATE, closed_at: DATE, created_at: DATE, result: JSONT,
     });
   });
 

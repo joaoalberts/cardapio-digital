@@ -1,7 +1,9 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import * as db from "@/lib/db/nocodb";
 import { communityOff } from "@/lib/comunidade/off";
 import { cronAuth, runRetention } from "@/lib/comunidade/retention";
+import { communityTags } from "@/lib/comunidade/tags";
 import { ownsFile, removeFilesStrict } from "@/lib/storage";
 
 // Retenção diária da Comunidade, chamada pelo cron da Vercel (vercel.json, 09:00 UTC =
@@ -11,7 +13,8 @@ import { ownsFile, removeFilesStrict } from "@/lib/storage";
 // Blob (ou o disco) falhar, a linha da foto fica e a próxima rodada tenta de novo.
 const NO_STORE = { "cache-control": "no-store" };
 
-// A varredura lê as 4 tabelas da Comunidade inteiras (páginas de 1.000): até 60 s.
+// A varredura lê as 4 tabelas da Comunidade inteiras, mais enquetes e restaurantes quando
+// há voto (páginas de 1.000): até 60 s.
 export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
@@ -22,7 +25,9 @@ export async function GET(request: NextRequest) {
   if (communityOff()) return NextResponse.json({ ok: true, off: true }, { headers: NO_STORE });
 
   try {
-    const report = await runRetention({ db, removeFiles: removeFilesStrict, ownsFile });
+    // Enquete que ganhou result: a agenda em cache passa a trazê-lo (os votos já saíram).
+    const revalidate = (rid: string) => revalidateTag(communityTags.rid(rid), "max");
+    const report = await runRetention({ db, removeFiles: removeFilesStrict, ownsFile, revalidate });
     return NextResponse.json({ ok: report.failed === 0, ...report }, { status: report.failed ? 500 : 200, headers: NO_STORE });
   } catch (e) {
     console.error("retenção da Comunidade:", e instanceof Error ? e.message : e);

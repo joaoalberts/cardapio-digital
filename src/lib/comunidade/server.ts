@@ -2,6 +2,7 @@ import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
 import * as db from "@/lib/db/nocodb";
 import { SLUG_PATTERN } from "@/lib/slug";
+import { communityTags } from "./tags";
 import type { CommunityHead, PollRow, PostRow, TvRow } from "./types";
 import { toContent, toHead } from "./votes";
 
@@ -9,7 +10,7 @@ import { toContent, toHead } from "./votes";
 // a CDN: quem garante que telão e celulares veem a mesma versão é a resposta única da
 // leitura agregada. As actions do painel chamam updateTag com estas tags depois de gravar;
 // voto e evento nunca invalidam.
-export const communityTags = { slug: (s: string) => `comunidade:${s}`, rid: (id: string) => `comunidade:${id}` };
+export { communityTags } from "./tags";
 
 // Até 200 enquetes, das mais novas: a casa agenda só para hoje, e a agenda guarda as que
 // terminaram nas últimas 24 h (toContent).
@@ -21,7 +22,9 @@ export async function getCommunityHead(slug: string): Promise<CommunityHead | nu
   "use cache";
   const s = slug.toLowerCase();
   cacheTag(communityTags.slug(s));
-  cacheLife({ revalidate: 60, expire: 300 });
+  // 5 min (Decisão do João, 16/10, orçamento do NocoDB): o que muda aqui (interruptor, hora
+  // do dia, modo simples, Instagram) vem do painel, que chama updateTag na hora.
+  cacheLife({ revalidate: 300, expire: 900 });
   if (!SLUG_PATTERN.test(s)) return null;
   return toHead(await db.first("restaurants", { slug: s }));
 }
@@ -32,7 +35,10 @@ export async function getCommunityHead(slug: string): Promise<CommunityHead | nu
 export async function getCommunityContent(rid: string): Promise<{ polls: PollRow[]; posts: PostRow[]; tvs: TvRow[] }> {
   "use cache";
   cacheTag(communityTags.rid(rid));
-  cacheLife({ revalidate: 60, expire: 300 });
+  // 2 min (Decisão do João, 16/10): enquete, foto e telão novos chegam pelo updateTag das
+  // actions; o has_tv (telão visto há < 10 min) sai desta mesma leitura de community_tvs,
+  // sem consulta própria; o result gravado pelo cron chega pelo revalidateTag dele.
+  cacheLife({ revalidate: 120, expire: 600 });
   const mine = { restaurant_id: rid };
   const [polls, posts, tvs] = await Promise.all([
     db.list("community_polls", mine, { sort: "-Id", limit: POLLS_READ }),

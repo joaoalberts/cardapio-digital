@@ -91,7 +91,8 @@ export async function resolveStory(
     // ou sem votos não tem resultado para mostrar.
     const row = polls.find((p) => p.id === pollId && p.restaurant_id === head.id);
     if (!row || pollPhase(row, now) === "scheduled") return null;
-    const votes = (await d.getVotes(row.id)).filter((v) => v.restaurant_id === head.id && v.poll_id === row.id);
+    // Com o result gravado pelo cron (os votos duram 1 dia), nem lê os votos.
+    const votes = row.result ? [] : (await d.getVotes(row.id)).filter((v) => v.restaurant_id === head.id && v.poll_id === row.id);
     const pub = publicPoll(row, votes, now);
     if (!pub.has_votes) return null;
     const menu = await d.getMenu(head.slug);

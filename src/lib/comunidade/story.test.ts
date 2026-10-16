@@ -275,6 +275,20 @@ describe("resolveStory: enquete", () => {
     expect(s.lang).toBe("pt-BR");
   });
 
+  it("encerrada com result gravado (votos já apagados pelo cron): usa o result, sem ler votos", async () => {
+    const withResult = POLLS.map((p) =>
+      p.id === P_CLOSED ? { ...p, result: { a: 0, b: 52, c: 48, has_votes: true, winner: "b" as const } } : p,
+    );
+    const d = deps({
+      getContent: vi.fn(async () => ({ polls: withResult, posts: POSTS, tvs: [] })),
+      getVotes: vi.fn(async () => []),
+    });
+    const s = asPoll(await resolveStory(d, "forno", { poll: P_CLOSED }));
+    expect(s.poll.winner).toBe("b");
+    expect(s.poll.options.map((o) => o.pct)).toEqual([0, 52, 48]);
+    expect(d.getVotes).not.toHaveBeenCalled();
+  });
+
   it("miniatura de cada opção (a das perdedoras aparece ao lado do %); sem prato, nada", async () => {
     const s = asPoll(await resolveStory(deps(), "forno", { poll: P_CLOSED }));
     expect(s.thumbs).toEqual({

@@ -16,7 +16,12 @@ export type PollRow = {
   ends_at: string;
   closed_at: string | null;
   created_at: string;
+  // Resultado final gravado pelo cron antes de apagar os votos (Decisão do João, 16/10):
+  // quando existe, o estado público e o story usam ele, e não os votos.
+  result?: PollResult | null;
 };
+// Porcentagem de cada opção da enquete (só as que existem nela), se houve voto e a vencedora.
+export type PollResult = Partial<Record<OptionId, number>> & { has_votes: boolean; winner: OptionId | null };
 export type VoteRow = { id: string; restaurant_id: string; poll_id: string; option_id: OptionId; device_id: string; table_id: string; created_at: string };
 export type PostRow = {
   id: string;

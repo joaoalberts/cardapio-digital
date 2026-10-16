@@ -82,6 +82,8 @@ export const TABLES = {
   community_polls: [
     id, text("restaurant_id"), text("template"), long("question"), json("options"),
     date("starts_at"), date("ends_at"), date("closed_at"), created,
+    // Resultado final ({a,b,c: %, has_votes, winner}), gravado pelo cron antes de apagar os votos.
+    json("result"),
   ],
   community_votes: [
     id, text("restaurant_id"), text("poll_id"), text("option_id"), text("device_id"), text("table_id"), created,

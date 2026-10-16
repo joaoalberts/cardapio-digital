@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MURAL_PAGE, TV_FRESH_MS, buildPublicState, cacheControl, disabledState } from "./public-state";
+import { MURAL_PAGE, TV_FRESH_MS, buildPublicState, cacheControl, disabledState, parseResult, pollResult } from "./public-state";
 import type { CommunityHead, OptionId, PollRow, PostRow, TvRow, VoteRow } from "./types";
 
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -210,6 +210,22 @@ describe("buildPublicState: enquete", () => {
     expect(s.poll?.winner).toBeNull();
   });
 
+  it("com result gravado (votos já apagados pelo cron), usa o result e não os votos", () => {
+    const closed = poll({
+      starts_at: iso(now - 20 * MIN),
+      ends_at: iso(now - 2 * MIN),
+      result: { a: 30, b: 52, c: 18, has_votes: true, winner: "b" },
+    });
+    const s = buildPublicState(input({ polls: [closed], votes: [] }));
+    expect(s.poll?.options.map((o) => o.pct)).toEqual([30, 52, 18]);
+    expect(s.poll?.has_votes).toBe(true);
+    expect(s.poll?.winner).toBe("b");
+    // Mesmo com votos (de antes da limpeza) na lista, o result manda.
+    const both = buildPublicState(input({ polls: [closed], votes: votes(5, 0, 0) }));
+    expect(both.poll?.options.map((o) => o.pct)).toEqual([30, 52, 18]);
+    expect(both.poll?.winner).toBe("b");
+  });
+
   it("encerrada há mais de 15 min sai do poll", () => {
     const old = poll({ starts_at: iso(now - 40 * MIN), ends_at: iso(now - 16 * MIN) });
     expect(buildPublicState(input({ polls: [old] })).poll).toBeNull();
@@ -331,5 +347,42 @@ describe("v (hash do conteúdo)", () => {
   });
   it("é curto", () => {
     expect(buildPublicState(input()).v).toMatch(/^[0-9a-f]{8}$/);
+  });
+});
+
+describe("pollResult e parseResult (resultado final gravado antes de apagar os votos)", () => {
+  it("pollResult: % pelo maior resto, has_votes e vencedora pela contagem, só das opções da enquete", () => {
+    expect(pollResult(poll(), votes(2, 1, 0))).toEqual({ a: 67, b: 33, c: 0, has_votes: true, winner: "a" });
+    expect(pollResult(poll(), votes(0, 50, 51))).toEqual({ a: 0, b: 50, c: 50, has_votes: true, winner: "c" });
+    expect(pollResult(poll(), [])).toEqual({ a: 0, b: 0, c: 0, has_votes: false, winner: null });
+    const two = poll({ options: poll().options.slice(0, 2) });
+    expect(pollResult(two, [...votes(1, 1, 0), vote("c")])).toEqual({ a: 50, b: 50, has_votes: true, winner: "a" });
+  });
+
+  it("pollResult aplica os tetos e o voto repetido do mesmo device", () => {
+    const dev = U(9999);
+    const repeated = [vote("a", { device_id: dev }), vote("b", { device_id: dev })];
+    expect(pollResult(poll(), repeated)).toEqual({ a: 100, b: 0, c: 0, has_votes: true, winner: "a" });
+  });
+
+  it("parseResult aceita só o formato certo para as opções da enquete", () => {
+    const ids = ["a", "b", "c"] as OptionId[];
+    const ok = { a: 30, b: 52, c: 18, has_votes: true, winner: "b" };
+    expect(parseResult(ok, ids)).toEqual(ok);
+    expect(parseResult({ a: 0, b: 0, c: 0, has_votes: false, winner: null }, ids)).toEqual({ a: 0, b: 0, c: 0, has_votes: false, winner: null });
+    for (const bad of [
+      null,
+      "x",
+      [],
+      { ...ok, a: 31 }, // soma 101
+      { ...ok, c: undefined },
+      { ...ok, a: -1, b: 83 },
+      { ...ok, a: 30.5, b: 51.5 },
+      { ...ok, winner: "d" },
+      { ...ok, has_votes: "true" },
+      { a: 0, b: 0, c: 0, has_votes: false, winner: "a" },
+      { a: 50, b: 50, c: 0, has_votes: false, winner: null },
+    ])
+      expect(parseResult(bad, ids)).toBeNull();
   });
 });

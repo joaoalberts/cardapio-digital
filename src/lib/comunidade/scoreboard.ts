@@ -3,6 +3,7 @@
 // (dayBounds). Conta só as linhas com origem da Comunidade, e nunca um pedido descartado
 // (envio repetido ou oferta perdida). O texto da tela diz "saíram", nunca "gerou".
 import type { OrderRow } from "@/lib/orders/service";
+import { addDays, dayBounds } from "./clock";
 import type { FunnelKey, TallyRow } from "./types";
 
 export const FUNNEL_KEYS: readonly FunnelKey[] = ["qr", "balloon_seen", "open", "vote", "buy_tap", "share", "ref_story", "ref_telao"];
@@ -59,4 +60,97 @@ export function scoreboard(orders: OrderRow[], tallies: TallyRow[], bounds: { fr
   const pct = qr.size ? Math.min(100, Math.round((open.size * 100) / qr.size)) : 0;
 
   return { orders: nOrders, lines: nLines, cents, funnel, tables: { qr: qr.size, open: open.size, pct } };
+}
+
+// ---------- Metas: vender mais e mais interação (Decisão do João, 16/10) ----------
+// Por noite e no acumulado de 4 semanas:
+// (a) % das linhas pedidas pelo QR que saíram da Comunidade (meta 5%);
+// (b) ticket por mesa = valor dos pedidos não descartados ÷ mesas distintas que pediram,
+//     contra a média do mesmo dia da semana nas 4 semanas anteriores (meta +5%). No
+//     acumulado, contra as 4 semanas de antes (que têm os mesmos dias da semana);
+// (c) interações por mesa = (vote + buy_tap + share) ÷ mesas que leram o QR (meta 1,5).
+// Somando noites, as mesas contam por noite (mesa-noite): a mesma mesa em duas noites são
+// dois grupos de clientes. A base do ticket é a média ponderada pelas mesas.
+
+export const GOALS = { share: 5, ticket: 5, interactions: 1.5 } as const;
+
+export type NightBounds = { day: string; from: Date; to: Date };
+export type NightTotals = { lines: number; communityLines: number; cents: number; tables: number; interactions: number; tablesQr: number };
+export type Goals = {
+  share: { pct: number | null; goal: number; hit: boolean | null };
+  ticket: { cents: number | null; baseline: number | null; delta: number | null; goal: number; hit: boolean | null };
+  interactions: { perTable: number | null; goal: number; hit: boolean | null };
+};
+
+// As noites que as metas usam, a partir do dia da Comunidade de hoje. since = início da
+// noite mais antiga (o que o painel precisa ler de pedidos).
+export function goalNights(today: string, timezone: string, dayStart: string) {
+  const b = (day: string): NightBounds => ({ day, ...dayBounds(day, timezone, dayStart) });
+  const range = (start: number, n: number) => Array.from({ length: n }, (_, k) => b(addDays(today, -(start + k))));
+  const prevMonth = range(28, 28);
+  return {
+    tonight: b(today),
+    sameWeekday: [7, 14, 21, 28].map((k) => b(addDays(today, -k))),
+    month: range(0, 28),
+    prevMonth,
+    since: prevMonth[27].from,
+  };
+}
+
+// Totais de uma noite. Linhas contam 1 cada (qualquer quantidade), como no placar; o valor é
+// o total do pedido (sem total, a soma das linhas).
+export function nightTotals(orders: OrderRow[], tallies: TallyRow[], night: NightBounds): NightTotals {
+  const from = night.from.getTime();
+  const to = night.to.getTime();
+  let lines = 0;
+  let communityLines = 0;
+  let cents = 0;
+  const tables = new Set<string>();
+  for (const o of orders) {
+    if (o.discarded === true) continue;
+    const t = ms(o.created_at);
+    if (!(t >= from && t < to)) continue;
+    const ls = Array.isArray(o.lines) ? o.lines.filter(Boolean) : [];
+    lines += ls.length;
+    communityLines += ls.filter((l) => ORIGINS.has(l.origin as string)).length;
+    const total = count(o.total_cents);
+    cents += total ?? ls.reduce((sum, l) => sum + (count(l.unit_cents) ?? 0) * (count(l.qty) ?? 0), 0);
+    if (typeof o.table_id === "string" && o.table_id) tables.add(o.table_id);
+  }
+  let interactions = 0;
+  const qr = new Set<string>();
+  for (const row of tallies) {
+    if (row.day !== night.day) continue;
+    const c = row.counts && typeof row.counts === "object" ? row.counts : {};
+    interactions += (count(c.vote) ?? 0) + (count(c.buy_tap) ?? 0) + (count(c.share) ?? 0);
+    for (const id of ids(row.tables_qr)) qr.add(id);
+  }
+  return { lines, communityLines, cents, tables: tables.size, interactions, tablesQr: qr.size };
+}
+
+const sum = (ns: NightTotals[], k: keyof NightTotals) => ns.reduce((a, n) => a + n[k], 0);
+
+export function goalsFor(current: NightTotals[], baseline: NightTotals[]): Goals {
+  const lines = sum(current, "lines");
+  const pct = lines ? (sum(current, "communityLines") * 100) / lines : null;
+  const tables = sum(current, "tables");
+  const cents = tables ? sum(current, "cents") / tables : null;
+  const baseTables = sum(baseline, "tables");
+  const base = baseTables ? sum(baseline, "cents") / baseTables : null;
+  const delta = cents !== null && base ? ((sum(current, "cents") * baseTables - sum(baseline, "cents") * tables) * 100) / (sum(baseline, "cents") * tables) : null;
+  const qr = sum(current, "tablesQr");
+  const perTable = qr ? sum(current, "interactions") / qr : null;
+  return {
+    share: { pct, goal: GOALS.share, hit: pct === null ? null : pct >= GOALS.share },
+    ticket: { cents, baseline: base, delta, goal: GOALS.ticket, hit: delta === null ? null : delta >= GOALS.ticket },
+    interactions: { perTable, goal: GOALS.interactions, hit: perTable === null ? null : perTable >= GOALS.interactions },
+  };
+}
+
+export function salesGoals(orders: OrderRow[], tallies: TallyRow[], n: ReturnType<typeof goalNights>): { night: Goals; month: Goals } {
+  const totals = (bs: NightBounds[]) => bs.map((b) => nightTotals(orders, tallies, b));
+  return {
+    night: goalsFor(totals([n.tonight]), totals(n.sameWeekday)),
+    month: goalsFor(totals(n.month), totals(n.prevMonth)),
+  };
 }

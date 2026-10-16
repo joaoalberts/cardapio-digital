@@ -348,6 +348,19 @@ describe("readPublicState", () => {
     for (const secret of [U(301), U(302), U(303), MESA_7, MESA_9, "device_id", "table_id"]) expect(json).not.toContain(secret);
   });
 
+  it("enquete recém-encerrada com result gravado: usa o result e não lê votos", async () => {
+    const closed = poll(P_OPEN, {
+      starts_at: iso(now - 20 * MIN),
+      ends_at: iso(now - 2 * MIN),
+      result: { a: 25, b: 75, c: 0, has_votes: true, winner: "b" },
+    });
+    const s = setup({ polls: [closed] });
+    const st = await readPublicState(s.deps, "forno");
+    expect(st?.poll).toMatchObject({ id: P_OPEN, closed: true, has_votes: true, winner: "b" });
+    expect(st?.poll?.options.map((o) => o.pct)).toEqual([25, 75, 0]);
+    expect(s.calls.list).toHaveLength(0);
+  });
+
   it("sem enquete aberta nem recém-encerrada: não lê votos", async () => {
     const s = setup({ content: [poll(P_SCHED, { starts_at: iso(now + 10 * MIN), ends_at: iso(now + 20 * MIN) })] });
     const st = await readPublicState(s.deps, "forno");
@@ -531,6 +544,25 @@ describe("toContent (linhas do NocoDB → agenda, posts e telões)", () => {
       closed_at: iso(now - MIN),
       created_at: iso(now - HOUR),
     });
+  });
+
+  it("result do banco entra só se bater com as opções; inválido fica de fora", () => {
+    const good = { a: 40, b: 60, c: 0, has_votes: true, winner: "b" };
+    const { polls } = toContent(
+      {
+        polls: [
+          pollRow(U(1), { result: JSON.parse(JSON.stringify(good)) }),
+          pollRow(U(2), { result: { a: 50, b: 60, c: 0, has_votes: true, winner: "b" } }),
+          pollRow(U(3), { result: null }),
+        ],
+        posts: [],
+        tvs: [],
+      },
+      NOW,
+    );
+    expect(polls[0].result).toEqual(good);
+    expect(polls[1]).not.toHaveProperty("result");
+    expect(polls[2]).not.toHaveProperty("result");
   });
 
   it("guarda as enquetes que terminaram nas últimas 24 h e as futuras", () => {

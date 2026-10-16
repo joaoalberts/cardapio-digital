@@ -36,7 +36,7 @@ function zoned(ms: number, timezone: string) {
 
 const ymd = (y: number, mo: number, d: number) => new Date(Date.UTC(y, mo - 1, d)).toISOString().slice(0, 10);
 
-function addDays(day: string, n: number): string {
+export function addDays(day: string, n: number): string {
   const [y, mo, d] = day.split("-").map(Number);
   return ymd(y, mo, d + n);
 }
