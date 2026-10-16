@@ -1,5 +1,6 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import * as db from "@/lib/db/nocodb";
+import { recordFunnel } from "@/lib/comunidade/funnel";
 import { getCommunityContent, getCommunityHead } from "@/lib/comunidade/server";
 import { castVote, communityOff, type CommunityDb, type VoteDeps } from "@/lib/comunidade/votes";
 import { isValidSlug } from "@/lib/slug";
@@ -11,12 +12,6 @@ const NO_STORE = { "cache-control": "no-store" };
 const MAX_BODY = 2_000;
 
 type Ctx = { params: Promise<{ slug: string }> };
-
-// Marcador do funil: a Tarefa 4 troca por recordFunnel de @/lib/comunidade/funnel.
-async function recordFunnel(slug: string, batch: { counts: { vote: number }; mesa: string | null }): Promise<void> {
-  void slug;
-  void batch;
-}
 
 export async function POST(request: NextRequest, { params }: Ctx) {
   const slug = (await params).slug.toLowerCase();

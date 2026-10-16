@@ -41,3 +41,15 @@ export async function getCommunityContent(rid: string): Promise<{ polls: PollRow
   ]);
   return toContent({ polls, posts, tvs }, new Date());
 }
+
+// Mesas do restaurante para o funil (código do QR → table_id), em cache de 5 min. Só o
+// funil usa esta lista: o voto e o pedido conferem a mesa no banco a cada vez.
+export async function getCommunityTables(rid: string): Promise<{ id: string; code: string; active: boolean }[]> {
+  "use cache";
+  cacheTag(communityTags.rid(rid));
+  cacheLife({ revalidate: 300, expire: 600 });
+  const rows = await db.list<Record<string, unknown>>("dining_tables", { restaurant_id: rid });
+  return rows.flatMap((r) =>
+    typeof r.id === "string" && typeof r.code === "string" ? [{ id: r.id, code: r.code, active: r.active === true }] : [],
+  );
+}
