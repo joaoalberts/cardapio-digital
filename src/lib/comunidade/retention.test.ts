@@ -364,6 +364,9 @@ const h = vi.hoisted(() => ({
   removeFiles: vi.fn<(paths: unknown[]) => Promise<void>>(async () => {}),
 }));
 vi.mock("@/lib/db/nocodb", () => ({ list: h.list, removeIds: h.removeIds }));
+// A rota também varre o Apareça (módulos "server-only"); a tabela vem vazia aqui.
+vi.mock("server-only", () => ({}));
+vi.mock("next/cache", () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
 // A rota usa só a remoção estrita; a comum, que engole erro, faria a linha sair com o
 // arquivo ainda lá.
 vi.mock("@/lib/storage", () => ({
@@ -409,14 +412,14 @@ describe("GET /api/cron/comunidade", () => {
     expect(h.list).not.toHaveBeenCalled();
   });
 
-  it("COMMUNITY_OFF=1: confere a senha antes e responde desligada sem tocar no banco", async () => {
+  it("COMMUNITY_OFF=1: confere a senha antes e responde desligada sem tocar nas tabelas da Comunidade (o Apareça ainda varre a dele)", async () => {
     vi.stubEnv("CRON_SECRET", SECRET);
     vi.stubEnv("COMMUNITY_OFF", "1");
     expect((await call("Bearer errado")).status).toBe(401);
     const res = await call(`Bearer ${SECRET}`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, off: true });
-    expect(h.list).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({ ok: true, off: true, apareca: { deleted: 0, failed: 0 } });
+    expect(h.list.mock.calls.map(([t]) => t)).toEqual(["apareca_videos"]);
   });
 
   it("senha certa: varre, apaga (mesmo de restaurante com a Comunidade desligada) e devolve só os números", async () => {
@@ -427,7 +430,7 @@ describe("GET /api/cron/comunidade", () => {
     const res = await call(`Bearer ${SECRET}`);
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
-    expect(await res.json()).toEqual({ ok: true, failed: 0, deleted: { votes: 1, tallies: 0, posts: 0, tvs: 0 } });
+    expect(await res.json()).toEqual({ ok: true, failed: 0, deleted: { votes: 1, tallies: 0, posts: 0, tvs: 0 }, apareca: { deleted: 0, failed: 0 } });
     expect(h.removeIds).toHaveBeenCalledWith("community_votes", [7]);
     expect(h.list.mock.calls.map(([t]) => t)).not.toContain("restaurants");
   });
@@ -445,7 +448,7 @@ describe("GET /api/cron/comunidade", () => {
     h.list.mockRejectedValue(new Error("nocodb GET: 500"));
     const all = await call(`Bearer ${SECRET}`);
     expect(all.status).toBe(500);
-    expect(await all.json()).toEqual({ ok: false, failed: 4, deleted: { votes: 0, tallies: 0, posts: 0, tvs: 0 } });
+    expect(await all.json()).toEqual({ ok: false, failed: 4, deleted: { votes: 0, tallies: 0, posts: 0, tvs: 0 }, apareca: { deleted: 0, failed: 1 } });
     spy.mockRestore();
   });
 
@@ -459,7 +462,7 @@ describe("GET /api/cron/comunidade", () => {
     const res = await call(`Bearer ${SECRET}`);
     spy.mockRestore();
     expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ ok: false, failed: 1, deleted: { votes: 0, tallies: 0, posts: 0, tvs: 0 } });
+    expect(await res.json()).toEqual({ ok: false, failed: 1, deleted: { votes: 0, tallies: 0, posts: 0, tvs: 0 }, apareca: { deleted: 0, failed: 0 } });
     expect(h.removeFiles).toHaveBeenCalledWith([old.photo_path, old.thumb_path]);
     expect(h.removeIds).not.toHaveBeenCalledWith("community_posts", expect.anything());
     // Na rodada seguinte o arquivo sai e a linha também.
