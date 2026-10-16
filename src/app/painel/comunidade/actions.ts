@@ -1,6 +1,7 @@
 "use server";
 
 import { updateTag } from "next/cache";
+import { aparecaTags } from "@/lib/apareca/store";
 import { isMember, isOwner } from "@/lib/auth";
 import * as db from "@/lib/db/nocodb";
 import { pollPhase } from "@/lib/comunidade/clock";
@@ -56,6 +57,9 @@ export async function setCommunityEnabled(restaurantId: string, on: boolean): Pr
     return { error: FAIL };
   }
   refresh(r);
+  // O Apareça lê community_enabled na cabeça dele (cache por slug e por id).
+  updateTag(aparecaTags.slug(r.slug));
+  updateTag(aparecaTags.rid(r.id));
   return {};
 }
 
