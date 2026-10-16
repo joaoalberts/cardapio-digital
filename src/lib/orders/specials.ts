@@ -3,6 +3,7 @@
 // O banco vem de fora (deps.db), como em service.ts.
 import { openStatus } from "@/lib/menu/hours";
 import { isSpecialOpen, specialCooldownMs } from "@/lib/menu/special-schedule";
+import { SPECIAL_TIME_WINDOW_MIN } from "@/lib/menu/specials";
 import type { PublicMenu } from "@/lib/menu/types";
 
 export type ClaimRow = {
@@ -21,6 +22,7 @@ export type ClaimRow = {
 
 export const CLAIM_TTL_MS = 6 * 60 * 60 * 1000; // mesmo prazo do carrinho guardado
 export const TABLE_MAX_PER_WINDOW = 3;
+const CLAIM_GRACE_MS = 60_000; // folga do servidor depois da janela do horário marcado
 
 type Where = Record<string, string | number | boolean | null>;
 export type ClaimsDb = {
@@ -63,14 +65,17 @@ export async function claimSpecial(deps: ClaimDeps, slug: string, body: unknown)
   // Horário marcado: o celular mostra a oferta até 1 minuto depois da hora e o toque vem
   // depois da contagem (3 s) e da oferta (até 15 s); o servidor dá mais 1 minuto de folga.
   const open = (at: Date) => !!item && isSpecialOpen(item, r.timezone, at);
-  const inTime = open(now) || (!!item?.special?.times?.length && open(new Date(now.getTime() - 60_000)));
+  const inTime = open(now) || (!!item?.special?.times?.length && open(new Date(now.getTime() - CLAIM_GRACE_MS)));
   if (!item?.special || item.promo_price_cents == null || !inTime) {
     return { ok: false, code: "unavailable" };
   }
 
   // Contra abuso: o mesmo celular espera o intervalo (ou, com horários marcados, a janela
   // de 5 minutos); a mesa pega no máximo 3 vezes nesse tempo.
-  const since = now.getTime() - specialCooldownMs(item);
+  // Com horário marcado, o servidor aceita o toque por 2 minutos (1 de folga no celular + 1
+  // aqui): o bloqueio cobre a janela inteira, para não dar duas vezes no mesmo horário.
+  const lookback = item.special.times?.length ? SPECIAL_TIME_WINDOW_MIN * 60_000 + CLAIM_GRACE_MS : specialCooldownMs(item);
+  const since = now.getTime() - lookback;
   const recent = (rows: ClaimRow[]) => rows.filter((c) => Date.parse(c.created_at) > since);
   const mine = recent(await deps.db.list<ClaimRow>("special_claims", { restaurant_id: r.id, item_id: item.id, device_id: input.device }));
   if (mine.length) return { ok: false, code: "too_soon" };
