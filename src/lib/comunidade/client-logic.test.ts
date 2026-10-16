@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { MenuCategory, MenuItem, PublicMenu } from "@/lib/menu/types";
 import {
   BALLOON_MIN_BAND, balloonMode, balloonNeed, buyState, clockSkew, clockText, houseHighlight, leaderOf, localTime,
-  minuteClock, muralColumns, orderableNow, pairCodeDue, pairCodeRecord, pollDelay, pollTiming, questionText, refFrom,
+  minuteClock, muralLayout, orderableNow, pairCodeDue, pairCodeRecord, pollDelay, pollTiming, questionText, refFrom,
   relativeTime, savedPairCode, shownPcts, POLL_OFF_MS,
+  balloonPath, buyFlow, cmuReturnDue, halfPartners, lowerFirst, pollOutcome, priceInfo, ringText, sizeChoices, soleLeader, stageCover,
   backoff, pollChime, TV_POLL_MS, TV_RELOAD_MS, tvMode, tvQuestionLong, tvReloadDue, storyChoices,
 } from "./client-logic";
 import type { PublicOption, PublicPoll, PublicPost, PublicState } from "./types";
@@ -42,14 +43,15 @@ describe("balloonMode", () => {
     expect(balloonMode(95)).toBe("compact");
     expect(balloonMode(96)).toBe("full");
   });
-  it("com a altura do balão da ficha: precisa caber o balão + 8 px em cima e embaixo", () => {
-    expect(balloonNeed("poll")).toBe(134);
-    expect(balloonNeed("mural")).toBe(138);
-    expect(balloonMode(147, balloonNeed("poll"))).toBe("full"); // 390×844
-    expect(balloonMode(82, balloonNeed("poll"))).toBe("compact"); // iPhone SE
-    expect(balloonMode(133, balloonNeed("poll"))).toBe("compact");
-    expect(balloonMode(134, balloonNeed("poll"))).toBe("full");
-    expect(balloonMode(137, balloonNeed("mural"))).toBe("compact");
+  it("com a altura do balão da ficha v2 (119 e 123 com a ponta): precisa caber o balão + 16 px", () => {
+    expect(balloonNeed("poll")).toBe(135);
+    expect(balloonNeed("mural")).toBe(139);
+    expect(balloonMode(148, balloonNeed("poll"))).toBe("full"); // 390×844: faixa de 148
+    expect(balloonMode(148, balloonNeed("mural"))).toBe("full");
+    expect(balloonMode(83, balloonNeed("poll"))).toBe("compact"); // iPhone SE: faixa de 83
+    expect(balloonMode(134, balloonNeed("poll"))).toBe("compact");
+    expect(balloonMode(135, balloonNeed("poll"))).toBe("full");
+    expect(balloonMode(138, balloonNeed("mural"))).toBe("compact");
   });
   it("nunca abaixo do mínimo de 96 px, nem com medida estranha", () => {
     expect(balloonMode(100, 40)).toBe("full");
@@ -247,11 +249,23 @@ describe("relógio da enquete", () => {
   });
 });
 
-describe("muralColumns", () => {
-  it("2 colunas desencontradas: esquerda 4:5, 1:1…; direita 1:1, 4:5…", () => {
-    const { left, right } = muralColumns(["p0", "p1", "p2", "p3", "p4"]);
-    expect(left).toEqual([{ post: "p0", ar: "4 / 5", i: 0 }, { post: "p2", ar: "1 / 1", i: 2 }, { post: "p4", ar: "4 / 5", i: 4 }]);
-    expect(right).toEqual([{ post: "p1", ar: "1 / 1", i: 1 }, { post: "p3", ar: "4 / 5", i: 3 }]);
+describe("muralLayout (página de revista)", () => {
+  it("a 1ª foto grande; depois duas quadradas e uma larga, repetindo", () => {
+    expect(muralLayout(["p0", "p1", "p2", "p3", "p4", "p5", "p6"])).toEqual([
+      { kind: "big", posts: ["p0"], i: 0 },
+      { kind: "pair", posts: ["p1", "p2"], i: 1 },
+      { kind: "wide", posts: ["p3"], i: 3 },
+      { kind: "pair", posts: ["p4", "p5"], i: 4 },
+      { kind: "wide", posts: ["p6"], i: 6 },
+    ]);
+  });
+  it("quadrada sozinha no fim vira larga; vazio, nada", () => {
+    expect(muralLayout(["p0", "p1"])).toEqual([
+      { kind: "big", posts: ["p0"], i: 0 },
+      { kind: "wide", posts: ["p1"], i: 1 },
+    ]);
+    expect(muralLayout(["p0", "p1", "p2", "p3", "p4"]).map((b) => b.kind)).toEqual(["big", "pair", "wide", "wide"]);
+    expect(muralLayout([])).toEqual([]);
   });
 });
 
@@ -413,5 +427,127 @@ describe("storyChoices (o que a folha do story oferece)", () => {
       poll: null,
       post: null,
     });
+  });
+});
+
+// ---------- Comunidade v2 (telas do celular) ----------
+
+describe("ringText: o anel do tempo em minutos", () => {
+  it("minutos arredondados para cima, com 'min'", () => {
+    expect(ringText(41 * 60_000)).toEqual({ n: "41", unit: "min" });
+    expect(ringText(40 * 60_000 + 1)).toEqual({ n: "41", unit: "min" });
+    expect(ringText(60_000)).toEqual({ n: "1", unit: "min" });
+  });
+  it("último minuto em segundos; acabou, 0 s", () => {
+    expect(ringText(59_999)).toEqual({ n: "1", unit: "min" });
+    expect(ringText(59_000)).toEqual({ n: "59", unit: "s" });
+    expect(ringText(42_000)).toEqual({ n: "42", unit: "s" });
+    expect(ringText(0)).toEqual({ n: "0", unit: "s" });
+    expect(ringText(-3_000)).toEqual({ n: "0", unit: "s" });
+  });
+  it("1 h ou mais: 3h47, sem unidade", () => {
+    expect(ringText(60 * 60_000)).toEqual({ n: "1h00", unit: "" });
+    expect(ringText(227 * 60_000 + 16_000)).toEqual({ n: "3h47", unit: "" });
+    expect(ringText(59 * 60_000 + 30_000)).toEqual({ n: "60", unit: "min" });
+  });
+});
+
+describe("pollOutcome: deu, empate ou sem votos", () => {
+  const opts = (pcts: number[]): PublicOption[] => pcts.map((pct, k) => ({ id: (["a", "b", "c"] as const)[k], label: "", item_id: null, pct }));
+  it("venceu com 1 ponto ou mais de diferença; as outras pela %", () => {
+    expect(pollOutcome({ has_votes: true, options: opts([31, 52, 17]) })).toEqual({ kind: "win", id: "b", rest: ["a", "c"] });
+    expect(pollOutcome({ has_votes: true, options: opts([50, 49, 1]) })).toEqual({ kind: "win", id: "a", rest: ["b", "c"] });
+  });
+  it("empate nas duas de cima: as duas, e a de fora", () => {
+    expect(pollOutcome({ has_votes: true, options: opts([43, 43, 14]) })).toEqual({ kind: "tie", ids: ["a", "b"], rest: ["c"] });
+    expect(pollOutcome({ has_votes: true, options: opts([14, 43, 43]) })).toEqual({ kind: "tie", ids: ["b", "c"], rest: ["a"] });
+    expect(pollOutcome({ has_votes: true, options: opts([33, 33, 33]) })).toEqual({ kind: "tie", ids: ["a", "b", "c"], rest: [] });
+  });
+  it("sem votos: nada", () => {
+    expect(pollOutcome({ has_votes: false, options: opts([0, 0, 0]) })).toEqual({ kind: "none" });
+    expect(pollOutcome({ has_votes: true, options: [] })).toEqual({ kind: "none" });
+  });
+});
+
+describe("soleLeader: barra acesa só sem empate", () => {
+  it("a maior sozinha; empate em cima ou tudo zero, nenhuma", () => {
+    expect(soleLeader({ a: 44, b: 37, c: 19 })).toBe("a");
+    expect(soleLeader({ a: 43, b: 43, c: 14 })).toBeNull();
+    expect(soleLeader({ a: 0, b: 0 })).toBeNull();
+    expect(soleLeader({ c: 100 })).toBe("c");
+  });
+});
+
+describe("priceInfo: o preço que aparece junto do nome", () => {
+  it("prato simples: promoção, senão o preço", () => {
+    expect(priceInfo(item("x", { price_cents: 4200 }))).toEqual({ cents: 4200, from: false });
+    expect(priceInfo(item("x", { price_cents: 4200, promo_price_cents: 3900 }))).toEqual({ cents: 3900, from: false });
+  });
+  it("com tamanhos: o menor, 'a partir de' só quando os preços variam", () => {
+    const sizes = [{ label: "Broto", price_cents: 3800 }, { label: "Grande", price_cents: 5400 }];
+    expect(priceInfo(item("x", { price_options: sizes }))).toEqual({ cents: 3800, from: true });
+    expect(priceInfo(item("x", { price_options: [{ label: "Única", price_cents: 5400 }] }))).toEqual({ cents: 5400, from: false });
+  });
+  it("preço escondido ou zero: nada", () => {
+    expect(priceInfo(item("x", { hide_price: true }))).toBeNull();
+    expect(priceInfo(item("x", { price_cents: 0 }))).toBeNull();
+    expect(priceInfo(item("x", { price_options: [{ label: "G", price_cents: 0 }] }))).toBeNull();
+    expect(priceInfo(undefined)).toBeNull();
+  });
+});
+
+describe("Pedir também: direto ou pela folha de tamanhos", () => {
+  const sizes = [{ label: "Broto", price_cents: 3800 }, { label: "Grande", price_cents: 5400 }];
+  const pizzaA = item("a", { category_id: "pz", half_half: true, price_options: sizes });
+  const pizzaB = item("b", { category_id: "pz", half_half: true, price_options: [{ label: "Grande", price_cents: 6000 }] });
+  const solo = item("s", { category_id: "pz2", half_half: true, price_cents: 3000 });
+  const m = menu([cat("pz", [pizzaA, pizzaB]), cat("pz2", [solo]), cat("c1", [item("burger")])]);
+  it("prato simples entra direto; tamanho único também, já com o tamanho", () => {
+    expect(buyFlow(item("burger"), m)).toEqual({ kind: "add", option: null });
+    expect(buyFlow(item("u", { price_options: [{ label: "Única", price_cents: 1000 }] }), m)).toEqual({ kind: "add", option: "Única" });
+    // meio a meio sem outro sabor na categoria: só a inteira
+    expect(buyFlow(solo, m)).toEqual({ kind: "add", option: null });
+  });
+  it("com tamanhos ou meio a meio possível: a folha", () => {
+    expect(buyFlow(item("t", { price_options: sizes }), m)).toEqual({ kind: "sheet" });
+    expect(buyFlow(item("h", { category_id: "pz", half_half: true, price_cents: 5000 }), menu([cat("pz", [item("h", { category_id: "pz", half_half: true, price_cents: 5000 }), item("i", { category_id: "pz", price_cents: 4000 })])]))).toEqual({ kind: "sheet" });
+  });
+  it("sizeChoices: os tamanhos com preço; sem tamanhos, a inteira", () => {
+    expect(sizeChoices(pizzaA)).toEqual([{ label: "Broto", cents: 3800 }, { label: "Grande", cents: 5400 }]);
+    expect(sizeChoices(item("x", { price_cents: 4200 }))).toEqual([{ label: null, cents: 4200 }]);
+    expect(sizeChoices(item("x", { hide_price: true }))).toEqual([]);
+  });
+  it("halfPartners: outros sabores da categoria com o mesmo tamanho", () => {
+    expect(halfPartners(m, pizzaA, "Grande").map((x) => x.id)).toEqual(["b"]);
+    expect(halfPartners(m, pizzaA, "Broto")).toEqual([]);
+    expect(halfPartners(m, item("burger"), null)).toEqual([]); // não aceita meio a meio
+    expect(halfPartners(null, pizzaA, "Grande")).toEqual([]);
+  });
+  it("cmuReturnDue: a Comunidade volta quando o meio a meio termina (sem escolha e sem folha)", () => {
+    expect(cmuReturnDue({ waiting: true, pick: false, sheet: false })).toBe(true);
+    expect(cmuReturnDue({ waiting: true, pick: true, sheet: false })).toBe(false);
+    expect(cmuReturnDue({ waiting: true, pick: false, sheet: true })).toBe(false);
+    expect(cmuReturnDue({ waiting: false, pick: false, sheet: false })).toBe(false);
+  });
+});
+
+describe("capa do Palco e textos curtos", () => {
+  it("stageCover: tríptico só com foto em todas as opções; senão a capa da casa", () => {
+    expect(stageCover(["a.webp", "b.webp", "c.webp"])).toEqual(["a.webp", "b.webp", "c.webp"]);
+    expect(stageCover(["a.webp", null])).toBeNull();
+    expect(stageCover(["a.webp"])).toBeNull();
+    expect(stageCover([])).toBeNull();
+  });
+  it("lowerFirst: 'Vote: qual prato…'; em alemão fica como está", () => {
+    expect(lowerFirst("Qual prato sai primeiro hoje?", "pt-BR")).toBe("qual prato sai primeiro hoje?");
+    expect(lowerFirst("¿Qué postre sale hoy?", "es")).toBe("¿qué postre sale hoy?");
+    expect(lowerFirst("Welches Dessert gewinnt heute?", "de")).toBe("Welches Dessert gewinnt heute?");
+    expect(lowerFirst("", "pt-BR")).toBe("");
+  });
+  it("balloonPath: corpo com cantos e a ponta no meio, embaixo", () => {
+    const d = balloonPath(262, 107, 24, 28, 12);
+    expect(d.startsWith("M24 0H238")).toBe(true);
+    expect(d).toContain("Q131 119"); // ponta em x = 131, y = 107 + 12
+    expect(d.endsWith("Z")).toBe(true);
   });
 });

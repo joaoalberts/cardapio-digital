@@ -66,45 +66,128 @@ function closedPoll(winnerItem: string | null): PublicPoll {
   };
 }
 
-function render(poll: PublicPoll) {
+type Opts = { mine?: "a" | "b" | "c" | null; canVote?: boolean; offline?: boolean; items?: MenuItem[]; inCart?: number };
+function render(poll: PublicPoll, o: Opts = {}) {
+  const items = o.items ?? [dish];
+  const m: PublicMenu = { ...menu, categories: [{ id: "c1", name: "Lanches", items }] };
   h.order = {
-    lang: "pt-BR", menu, enabled: true, pick: null,
-    itemById: (id: string) => (id === dish.id ? dish : undefined),
-    inCart: () => 0, add: () => {}, openItem: () => {},
+    lang: "pt-BR", menu: m, enabled: true, pick: null,
+    itemById: (id: string) => items.find((x) => x.id === id),
+    inCart: () => o.inCart ?? 0, add: () => {}, openItem: () => {},
   };
   h.comunidade = {
-    state: { now: NOW, poll, next: null, mural: [], has_tv: false },
-    open: true, tab: "palco", skew: 0, offline: false, canVote: true,
-    myVote: () => null, track: () => {}, setOpen: () => {}, setTab: () => {}, vote: async () => ({ ok: true }),
+    state: { enabled: true, now: NOW, poll, next: null, mural: [], has_tv: false },
+    open: true, tab: "palco", skew: 0, minute: 0, offline: !!o.offline, canVote: o.canVote ?? true,
+    myVote: () => o.mine ?? null, track: () => {}, setOpen: () => {}, setTab: () => {}, vote: async () => ({ ok: true }),
   };
-  return renderToStaticMarkup(createElement(Stage));
+  return renderToStaticMarkup(createElement(Stage, { onShare: () => {} }));
 }
 
-// Os botões "Pedir também" do Palco (classe cmu-also), com o texto e se estão desligados.
+// Os botões "Pedir também" do Palco (classe cmu-buy): o texto, o preço e se estão desligados.
 function buyButtons(html: string) {
-  return [...html.matchAll(/<button class="cmu-also[^"]*"([^>]*)>.*?<span class="cmu-t">([^<]*)<\/span><\/button>/g)].map((m) => ({
+  return [...html.matchAll(/<button class="cmu-buy[^"]*"([^>]*)>(.*?)<\/button>/g)].map((m) => ({
     disabled: /\sdisabled=""/.test(m[1]),
-    text: m[2],
+    text: /<span class="cmu-t">([^<]*)<\/span>/.exec(m[2])?.[1] ?? "",
+    price: /<span class="cmu-pr">([^<]*)<\/span>/.exec(m[2])?.[1]?.replace(/\u00a0/g, " ") ?? null,
   }));
+}
+const txt = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&nbsp;|\u00a0/g, " ").replace(/\s+/g, " ");
+
+function openPoll(): PublicPoll {
+  return {
+    ...closedPoll(dish.id),
+    options: [
+      { id: "a", label: "", item_id: dish.id, pct: 44 },
+      { id: "b", label: "Samba", item_id: null, pct: 37 },
+      { id: "c", label: "Jazz", item_id: null, pct: 19 },
+    ],
+    ends_at: "2026-10-16T23:41:00Z",
+    closed: false,
+  };
 }
 
 describe("Palco · vencedora da enquete encerrada e o \"Pedir também\"", () => {
-  it("vencedora sem prato ligado (só o texto da casa): sem botão", () => {
+  it("vencedora sem prato ligado (só o texto da casa): sem botão, \"Deu Rock clássico\"", () => {
     const html = render(closedPoll(null));
-    expect(html).toContain("Rock clássico");
-    expect(html).toContain("Deu na enquete");
+    expect(txt(html)).toContain("Deu Rock clássico");
     expect(buyButtons(html)).toEqual([]);
   });
 
-  it("vencedora ligada a um prato do cardápio: \"Pedir também\" ligado", () => {
+  it("vencedora sem prato e com destaque da casa: \"Pra acompanhar\" com o destaque", () => {
+    const star = item("star", { featured: true, price_cents: 4200 });
+    const html = render(closedPoll(null), { items: [dish, star] });
+    expect(txt(html)).toContain("Pra acompanhar");
+    expect(txt(html)).toContain("Prato star");
+    expect(buyButtons(html)).toEqual([{ disabled: false, text: "Pedir também", price: "R$ 42" }]);
+  });
+
+  it("vencedora ligada a um prato do cardápio: \"Deu\" com o prato e \"Pedir também\" com o preço", () => {
     const html = render(closedPoll(dish.id));
-    expect(html).toContain("Prato burger");
-    expect(buyButtons(html)).toEqual([{ disabled: false, text: "Pedir também" }]);
+    expect(txt(html)).toContain("Deu Prato burger");
+    expect(txt(html)).toContain("Enquete da casa, encerrada");
+    expect(buyButtons(html)).toEqual([{ disabled: false, text: "Pedir também", price: "R$ 10" }]);
   });
 
   it("vencedora ligada a um prato que saiu do cardápio: \"indisponível\" desligado", () => {
     const html = render(closedPoll("sumiu"));
-    expect(html).toContain("Rock clássico");
-    expect(buyButtons(html)).toEqual([{ disabled: true, text: "indisponível" }]);
+    expect(txt(html)).toContain("Deu Rock clássico");
+    expect(buyButtons(html)).toEqual([{ disabled: true, text: "indisponível", price: null }]);
+  });
+
+  it("empate: \"Empate!\", um \"Pedir também\" para cada prato e a de fora no rodapé", () => {
+    const b = item("pizza", { price_cents: 5400 });
+    const p: PublicPoll = {
+      ...closedPoll(dish.id),
+      options: [
+        { id: "a", label: "", item_id: dish.id, pct: 43 },
+        { id: "b", label: "", item_id: b.id, pct: 43 },
+        { id: "c", label: "Jazz", item_id: null, pct: 14 },
+      ],
+    };
+    const html = render(p, { items: [dish, b] });
+    expect(txt(html)).toContain("Empate!");
+    expect(txt(html)).toContain("Jazz ficou com 14%");
+    expect(buyButtons(html).map((x) => x.text)).toEqual(["Pedir também", "Pedir também"]);
+  });
+
+  it("já no pedido: \"No pedido\", sem preço", () => {
+    const html = render(closedPoll(dish.id), { inCart: 1 });
+    expect(buyButtons(html)).toEqual([{ disabled: false, text: "No pedido", price: null }]);
+  });
+});
+
+describe("Palco · enquete aberta", () => {
+  it("antes do voto: \"Toque no prato para votar\", opções com o preço, sem \"Pedir também\"", () => {
+    const html = render(openPoll());
+    expect(txt(html)).toContain("Toque no prato para votar");
+    expect(txt(html)).toContain("R$ 10");
+    expect(buyButtons(html)).toEqual([]);
+  });
+
+  it("logo depois do voto: cartão \"Seu voto\" com o preço e \"Pedir também\"", () => {
+    const html = render(openPoll(), { mine: "a" });
+    expect(txt(html)).toContain("Voto registrado");
+    expect(txt(html)).toContain("Seu voto");
+    expect(txt(html)).toContain("peça já e ele sai primeiro da cozinha");
+    expect(buyButtons(html)).toEqual([{ disabled: false, text: "Pedir também", price: "R$ 10" }]);
+  });
+
+  it("votou numa opção sem prato: cartão sem \"Pedir também\"", () => {
+    const html = render(openPoll(), { mine: "b" });
+    expect(txt(html)).toContain("Seu voto");
+    expect(buyButtons(html)).toEqual([]);
+  });
+
+  it("sem mesa: vê o resultado, \"Para votar, leia o QR da sua mesa\", sem cartão de voto", () => {
+    const html = render(openPoll(), { canVote: false });
+    expect(txt(html)).toContain("Para votar, leia o QR da sua mesa");
+    expect(txt(html)).toContain("44");
+    expect(txt(html)).not.toContain("Seu voto");
+  });
+
+  it("sem conexão: voto guardado e o \"Pedir também\" some", () => {
+    const html = render(openPoll(), { mine: "a", offline: true });
+    expect(txt(html)).toContain("Seu voto está guardado");
+    expect(buyButtons(html)).toEqual([]);
   });
 });

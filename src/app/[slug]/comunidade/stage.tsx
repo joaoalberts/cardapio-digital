@@ -1,28 +1,41 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- fotos dos pratos e logo já vêm no tamanho certo */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  clockText, houseHighlight, leaderOf, localTime, pollTiming, questionText, shownPcts, storyChoices,
+  houseHighlight, localTime, pollOutcome, pollTiming, priceInfo, questionText, shownPcts, soleLeader, stageCover, storyChoices,
 } from "@/lib/comunidade/client-logic";
 import { ct, ctf, type CmuKey } from "@/lib/comunidade/i18n";
-import type { OptionId, PublicPoll } from "@/lib/comunidade/types";
+import type { OptionId, PublicOption, PublicPoll } from "@/lib/comunidade/types";
 import { mediaUrl, thumbSrc } from "@/lib/menu/media";
 import type { MenuItem } from "@/lib/menu/types";
 import { useOrder } from "../order/order-context";
-import { BuyButton, type BuySource } from "./buy-button";
-import { IconChevron, IconClock, IconQr, IconTv, Live, Ring, useClock } from "./parts";
+import { BuyButton, useBuyState, type BuySource } from "./buy-button";
+import { houseCover, IconCheck, IconQr, IconShare, Live, priceText, Ring, useClock } from "./parts";
 import { useComunidade } from "./provider";
-import { ShareStoryButton } from "./share";
 
-// Palco da casa (ficha: telas 06 a 10, 13 e 14). Cartão da casa "ao vivo agora" (com o selo
-// "no telão" quando há telão), a enquete com voto em 1 toque e as barras em % depois, o tempo
-// com anel; encerrada, a vencedora, com "Pedir também" só quando ligada a um prato (sem
-// votos, o destaque da casa); sem enquete, a próxima e o destaque. Quem não tem mesa vê o
-// resultado e o aviso do QR da mesa. "Compartilhar no story" aparece com o resultado à mostra
-// (enquete com votos, depois do voto, sem mesa ou encerrada; storyChoices).
+// Palco da casa (ficha v2, telas 04 a 09, 14 e 15): capa de revista com o tríptico das fotos
+// das opções (cada coluna também vota), a pergunta grande na fonte da casa e as opções como
+// cartões com foto, nome e preço. Depois do voto, as barras em % e o cartão "Seu voto" com
+// "Pedir também" (o voto leva à venda). Encerrada: "Deu <prato>" com a foto inteira na capa e
+// o anel ônix e champanhe no "Pedir também"; empate com as duas fotos; vencedora que não é
+// prato (ou sem votos), "Pra acompanhar" com o destaque da casa. Sem mesa: vê o resultado,
+// não vota. Sem conexão: pausado no último valor, sem toque e sem "Pedir também".
+// "Postar" (story) aparece com o resultado à mostra (storyChoices).
 
 const TIP_KEY = "cmu-dica-vista";
+
+type Ctx = {
+  menu: NonNullable<ReturnType<typeof useOrder>["menu"]>;
+  L: string;
+  itemOf: (o: { item_id: string | null }) => MenuItem | undefined;
+  nameOf: (o: PublicOption) => string;
+  logo: string | null;
+  house: string | null;
+  highlight: MenuItem | null;
+  canShare: boolean;
+  onShare: () => void;
+};
 
 export function Stage({ onShare }: { onShare: () => void }) {
   const c = useComunidade();
@@ -37,10 +50,9 @@ export function Stage({ onShare }: { onShare: () => void }) {
   const minute = c.minute || nowSeed;
   const highlight = useMemo(() => (menu ? houseHighlight(menu, new Date(minute)) : null), [menu, minute]);
 
-  // Primeira vez: uma linha de explicação, dispensável; some também ao votar ou ao fechar.
-  // Só conta como vista quando aparece no Palco (quem abre direto no Mural vê depois).
+  // Primeira vez: um aviso de uma frase sobre a capa, com "Entendi". Só conta como visto
+  // quando aparece no Palco (quem abre direto no Mural vê depois); some também ao votar.
   const [tip, setTip] = useState<"off" | "on" | "out">("off");
-  const tipRef = useRef<HTMLDivElement>(null);
   const onStage = c.open && c.tab === "palco";
   useEffect(() => {
     if (!onStage) return;
@@ -52,106 +64,89 @@ export function Stage({ onShare }: { onShare: () => void }) {
     if (!seen) queueMicrotask(() => setTip("on"));
     return () => queueMicrotask(() => setTip("off"));
   }, [onStage]);
+  const tipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(tipTimer.current), []);
   const dismissTip = () => {
-    const el = tipRef.current;
-    if (tip !== "on" || !el) return;
-    const h = el.offsetHeight + 12;
-    const after = [...(el.parentElement?.children ?? [])].filter((x) => x !== el) as HTMLElement[];
-    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (tip !== "on") return;
     setTip("out");
-    setTimeout(
-      () => {
-        setTip("off");
-        if (!reduce) after.forEach((x) => x.animate([{ transform: `translateY(${h}px)` }, { transform: "none" }], { duration: 380, easing: "cubic-bezier(.2,.9,.25,1)" }));
-      },
-      reduce ? 0 : 180,
-    );
+    tipTimer.current = setTimeout(() => setTip("off"), matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 200);
   };
 
   if (!s || !menu) return null;
-  const logo = mediaUrl(menu.restaurant.logo_path);
   const poll = s.poll;
-  const hlSource: BuySource = poll ? { kind: "palco", ref: poll.id } : null;
-  const canShare = !!storyChoices(s, { mine: poll ? c.myVote(poll.id) : null, canVote: c.canVote, highlightId: null, hasItem: () => false }).poll;
+  const x: Ctx = {
+    menu,
+    L,
+    itemOf: (opt) => (opt.item_id ? o.itemById(opt.item_id) : undefined),
+    // Nome da opção no idioma do cliente (pelo prato); prato que saiu do cardápio fica com o
+    // texto da casa, ou "indisponível".
+    nameOf: (opt) => (opt.item_id ? o.itemById(opt.item_id)?.name : undefined) ?? (opt.label || ct("unavailable", L)),
+    logo: mediaUrl(menu.restaurant.logo_path),
+    house: houseCover(menu),
+    highlight,
+    canShare: !!storyChoices(s, { mine: poll ? c.myVote(poll.id) : null, canVote: c.canVote, highlightId: null, hasItem: () => false }).poll,
+    onShare,
+  };
 
   return (
     <>
       {tip !== "off" && (
-        <div ref={tipRef} className={`cmu-tip${tip === "out" ? " out" : ""}`}>
-          <p>{ct("tip", L)}</p>
+        <div className={`cmu-note${tip === "out" ? " out" : ""}`} role="note">
+          <p>
+            <b>{ct("tipBold", L)}</b> {ct("tipRest", L)}
+          </p>
           <button onClick={dismissTip}>{ct("tipOk", L)}</button>
         </div>
       )}
-
-      <div className="cmu-house">
-        {logo ? <img src={logo} alt="" /> : <span className="cmu-house-l" aria-hidden />}
-        <div className="cmu-hn">
-          <b>{menu.restaurant.name}</b>
-          <span>
-            <Live hidden={c.offline} />
-            <em>{ct(c.offline ? "paused" : "liveNow", L)}</em>
-          </span>
-        </div>
-        {s.has_tv && (
-          <span className="cmu-seal">
-            <IconTv />
-            {ct("onTv", L)}
-          </span>
-        )}
-      </div>
-
-      {poll && !poll.closed && <PollCard poll={poll} now={now} onVoted={dismissTip} />}
-      {poll && !poll.closed && !poll.has_votes && !c.myVote(poll.id) && highlight && (
-        <HighlightRow item={highlight} source={hlSource} />
-      )}
-      {poll?.closed && <ClosedCard poll={poll} highlight={highlight} />}
-      {canShare && <ShareStoryButton onClick={onShare} />}
-      {s.next && (
-        <div className="cmu-next">
-          <IconClock />
-          <div>
-            <small>{ctf("nextAt", L, { t: localTime(s.next.starts_at, menu.restaurant.timezone, L) })}</small>
-            <b>{questionText(s.next, L)}</b>
-          </div>
-        </div>
-      )}
-      {!poll && highlight && <WinCard item={highlight} kind="highlight" small={null} line={ct("recommends", L)} source={null} />}
-      {s.mural.length > 0 && (
-        <button className="cmu-peek" onClick={() => c.setTab("mural")}>
-          <span className="cmu-pf3">
-            {s.mural.slice(0, 3).map((p) => (
-              <img key={p.id} src={p.thumb} alt="" loading="lazy" />
-            ))}
-          </span>
-          <div>
-            <small>{ct("muralNow", L)}</small>
-            <b>{s.mural.length === 1 ? ct("muralCount1", L) : ctf("muralCount", L, { n: s.mural.length })}</b>
-          </div>
-          <IconChevron />
-        </button>
-      )}
+      {poll && !poll.closed && <LivePoll x={x} poll={poll} now={now} onVoted={dismissTip} />}
+      {poll?.closed && <ClosedPoll x={x} poll={poll} />}
+      {!poll && <NoPoll x={x} />}
+      <Strip x={x} />
     </>
   );
 }
 
-// Nome da opção no idioma do cliente (pelo prato); prato que saiu do cardápio fica com o
-// texto da casa, ou "indisponível".
-function optionName(opt: { label: string; item_id: string | null }, item: MenuItem | undefined, lang: string) {
-  return item?.name ?? (opt.label || ct("unavailable", lang));
+// Linha de cima da capa: logo com aro da casa, o rótulo, o "ao vivo" e o anel do tempo.
+function Kick({ x, label, live, ring }: { x: Ctx; label: string; live?: ReactNode; ring?: ReactNode }) {
+  return (
+    <div className="cmu-kick">
+      {x.logo ? <img className="cmu-ml" src={x.logo} alt="" /> : <i className="cmu-ml" aria-hidden />}
+      <span className="cmu-kl">{label}</span>
+      {live}
+      {ring}
+    </div>
+  );
 }
 
-function PollCard({ poll, now, onVoted }: { poll: PublicPoll; now: number; onVoted: () => void }) {
+// Fotos da capa encerrada (vencedora, empate, destaque): as fotos inteiras lado a lado.
+function Solo({ photos }: { photos: (string | null)[] }) {
+  const ok = photos.filter((p): p is string => !!p);
+  return (
+    <div className="cmu-solo" style={{ "--n": Math.max(1, ok.length) } as CSSProperties}>
+      {ok.map((src, k) => (
+        <figure key={k}>
+          <img src={src} alt="" />
+          <span className="cmu-streak" />
+        </figure>
+      ))}
+    </div>
+  );
+}
+
+function LivePoll({ x, poll, now, onVoted }: { x: Ctx; poll: PublicPoll; now: number; onVoted: () => void }) {
   const c = useComunidade();
-  const o = useOrder();
-  const L = o.lang;
+  const { L } = x;
   const [msg, setMsg] = useState<CmuKey | null>(null);
   const mine = c.myVote(poll.id);
   const timing = pollTiming(poll, now);
   const over = timing.left <= 0;
   const show = !!mine || !c.canVote;
   const pcts = shownPcts(poll, mine);
-  const lead = show ? leaderOf(pcts) : null;
+  const lead = show ? soleLeader(pcts) : null;
   const locked = show || c.offline || over;
+  const items = poll.options.map((opt) => x.itemOf(opt));
+  const tri = stageCover(items.map((i) => (i ? thumbSrc(i) : null)));
+  const q = questionText(poll, L);
 
   const tap = async (id: OptionId) => {
     if (locked) return;
@@ -159,199 +154,367 @@ function PollCard({ poll, now, onVoted }: { poll: PublicPoll; now: number; onVot
     onVoted();
     const r = await c.vote(id);
     if (r.ok) return;
-    const key: CmuKey =
-      r.code === "too_many" ? "voteTooMany" : r.code === "table" ? "voteTable" : r.code === "poll" || r.code === "closed" ? "voteClosed" : "voteErr";
-    setMsg(key);
+    setMsg(r.code === "too_many" ? "voteTooMany" : r.code === "table" ? "voteTable" : r.code === "poll" || r.code === "closed" ? "voteClosed" : "voteErr");
   };
 
+  const live = (
+    <span className="cmu-lv">
+      <Live off={c.offline} />
+      {c.offline ? (
+        <em>{ct("pausedShort", L)}</em>
+      ) : s_hasTv(c) ? (
+        <>
+          <em className="cmu-lv-l">{ct("liveTv", L)}</em>
+          <em className="cmu-lv-s">{ct("live", L)}</em>
+        </>
+      ) : (
+        <em>{ct("live", L)}</em>
+      )}
+    </span>
+  );
+
+  const go: ReactNode = msg ? (
+    <span className="cmu-gm">{ct(msg, L)}</span>
+  ) : !c.canVote ? (
+    <span className="cmu-gm">{ct(s_hasTv(c) ? "readonlyTv" : "readonly", L)}</span>
+  ) : c.offline ? (
+    <span className="cmu-gm">{ct(mine ? "offlineVoted" : "offlineWait", L)}</span>
+  ) : over ? (
+    <span className="cmu-gm">{ct("closing", L)}</span>
+  ) : mine ? (
+    <>
+      {ct("voteSaved", L)} <span className="cmu-gm">· {ct("resultLive", L)}</span>
+    </>
+  ) : (
+    ct("tapDish", L)
+  );
+
+  const mineOpt = mine ? poll.options.find((p) => p.id === mine) : undefined;
+
   return (
-    <section className={`cmu-poll${show ? " show" : ""}`} aria-label={ct("housePoll", L)}>
-      <div className="cmu-ph">
-        <span className="cmu-plb">{ct("housePoll", L)}</span>
-        <span className="cmu-ptm">
-          {ct("closesIn", L)} <b>{clockText(timing.left)}</b>
-          <Ring angle={timing.angle} />
-        </span>
+    <>
+      <div className={`cmu-cov${show ? " voted" : ""}`}>
+        {tri ? (
+          <div className="cmu-tri" style={{ "--n": tri.length } as CSSProperties}>
+            {poll.options.map((opt, k) => (
+              <button
+                key={opt.id}
+                className={`cmu-col${lead === opt.id ? " lead" : ""}`}
+                onClick={() => void tap(opt.id)}
+                disabled={locked}
+                tabIndex={-1}
+                aria-hidden
+              >
+                <img src={tri[k]} alt="" />
+                <span className="cmu-streak" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <Solo photos={[x.house]} />
+        )}
+        <div className="cmu-ptx">
+          <Kick x={x} label={ct("housePoll", L)} live={live} ring={<Ring angle={timing.angle} left={timing.left} lang={L} paused={c.offline} />} />
+          <h2 className="fd">{q}</h2>
+          <p className="cmu-gol" role="status">
+            {go}
+          </p>
+        </div>
       </div>
-      <h2 className="fd">{questionText(poll, L)}</h2>
-      <div className="cmu-opts" role="group" aria-label={questionText(poll, L)}>
-        {poll.options.map((opt) => {
-          const item = opt.item_id ? o.itemById(opt.item_id) : undefined;
+
+      <div className={`cmu-opts${c.offline ? " dim" : ""}`} role="group" aria-label={q}>
+        {poll.options.map((opt, k) => {
+          const item = items[k];
           const th = item ? thumbSrc(item) : null;
           const pct = pcts[opt.id] ?? 0;
           const isMine = mine === opt.id;
+          const pr = priceText(priceInfo(item), L);
           return (
             <button
               key={opt.id}
-              className={`cmu-opt${lead === opt.id ? " lead" : ""}${isMine ? " mine" : ""}`}
+              className={`cmu-opt${lead === opt.id ? " lead" : ""}${th ? "" : " nophoto"}`}
               onClick={() => void tap(opt.id)}
               disabled={locked}
               aria-pressed={isMine}
             >
-              <i className="cmu-fill" style={{ transform: `scaleX(${show ? pct / 100 : 0})` }} />
-              {th && <img className="cmu-em" src={th} alt="" />}
+              <span className="cmu-fill" style={{ "--p": show ? pct : 0 } as CSSProperties} />
+              {th && <img className="cmu-oth" src={th} alt="" />}
               <span className="cmu-tx">
-                <b>{optionName(opt, item, L)}</b>
-                {isMine ? <small>{ct("youVotedMark", L)}</small> : item?.description ? <small>{item.description}</small> : null}
+                <span className="cmu-on fd">{x.nameOf(opt)}</span>
+                {isMine ? (
+                  <span className="cmu-od mine">
+                    <IconCheck />
+                    {ct("yourVoteMark", L)}
+                  </span>
+                ) : pr || item?.description ? (
+                  <span className="cmu-od">
+                    {pr && <b>{pr}</b>}
+                    {item?.description}
+                  </span>
+                ) : null}
               </span>
-              <Pct value={pct} on={show} />
-              <span className="cmu-rd" />
+              <span className="cmu-rt">
+                {show ? (
+                  <span className="cmu-pc">
+                    {pct}
+                    <small>%</small>
+                  </span>
+                ) : (
+                  <span className="cmu-radio" />
+                )}
+              </span>
             </button>
           );
         })}
       </div>
+
       {!c.canVote ? (
-        <div className="cmu-needmesa">
+        <div className="cmu-nomesa">
           <IconQr />
           <div>
             <b>{ct("needTable", L)}</b>
-            <small>{ct("needTableSub", L)}</small>
+            <span>{ct("needTableSub", L)}</span>
           </div>
         </div>
-      ) : (
-        <p className="cmu-pf" role="status">
-          {msg ? (
-            ct(msg, L)
-          ) : over ? (
-            ct("closing", L)
-          ) : mine ? (
-            <>
-              <b>{ct("youVoted", L)}</b> · {ct(c.state?.has_tv ? "resultLiveTv" : "resultLive", L)}
-            </>
-          ) : poll.has_votes ? (
-            ct("tapOption", L)
-          ) : (
-            ct("beFirst", L)
+      ) : c.offline ? (
+        <p className="cmu-hint">{ct("offlineHint", L)}</p>
+      ) : mineOpt ? (
+        <YourVote x={x} poll={poll} opt={mineOpt} />
+      ) : null}
+    </>
+  );
+}
+
+const s_hasTv = (c: ReturnType<typeof useComunidade>) => !!c.state?.has_tv;
+
+// Logo depois do voto: o voto vira venda (ficha v2, tela 06).
+function YourVote({ x, poll, opt }: { x: Ctx; poll: PublicPoll; opt: PublicOption }) {
+  const { L } = x;
+  const item = x.itemOf(opt);
+  const th = item ? thumbSrc(item) : null;
+  const pr = priceText(priceInfo(item), L);
+  const buy = useBuyState(opt.item_id) !== "hidden";
+  return (
+    <div className="cmu-after">
+      <div className={`cmu-who${th ? "" : " nophoto"}`}>
+        {th && <img src={th} alt="" />}
+        <small>{ct("yourVote", L)}</small>
+        <b className="fd">{x.nameOf(opt)}</b>
+        {item && pr && (
+          <span>
+            <em>{pr}</em> · {ct("yourVoteWhy", L)}
+          </span>
+        )}
+      </div>
+      {(buy || x.canShare) && (
+        <div className="cmu-arow">
+          {buy && <BuyButton itemId={opt.item_id} source={{ kind: "palco", ref: poll.id }} variant="wide" price />}
+          {x.canShare && (
+            <button className={`cmu-ghost${buy ? "" : " grow"}`} onClick={x.onShare}>
+              <IconShare />
+              {ct("post", L)}
+            </button>
           )}
-        </p>
-      )}
-    </section>
-  );
-}
-
-// Porcentagem que sobe até o valor em 0,7 s (direto no valor com "reduzir movimento").
-function Pct({ value, on }: { value: number; on: boolean }) {
-  const el = useRef<HTMLSpanElement>(null);
-  const shown = useRef(0);
-  useEffect(() => {
-    const node = el.current;
-    if (!node || !on) return;
-    const from = shown.current;
-    shown.current = value;
-    if (from === value || matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      node.textContent = `${value}%`;
-      return;
-    }
-    const t0 = performance.now();
-    let raf = 0;
-    const step = (t: number) => {
-      const k = Math.min(1, (t - t0) / 700);
-      node.textContent = `${Math.round(from + (value - from) * (1 - Math.pow(1 - k, 3)))}%`;
-      if (k < 1) raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [value, on]);
-  return (
-    <span className="cmu-pc" ref={el}>
-      0%
-    </span>
-  );
-}
-
-function ClosedCard({ poll, highlight }: { poll: PublicPoll; highlight: MenuItem | null }) {
-  const o = useOrder();
-  const L = o.lang;
-  const q = questionText(poll, L);
-  const source: BuySource = { kind: "palco", ref: poll.id };
-  const win = poll.winner ? poll.options.find((x) => x.id === poll.winner) : undefined;
-  if (poll.has_votes && win) {
-    const item = win.item_id ? o.itemById(win.item_id) : undefined;
-    const others = poll.options.filter((x) => x.id !== win.id);
-    return (
-      <WinCard
-        item={item}
-        name={optionName(win, item, L)}
-        kind="winner"
-        small={ctf("closedQ", L, { q })}
-        line={
-          <>
-            {ct("wonWith", L)} <b>{win.pct}%</b>
-            {others.map((x) => ` · ${optionName(x, x.item_id ? o.itemById(x.item_id) : undefined, L)} ${x.pct}%`).join("")}
-          </>
-        }
-        itemId={win.item_id}
-        source={source}
-      />
-    );
-  }
-  if (highlight) return <WinCard item={highlight} kind="highlight" small={ctf("closedNoVotesQ", L, { q })} line={ct("recommends", L)} source={source} />;
-  return (
-    <section className="cmu-win">
-      <div className="cmu-wb">
-        <small>{ctf("closedNoVotesQ", L, { q })}</small>
-      </div>
-    </section>
-  );
-}
-
-// Cartão grande com foto: a vencedora ("🏆 Deu na enquete") ou o destaque da casa ("★").
-function WinCard({
-  item, name, kind, small, line, itemId, source,
-}: {
-  item: MenuItem | undefined;
-  name?: string;
-  kind: "winner" | "highlight";
-  small: string | null;
-  line: ReactNode;
-  itemId?: string | null;
-  source: BuySource;
-}) {
-  const o = useOrder();
-  const L = o.lang;
-  const photo = item ? thumbSrc(item) : null;
-  const chip =
-    kind === "winner" ? (
-      <span className="cmu-chip">🏆 {ct("pollWon", L)}</span>
-    ) : (
-      <span className="cmu-chip">
-        <i className="cmu-star">★</i> {ct("highlightTitle", L)}
-      </span>
-    );
-  return (
-    <section className={`cmu-win${photo ? "" : " nophoto"}`}>
-      {photo ? (
-        <div className="cmu-wph">
-          <img src={photo} alt="" />
-          {chip}
         </div>
-      ) : (
-        <div className="cmu-wchip">{chip}</div>
       )}
-      <div className="cmu-wb">
-        {small && <small>{small}</small>}
-        <h2 className="fd">{name ?? item?.name ?? ""}</h2>
-        <p>{line}</p>
-        <BuyButton itemId={itemId === undefined ? (item?.id ?? null) : itemId} source={source} big />
-      </div>
-    </section>
+    </div>
   );
 }
 
-// Enquete aberta e ninguém votou ainda: o destaque da casa embaixo, com "Pedir também".
-function HighlightRow({ item, source }: { item: MenuItem; source: BuySource }) {
-  const o = useOrder();
-  const th = thumbSrc(item);
+// "Pra acompanhar: ★ destaque da casa" (vencedora que não é prato, ou ninguém votou).
+function WithIt({ x, source }: { x: Ctx; source: BuySource }) {
+  const h = x.highlight;
+  const buy = useBuyState(h?.id ?? null) !== "hidden";
+  if (!h || !buy) return null;
+  const th = thumbSrc(h);
   return (
-    <div className="cmu-hlrow">
+    <div className="cmu-with">
       {th && <img src={th} alt="" />}
       <div>
         <small>
-          <i className="cmu-star">★</i> {ct("highlightLower", o.lang)}
+          {ct("withIt", x.L)} · <i>★</i> {ct("highlightLower", x.L)}
         </small>
-        <b>{item.name}</b>
+        <b className="fd">{h.name}</b>
       </div>
-      <BuyButton itemId={item.id} source={source} />
+      <BuyButton itemId={h.id} source={source} variant="sm" price />
+    </div>
+  );
+}
+
+function PostButton({ x }: { x: Ctx }) {
+  if (!x.canShare) return null;
+  return (
+    <button className="cmu-ghost" onClick={x.onShare}>
+      <IconShare />
+      {ct("postResult", x.L)}
+    </button>
+  );
+}
+
+function ClosedPoll({ x, poll }: { x: Ctx; poll: PublicPoll }) {
+  const { L } = x;
+  const q = questionText(poll, L);
+  const source: BuySource = { kind: "palco", ref: poll.id };
+  const out = pollOutcome(poll);
+  const byId = (id: OptionId) => poll.options.find((p) => p.id === id)!;
+  const photo = (opt: PublicOption) => {
+    const i = x.itemOf(opt);
+    return (i ? thumbSrc(i) : null) ?? null;
+  };
+  const winId = out.kind === "win" ? out.id : null;
+  const winBuy = useBuyState(winId ? byId(winId).item_id : null);
+
+  if (out.kind === "win") {
+    const win = byId(out.id);
+    return (
+      <>
+        <div className="cmu-cov win">
+          <Solo photos={[photo(win) ?? x.house]} />
+          <div className="cmu-ptx">
+            <Kick x={x} label={ct("housePollClosed", L)} />
+            <p className="cmu-pq fd">{q}</p>
+            <h2 className="fd">{ctf("won", L, { name: x.nameOf(win) })}</h2>
+          </div>
+        </div>
+        <div className="cmu-res">
+          <span className="cmu-big">
+            {win.pct}
+            <small>%</small>
+          </span>
+          <span className="cmu-rest">
+            {out.rest.map((id) => {
+              const r = byId(id);
+              const th = photo(r);
+              return (
+                <span className="cmu-rr" key={id}>
+                  {th && <img src={th} alt="" />}
+                  {x.nameOf(r)} <b>{r.pct}%</b>
+                </span>
+              );
+            })}
+          </span>
+        </div>
+        <div className="cmu-ctas">
+          {winBuy !== "hidden" ? (
+            <div className="cmu-gowrap">
+              <BuyButton itemId={win.item_id} source={source} variant="big" price />
+            </div>
+          ) : !win.item_id ? (
+            <WithIt x={x} source={source} />
+          ) : null}
+          <PostButton x={x} />
+        </div>
+      </>
+    );
+  }
+
+  if (out.kind === "tie") {
+    const tied = out.ids.map(byId);
+    const outside = out.rest[0] ? byId(out.rest[0]) : null;
+    return (
+      <>
+        <div className="cmu-cov win">
+          <Solo photos={tied.map((t) => photo(t) ?? x.house)} />
+          <div className="cmu-ptx">
+            <Kick x={x} label={ct("housePollClosed", L)} />
+            <p className="cmu-pq fd">{q}</p>
+            <h2 className="fd">{ct("tie", L)}</h2>
+          </div>
+        </div>
+        <div className="cmu-tie" style={{ "--n": tied.length } as CSSProperties}>
+          {tied.map((t) => {
+            const pr = priceText(priceInfo(x.itemOf(t)), L);
+            return (
+              <div key={t.id}>
+                <b className="fd">{x.nameOf(t)}</b>
+                <span>
+                  <em>{t.pct}%</em>
+                  {pr}
+                </span>
+                <BuyButton itemId={t.item_id} source={source} variant="sm" />
+              </div>
+            );
+          })}
+        </div>
+        <p className="cmu-hint">{outside ? ctf("tieRest", L, { name: x.nameOf(outside), p: outside.pct }) : ct("tieBoth", L)}</p>
+        <div className="cmu-ctas">
+          <PostButton x={x} />
+        </div>
+      </>
+    );
+  }
+
+  // Ninguém votou: a pergunta e o destaque da casa para acompanhar.
+  return (
+    <>
+      <div className="cmu-cov win">
+        <Solo photos={[(x.highlight ? thumbSrc(x.highlight) : null) ?? x.house]} />
+        <div className="cmu-ptx">
+          <Kick x={x} label={ct("housePollClosed", L)} />
+          <p className="cmu-pq fd">{q}</p>
+          <h2 className="fd">{ct("noVotes", L)}</h2>
+        </div>
+      </div>
+      <div className="cmu-ctas">
+        <WithIt x={x} source={source} />
+      </div>
+    </>
+  );
+}
+
+// Sem enquete: o destaque da casa na capa, com "Pedir também" (sem origem: não há enquete).
+function NoPoll({ x }: { x: Ctx }) {
+  const { L } = x;
+  const h = x.highlight;
+  return (
+    <>
+      <div className="cmu-cov win">
+        <Solo photos={[(h ? thumbSrc(h) : null) ?? x.house]} />
+        <div className="cmu-ptx">
+          <Kick x={x} label={h ? `★ ${ct("highlightTitle", L)}` : ct("noPoll", L)} />
+          <h2 className="fd">{h ? h.name : ct("noPoll", L)}</h2>
+          {h?.description && <p className="cmu-gol cmu-gm">{h.description}</p>}
+        </div>
+      </div>
+      {h && (
+        <div className="cmu-ctas">
+          <BuyButton itemId={h.id} source={null} variant="big" price />
+        </div>
+      )}
+    </>
+  );
+}
+
+// Rodapé único: a próxima enquete e o Mural, separados por um fio da cor da casa.
+function Strip({ x }: { x: Ctx }) {
+  const c = useComunidade();
+  const s = c.state!;
+  const n = s.mural.length;
+  if (!s.next && !n) return null;
+  return (
+    <div className={`cmu-strip${s.next && n ? "" : " one"}`}>
+      {s.next && (
+        <div className="cmu-sb">
+          <span className="cmu-stx">
+            <small>{ctf("nextAt", x.L, { t: localTime(s.next.starts_at, x.menu.restaurant.timezone, x.L) })}</small>
+            <b>{questionText(s.next, x.L)}</b>
+          </span>
+        </div>
+      )}
+      {s.next && n > 0 && <i aria-hidden />}
+      {n > 0 && (
+        <button className="cmu-sb" onClick={() => c.setTab("mural")}>
+          <span className="cmu-stack">
+            {s.mural.slice(0, 2).map((p) => (
+              <img key={p.id} src={p.thumb} alt="" loading="lazy" />
+            ))}
+          </span>
+          <span className="cmu-stx">
+            <small>{ct("stripMural", x.L)}</small>
+            <b>{n === 1 ? ct("stripPhotos1", x.L) : ctf("stripPhotos", x.L, { n })}</b>
+          </span>
+        </button>
+      )}
     </div>
   );
 }

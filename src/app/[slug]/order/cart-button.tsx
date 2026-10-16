@@ -24,7 +24,8 @@ export function CartButton({ inViewer = false, island = true, className }: { inV
         <circle cx="9.6" cy="19.4" r="1.3" />
         <circle cx="17" cy="19.4" r="1.3" />
       </svg>
-      {n > 0 && <b className="o-cartbtn-n">{n}</b>}
+      {/* key: o selo remonta a cada mudança (a Comunidade faz o número pular). */}
+      {n > 0 && <b key={n} className="o-cartbtn-n">{n}</b>}
     </button>
   );
 }
