@@ -1,6 +1,7 @@
 // Verificação ponta a ponta da Comunidade (Tarefa 12) com Playwright, contra o servidor de
-// produção local (next start) e o NocoDB do Docker. Tira os prints t12-* e mede as chamadas
-// ao NocoDB pelo contador de teste (NOCODB_COUNT=1, GET /api/arquivos-locais/_calls).
+// produção local (next start) e o NocoDB do Docker, nas telas v2 (docs/prototipos/comunidade-v2/
+// recomendada). Tira os prints v2-e2e-* e mede as chamadas ao NocoDB pelo contador de teste
+// (NOCODB_COUNT=1, GET /api/arquivos-locais/_calls).
 //
 // Roteiro (no worktree):
 //   node --env-file=.env.local scripts/comunidade/seed-local.mjs --minutos=55
@@ -9,16 +10,21 @@
 //   npx -y -p playwright@1.63.0 -c 'node --env-file=.env.local scripts/comunidade/e2e.mjs celular fontes'
 //   # O painel abre o 1º restaurante da conta de teste; placar, telão e medição rodam nele:
 //   node --env-file=.env.local scripts/comunidade/seed-local.mjs --slug=pizzaria-teste --aberto-agora --minutos=55 --limpar-votos
-//   npx -y -p playwright@1.63.0 -c 'node --env-file=.env.local scripts/comunidade/e2e.mjs placar telao medir --slug=pizzaria-teste --mesa=4VEUC7'
+//   npx -y -p playwright@1.63.0 -c 'node --env-file=.env.local scripts/comunidade/e2e.mjs placar telao telas medir --slug=pizzaria-teste --mesa=4VEUC7'
 //
 // Fases:
 //   celular  balão sem cobrir logo e botões, vidro da folha, QR → voto em 2 toques, % sem
-//            device na leitura, pílula em 375×667
+//            device na leitura, cartão "Seu voto" com "Pedir também", celular sem rede
+//            ("sem conexão" e volta), pílula em 375×667
 //   fontes   3 temas de fonte (um IM Fell) e as 6 línguas na camada; troca font_theme e
 //            languages só no NocoDB local e volta ao original no fim
-//   placar   "Pedir também" no Mural → pedido enviado → /painel/pedidos e placar do painel
+//   placar   "Pedir também" no Mural (folha de tamanhos dentro da Comunidade quando o prato
+//            tem tamanhos) → ilha "Seu pedido" → pedido enviado → /painel/pedidos, placar e
+//            as 3 metas do painel
 //   telao    parear pelo painel, 2 celulares votando (tempo até a barra mudar), 2 min sem
 //            rede e volta sozinho, ?debug=1 com o mesmo v do celular
+//   telas    o telão pareado nos 5 tamanhos da ficha v2: nada fora da tela, nenhum texto
+//            cortado, menor texto e lado do QR
 //   medir    N minutos (--minutos=10) com 2 celulares de camada aberta e o telão
 //
 // Só roda contra http://localhost. A conta de teste vem do comentário do .env.local e não é
@@ -100,7 +106,7 @@ function check(passo, ok, detalhe) {
 }
 const prints = [];
 async function shot(page, name, opts = {}) {
-  const file = path.join(PRINTS, `t12-${name}.png`);
+  const file = path.join(PRINTS, `v2-e2e-${name}.png`);
   await page.screenshot({ path: file, ...opts });
   prints.push(path.basename(file));
 }
@@ -214,7 +220,7 @@ async function faseCelular(browser, cfg) {
   const hits = b.others.filter((o) => overlap(b.bal, o)).map((o) => o.cls);
   check("2.1 balão grande na capa 390×844", /cmu-bal-p|cmu-bal-m/.test(b.bal?.cls ?? ""), b.bal?.cls);
   check("2.1 balão não cobre logo nem botões", b.bal && b.others.length >= 3 && hits.length === 0, `caixas conferidas: ${b.others.length}; sobrepostas: ${hits.join(", ") || "nenhuma"}`);
-  check("2.1 balão com vidro (backdrop-filter)", b.balBackdrop && b.balBackdrop !== "none", b.balBackdrop);
+  check("2.1 balão com vidro (backdrop-filter)", b.balBackdrop && b.balBackdrop !== "none", `${b.balBackdrop} (ficha: blur(18px) saturate(0.5))`);
   await shot(page, "01-capa-balao-390");
 
   // 2. Do QR ao voto em 2 toques: balão → opção.
@@ -222,14 +228,14 @@ async function faseCelular(browser, cfg) {
   await openLayer(page);
   taps++;
   const sheet = await page.evaluate(() => getComputedStyle(document.querySelector(".cmu-layer")).backdropFilter);
-  check("2.1 folha da camada com backdrop-filter", sheet && sheet !== "none", sheet);
+  check("2.1 folha da camada com backdrop-filter", sheet && sheet !== "none", `${sheet} (ficha: blur(30px) saturate(0.55))`);
   await shot(page, "02-palco-antes-do-voto");
   const v = await vote(page, 0);
   taps++;
   check("2.2 do QR ao voto em 2 toques", v.status === 200 && v.body?.ok === true && taps === 2, `toques: ${taps}; /votar ${v.status} ${JSON.stringify(v.body)?.slice(0, 80)}`);
 
   // 3. A barra mostra % e a leitura pública não tem device.
-  await page.locator(".cmu-layer.on .cmu-opt.mine .cmu-pc").waitFor({ state: "visible", timeout: 10_000 });
+  await page.locator('.cmu-layer.on .cmu-opt[aria-pressed="true"] .cmu-pc').waitFor({ state: "visible", timeout: 10_000 });
   await sleep(900);
   const pcs = await page.locator(".cmu-layer.on .cmu-opt .cmu-pc").allTextContents();
   check("2.3 barras com porcentagem depois do voto", pcs.length >= 2 && pcs.every((t) => /^\d{1,3}%$/.test(t.trim())), pcs.join(" · "));
@@ -239,7 +245,42 @@ async function faseCelular(browser, cfg) {
   const after = reads.filter((r) => r.at > v.at && r.body?.poll?.has_votes).at(-1);
   check("2.3 leitura depois do voto traz o voto em %", !!after && after.body.poll.options.some((o) => o.pct > 0), after ? after.body.poll.options.map((o) => `${o.label} ${o.pct}%`).join(", ") : "sem releitura");
   await sleep(900);
-  await shot(page, "03-palco-votou"); // depois da releitura: com "Compartilhar no story"
+  await shot(page, "03-palco-votou"); // depois da releitura: com "Postar"
+  // Ficha v2, tela 06: o cartão "Seu voto" com "Pedir também" e o preço.
+  const card = await page.evaluate(() => {
+    const a = document.querySelector(".cmu-layer.on .cmu-after");
+    if (!a) return null;
+    const r = a.getBoundingClientRect();
+    return { who: a.querySelector(".cmu-who b")?.textContent, buy: a.querySelector(".cmu-buy")?.textContent, bottom: r.bottom, vh: innerHeight };
+  });
+  check("2.3 cartão \"Seu voto\" com \"Pedir também\"", !!card?.who && /Pedir também/.test(card.buy ?? ""), card ? `${card.who} · ${card.buy}` : "sem cartão");
+  await page.locator(".cmu-layer.on .cmu-after").scrollIntoViewIfNeeded().catch(() => {});
+  await sleep(500);
+  await shot(page, "03a-seu-voto");
+
+  // Celular sem rede: pílula "sem conexão", opções sem toque, "Pedir também" some; volta sozinho.
+  await ctx.setOffline(true);
+  const off0 = Date.now();
+  const offOk = await page.locator(".cmu-layer.on.offline").waitFor({ state: "attached", timeout: 60_000 }).then(() => true, () => false);
+  const offAt = Date.now() - off0;
+  const offView = offOk
+    ? await page.evaluate(() => ({
+        opts: getComputedStyle(document.querySelector(".cmu-layer.on .cmu-opts")).opacity,
+        dim: document.querySelector(".cmu-layer.on .cmu-opts")?.classList.contains("dim"),
+        buys: document.querySelectorAll(".cmu-layer.on #cmu-pane-palco .cmu-buy").length,
+      }))
+    : null;
+  await sleep(700);
+  await shot(page, "03c-sem-conexao");
+  await ctx.setOffline(false);
+  const on0 = Date.now();
+  const backOk = await page.locator(".cmu-layer.on.offline").waitFor({ state: "detached", timeout: 60_000 }).then(() => true, () => false);
+  check(
+    "2.3 celular sem rede: \"sem conexão\" e volta sozinho",
+    offOk && backOk && offView?.dim && offView.buys === 0,
+    offOk ? `aviso em ${(offAt / 1000).toFixed(1)} s; opções dim=${offView.dim} (opacidade ${offView.opts}); Pedir também no Palco: ${offView.buys}; voltou ${backOk ? `${((Date.now() - on0) / 1000).toFixed(1)} s depois da rede` : "não"}` : "o aviso não apareceu em 60 s",
+  );
+  await sleep(1200);
   const bad = reads.flatMap((r) => forbiddenKeys(r.body));
   check("2.3 GET pública sem device_id, mesa nem contagem", reads.length > 0 && bad.length === 0, `${reads.length} leituras; chaves proibidas: ${bad.join(", ") || "nenhuma"}`);
   await page.locator("#cmu-tab-mural").tap();
@@ -252,7 +293,7 @@ async function faseCelular(browser, cfg) {
   const m = await openMenu(se, cfg);
   const b2 = await balloonBoxes(m.page);
   const hits2 = b2.others.filter((o) => overlap(b2.bal, o)).map((o) => o.cls);
-  check("2.5 pílula compacta em 375×667", /cmu-bal-c/.test(b2.bal?.cls ?? ""), b2.bal?.cls);
+  check("2.5 pílula compacta em 375×667", /cmu-pill/.test(b2.bal?.cls ?? ""), b2.bal?.cls);
   check("2.5 pílula não cobre logo nem botões", b2.bal && hits2.length === 0, `sobrepostas: ${hits2.join(", ") || "nenhuma"}`);
   await shot(m.page, "05-capa-pilula-375");
   await se.close();
@@ -261,12 +302,12 @@ async function faseCelular(browser, cfg) {
 // Espera o cardápio público (cache "minutes") refletir a troca feita no NocoDB.
 async function waitMenu(cfg, ok, label) {
   const t0 = Date.now();
-  while (Date.now() - t0 < 240_000) {
+  while (Date.now() - t0 < 420_000) {
     const m = await fetch(`${cfg.base}/api/menu/${cfg.slug}?lang=pt-BR`).then((r) => r.json()).catch(() => null);
     if (m && ok(m.restaurant)) return Date.now() - t0;
     await sleep(5000);
   }
-  throw new Error(`o cardápio não refletiu ${label} em 4 min`);
+  throw new Error(`o cardápio não refletiu ${label} em 7 min`);
 }
 
 // Recarrega até a página (cache da rota) mostrar o tema de fonte pedido.
@@ -277,7 +318,7 @@ async function openWithFont(browser, cfg, font) {
     const opened = await openMenu(ctx, cfg);
     if (await opened.page.evaluate((f) => document.querySelector(".cm")?.dataset.font === f, font)) return { ctx, ...opened };
     await ctx.close();
-    if (Date.now() - t0 > 240_000) throw new Error("a página não refletiu a troca em 4 min");
+    if (Date.now() - t0 > 420_000) throw new Error("a página não refletiu a troca em 7 min");
     await sleep(5000);
   }
 }
@@ -338,33 +379,41 @@ async function fasePlacar(browser, cfg, shared) {
   const { page } = await openMenu(ctx, cfg);
   await openLayer(page);
   await page.locator("#cmu-tab-mural").tap();
-  const buy = page.locator(".cmu-layer.on #cmu-pane-mural .cmu-post button.cmu-also:not([disabled])").first();
+  await sleep(800);
+  await shot(page, "04-mural");
+  const buy = page.locator(".cmu-layer.on #cmu-pane-mural .cmu-buy:not(.off):not(.done)").first();
   await buy.waitFor({ state: "visible", timeout: 10_000 });
-  const post = await buy.evaluate((b) => b.closest(".cmu-post")?.querySelector(".cmu-pimg")?.getAttribute("aria-label"));
+  const post = await buy.evaluate((b) => b.getAttribute("aria-label"));
   await buy.tap();
-  // Prato com tamanhos/meio a meio fecha a camada e abre a folha do prato (o "Adicionar" leva
-  // ao carrinho); prato simples entra direto e o carrinho é o da camada.
-  const cta = page.locator(".g-cta");
-  const layerCart = page.locator(".cmu-layer.on .cmu-cart");
-  await Promise.race([cta.waitFor({ state: "visible", timeout: 5000 }), sleep(1500)]).catch(() => {});
-  const sized = await cta.isVisible().catch(() => false);
+  // Prato com tamanhos/meio a meio: a folha de tamanhos abre dentro da Comunidade (ficha v2,
+  // tela 11) e "Adicionar ao pedido" volta ao Mural; prato simples entra direto. Nos dois
+  // casos aparece a ilha "Seu pedido", que abre o carrinho.
+  const sizes = page.locator(".cmu-layer.on .cmu-sizes");
+  await Promise.race([sizes.waitFor({ state: "visible", timeout: 5000 }), sleep(1500)]).catch(() => {});
+  const sized = await sizes.isVisible().catch(() => false);
   if (sized) {
-    await shot(page, "04a-mural-pedir-tambem-folha");
-    await cta.tap();
+    await sleep(600);
+    await shot(page, "04a-mural-tamanhos");
+    await page.locator(".cmu-layer.on .cmu-sizes .cmu-buy.big").tap();
+    await sizes.waitFor({ state: "hidden", timeout: 5000 }).catch(() => {});
   }
-  await sleep(900);
-  await shot(page, sized ? "04a2-adicionado" : "04a-mural-pedir-tambem");
+  const island = page.locator(".cmu-layer.on .cmu-island");
+  const islandOk = await island.waitFor({ state: "visible", timeout: 8000 }).then(() => true, () => false);
+  const done = await page.locator(".cmu-layer.on #cmu-pane-mural .cmu-buy.done").count();
+  await sleep(700);
+  await shot(page, "04b-mural-com-pedido");
+  check("2.4 Pedir também no Mural: \"No pedido\" e ilha \"Seu pedido\"", islandOk && done >= 1, `${post}${sized ? " (folha de tamanhos)" : ""}; botões "No pedido": ${done}; ilha: ${islandOk ? (await island.innerText()).replace(/\s+/g, " ") : "não"}`);
+  await island.locator("button").tap();
   const slide = page.locator(".o-slide");
-  if (!(await slide.isVisible().catch(() => false))) await layerCart.tap();
   await slide.waitFor({ state: "visible", timeout: 10_000 });
-  await shot(page, "04b-carrinho");
+  await shot(page, "04c-carrinho");
   const sent = page.waitForResponse((r) => r.url().includes(`/api/pedidos/${cfg.slug}`) && r.request().method() === "POST", { timeout: 20_000 });
   await slide.focus();
   await page.keyboard.press("Enter");
   const resp = await sent;
   const body = await resp.json().catch(() => null);
   await page.locator(".o-done").waitFor({ state: "visible", timeout: 10_000 });
-  await shot(page, "04c-pedido-enviado");
+  await shot(page, "04d-pedido-enviado");
   check("2.4 pedido com Pedir também enviado", resp.ok() && body?.ok !== false, `${post ?? "post"} · HTTP ${resp.status()}`);
   await ctx.close();
 
@@ -391,17 +440,39 @@ async function fasePlacar(browser, cfg, shared) {
   const found = await card.isVisible().catch(() => false);
   if (found) await card.scrollIntoViewIfNeeded();
   check("2.4 pedido aparece em /painel/pedidos", found, `${order.table_label} · ${lines.map((l) => `${l.qty}× ${l.name}${l.option ? ` ${l.option}` : ""}`).join(", ")}`);
-  await shot(p.page, "04d-painel-pedidos");
+  await shot(p.page, "04e-painel-pedidos");
   await p.page.goto(`${cfg.base}/painel/comunidade`);
   const score = await p.page.locator(".cp-score b").textContent();
   const sub = await p.page.locator(".cp-score-sub").innerText();
   check("2.4 placar conta o pedido da Comunidade", Number(score) >= 1, `placar: ${score} · ${sub.replace(/\s+/g, " ")}`);
   await p.page.locator(".cp-score").scrollIntoViewIfNeeded();
-  await shot(p.page, "04e-painel-placar");
+  await shot(p.page, "04f-painel-placar");
+  // As 3 metas (fatia da Comunidade 5%, ticket por mesa +5%, interações por mesa 1,5), hoje e 4 semanas.
+  const goals = await p.page.$$eval(".cp-goals li", (lis) =>
+    lis.map((li) => ({
+      name: li.querySelector(".cp-goal-h b")?.textContent,
+      goal: li.querySelector(".cp-goal-h small")?.textContent,
+      cols: [...li.querySelectorAll(".cp-goal-cols > div")].map((d) => `${d.querySelector("span")?.textContent} ${d.querySelector("strong")?.textContent} (${d.querySelector(".cp-goal-mark")?.textContent})`),
+    })),
+  );
+  const shareGoal = goals.find((g) => /Comunidade/.test(g.name ?? ""));
+  check(
+    "2.4 placar com as 3 metas",
+    goals.length === 3 && goals.every((g) => g.cols.length === 2) && !!shareGoal && !/^Hoje —/.test(shareGoal.cols[0]),
+    goals.map((g) => `${g.name} [${g.goal}]: ${g.cols.join(" · ")}`).join(" | "),
+  );
+  await p.page.locator(".cp-goals").scrollIntoViewIfNeeded();
+  await shot(p.page, "04g-painel-metas");
 }
 
-// Opções do telão: largura (transform) de cada barra.
-const tvBars = (tv) => tv.$$eval(".tl-bar .tl-fill", (els) => els.map((e) => e.style.transform).join("|"));
+// Opções do telão: % de cada barra (--p), por nome (a líder sobe ao topo, a ordem muda).
+const tvBars = (tv) =>
+  tv.$$eval(".tl-bar", (els) =>
+    els
+      .map((e) => `${e.querySelector(".tl-nm")?.textContent}=${e.querySelector(".tl-fill")?.style.getPropertyValue("--p")}`)
+      .sort()
+      .join("|"),
+  );
 
 async function waitTvChange(tv, before, from, limit = 15_000) {
   for (;;) {
@@ -429,7 +500,7 @@ async function pairTv(browser, cfg, shared) {
   await shot(p.page, "11-painel-tv-pareada", { fullPage: false });
   await tv.locator(".tl-pair").waitFor({ state: "detached", timeout: 20_000 });
   check("3 parear pelo painel", true, `TV saiu do código ${Math.round((Date.now() - t0) / 100) / 10} s depois do Parear`);
-  await tv.locator(".tl-bars, .tl-idle").first().waitFor({ state: "visible", timeout: 20_000 });
+  await tv.locator(".tl-bars, .tl-tv.k-feat").first().waitFor({ state: "visible", timeout: 20_000 });
   await sleep(1500);
   await shot(tv, "12-telao-pareado");
   shared.tv = { ctx, page: tv };
@@ -455,6 +526,10 @@ async function faseTelao(browser, cfg, shared) {
     await shot(tv, `13-telao-voto-${k + 1}`);
   }
   await shot(phones[1].page, "13b-celular-votou");
+  // A líder vem sempre em primeiro, e só o % dela fica em --accent.
+  const order = await tv.$$eval(".tl-bar", (els) => els.map((e) => ({ lead: e.classList.contains("lead"), p: Number(e.querySelector(".tl-fill")?.style.getPropertyValue("--p")) })));
+  const maxP = Math.max(...order.map((o) => o.p));
+  check("3 líder em primeiro no telão", order.length >= 2 && order[0].p === maxP && (order[0].lead || order.filter((o) => o.p === maxP).length > 1), order.map((o) => `${o.p}%${o.lead ? "★" : ""}`).join(" · "));
 
   // Sem rede por 2 min: "reconectando" aparece e some sozinho.
   const off0 = Date.now();
@@ -482,6 +557,79 @@ async function faseTelao(browser, cfg, shared) {
   check("3 ?debug=1 mostra o mesmo v do celular", tvV && tvV === phoneV, `telão ${tvV} · celular ${phoneV}`);
   await shot(tv, "16-telao-debug");
   for (const p of phones) await p.ctx.close();
+}
+
+// Ficha v2: menor texto e lado do QR em cada tamanho (2,8u e 42u/38u/46u).
+const TV_SIZES = [
+  { w: 1280, h: 720, minText: 20.2, qr: 302 },
+  { w: 1920, h: 1080, minText: 30.2, qr: 454 },
+  { w: 3840, h: 2160, minText: 60.5, qr: 907 },
+  { w: 1080, h: 1920, minText: 30.2, qr: 497 },
+  { w: 1024, h: 768, minText: 21.5, qr: 292 },
+];
+
+async function faseTelas(browser, cfg, shared) {
+  if (!shared.tv) await pairTv(browser, cfg, shared);
+  const tv = shared.tv.page;
+  if (!new URL(tv.url()).pathname.endsWith("/telao") || new URL(tv.url()).search) await tv.goto(`${cfg.base}/${cfg.slug}/telao`);
+  await tv.locator(".tl-tv").waitFor({ state: "visible", timeout: 20_000 });
+  for (const sz of TV_SIZES) {
+    await tv.setViewportSize({ width: sz.w, height: sz.h });
+    await sleep(2500); // troca de arranjo e fim das transições (1,2 s)
+    const m = await tv.evaluate(() => {
+      const vw = innerWidth;
+      const vh = innerHeight;
+      const root = document.querySelector(".tl-tv");
+      const out = [];
+      const cut = [];
+      let minFont = Infinity;
+      let minWho = "";
+      for (const el of root.querySelectorAll("*")) {
+        const st = getComputedStyle(el);
+        if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) continue;
+        if (el.closest(".tl-bgb, .tl-photo, svg")) continue; // fundo e foto podem sangrar
+        // A parte visível: recortada pelos ancestrais com overflow (o preenchimento da barra
+        // fica fora do trilho de propósito, com translateX(p − 100%)).
+        const b = el.getBoundingClientRect();
+        const r = { left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height };
+        for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+          if (getComputedStyle(p).overflow === "visible") continue;
+          const c = p.getBoundingClientRect();
+          r.left = Math.max(r.left, c.left);
+          r.top = Math.max(r.top, c.top);
+          r.right = Math.min(r.right, c.right);
+          r.bottom = Math.min(r.bottom, c.bottom);
+        }
+        if (r.right - r.left <= 0 || r.bottom - r.top <= 0) continue;
+        const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+        const name = `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`;
+        if (r.left < -1 || r.top < -1 || r.right > vw + 1 || r.bottom > vh + 1) out.push(name);
+        if (own) {
+          const f = parseFloat(st.fontSize);
+          if (f < minFont) {
+            minFont = f;
+            minWho = `${name} "${el.textContent.trim().slice(0, 24)}"`;
+          }
+          if (el.scrollWidth > el.clientWidth + 1 && st.overflow !== "visible") cut.push(name);
+        }
+      }
+      const plate = document.querySelector(".tl-plate")?.getBoundingClientRect();
+      return { out: [...new Set(out)], cut: [...new Set(cut)], minFont, minWho, qr: plate ? Math.round(plate.width) : null, kind: root.className };
+    });
+    const tag = `${sz.w}x${sz.h}`;
+    await shot(tv, `20-telao-${tag}`);
+    check(
+      `3 telão ${tag}: nada fora da tela nem cortado`,
+      m.out.length === 0 && m.cut.length === 0,
+      `${m.kind}; fora: ${m.out.join(", ") || "nada"}; cortado: ${m.cut.join(", ") || "nada"}`,
+    );
+    check(
+      `3 telão ${tag}: menor texto e QR como na ficha`,
+      m.minFont >= sz.minText - 1 && m.qr != null && Math.abs(m.qr - sz.qr) <= sz.qr * 0.06,
+      `menor texto ${m.minFont.toFixed(1)} px (ficha ${sz.minText}) em ${m.minWho}; QR ${m.qr} px (ficha ${sz.qr})`,
+    );
+  }
+  await tv.setViewportSize(TV);
 }
 
 async function calls(cfg) {
@@ -551,7 +699,7 @@ async function main() {
   const { chromium } = await loadPlaywright();
   const browser = await chromium.launch();
   const shared = {};
-  const phases = { celular: faseCelular, fontes: faseFontes, placar: fasePlacar, telao: faseTelao, medir: faseMedir };
+  const phases = { celular: faseCelular, fontes: faseFontes, placar: fasePlacar, telao: faseTelao, telas: faseTelas, medir: faseMedir };
   try {
     for (const ph of cfg.phases) {
       if (!phases[ph]) throw new Error(`fase desconhecida: ${ph}`);
