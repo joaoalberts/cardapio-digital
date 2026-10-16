@@ -18,7 +18,7 @@ import { OrderLayer } from "./order/order-layer";
 import { StoryBuy } from "./order/story-actions";
 import { SpecialStory } from "./order/special-story";
 import {
-  SPECIAL_KEY, afterShown, ensureFirstEligible, injectOffer, parseClock, pickSpecial, placeOffer,
+  SPECIAL_KEY, afterShown, ensureFirstEligible, injectOffer, nextTimedStart, parseClock, pickSpecial, placeOffer,
   type OfferPlacement, type SpecialClock,
 } from "@/lib/menu/special-schedule";
 import { CartButton } from "./order/cart-button";
@@ -700,6 +700,61 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
     cardEls.current.forEach((c) => c && io.observe(c));
     return () => io.disconnect();
   }, [cats.length]);
+
+  // Oferta em horário marcado é pontual (decisão do João, 16/10): na hora exata ela aparece
+  // onde o cliente estiver. Nos stories, vira o próximo story na hora; na capa ou na lista,
+  // abre os stories direto nela. Com folha, carrinho ou meio a meio aberto, espera fechar
+  // (até 1 minuto depois da hora).
+  const fireTimed = useCallback(() => {
+    if (!order.enabled) return false;
+    const now0 = Date.now();
+    const busy = order.sheet !== null || order.pick !== null;
+    const sp = pickSpecial(menu.specials?.items ?? [], readClock(), { now: now0, storiesSeen: 0, timezone: menu.restaurant.timezone, busy, openingHours: menu.restaurant.opening_hours }, Math.random);
+    if (!sp?.special?.times?.length) return busy; // ocupado: tenta de novo em instantes
+    const list = catsRef.current.map((c) => ({ ...c, items: c.items.filter((it) => !it.special) }));
+    const v = viewRef.current;
+    if (v.open) {
+      const c = list[v.cur];
+      if (!c) return false;
+      const at = Math.min(c.items.length, (v.idx[v.cur] ?? 0) + 1);
+      placementRef.current = { itemId: sp.id, catId: c.id, at };
+      setPlacement(placementRef.current);
+      setTimeout(() => next(), 80); // depois de o story entrar na lista
+    } else {
+      const ci = Math.max(0, list.findIndex((c) => c.id !== "destaques"));
+      const c = list[ci];
+      if (!c) return false;
+      placementRef.current = { itemId: sp.id, catId: c.id, at: v.idx[ci] ?? 0 };
+      setPlacement(placementRef.current);
+      setTimeout(() => openViewer(ci), 80);
+    }
+    return false;
+  }, [menu, next, openViewer, order.enabled, order.pick, order.sheet, readClock]);
+  const fireTimedRef = useRef(fireTimed);
+  useEffect(() => {
+    fireTimedRef.current = fireTimed;
+  }, [fireTimed]);
+
+  const timedSpecials = menu.specials?.items.filter((i) => i.special?.times?.length);
+  const timedKey = (timedSpecials ?? []).map((i) => `${i.id}:${i.special!.times!.join(",")}:${i.special!.days.join(",")}`).join("|");
+  useEffect(() => {
+    if (!order.enabled || !timedKey) return;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      const at = nextTimedStart(menuRef.current.specials?.items ?? [], menuRef.current.restaurant.timezone, new Date());
+      if (at == null) return;
+      t = setTimeout(() => {
+        const until = at + 60_000;
+        const attempt = () => {
+          if (fireTimedRef.current() && Date.now() < until) t = setTimeout(attempt, 2000);
+          else schedule();
+        };
+        attempt();
+      }, Math.max(0, at - Date.now()));
+    };
+    schedule();
+    return () => clearTimeout(t);
+  }, [order.enabled, timedKey]);
 
   // ---------- Gestos ----------
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {

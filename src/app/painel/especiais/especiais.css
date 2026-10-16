@@ -46,3 +46,7 @@
   & .sp-switch input:disabled + .sp-track { opacity: 0.6; }
   & .sp-state { font-size: 12px; color: var(--muted); }
 }
+/* Horários marcados da oferta (16/10): um campo de hora por horário, com × para tirar. */
+.ap .sp-times { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.ap .sp-time { display: flex; align-items: center; gap: 4px; }
+.ap .sp-time input { width: 120px; }

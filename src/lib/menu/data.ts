@@ -41,6 +41,7 @@ type I = Omit<MenuItem, "media" | "special"> & {
   special_from?: string | null;
   special_to?: string | null;
   special_limit?: number | null;
+  special_times?: unknown;
 };
 type M = MenuMedia & { Id: number; item_id: string | null; category_id: string | null; status: string };
 type T = { category_id: string | null; item_id: string | null; language: string; name: string; description: string | null };

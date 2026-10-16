@@ -2,7 +2,7 @@
 // O pedido só aceita o preço de oferta com esse registro (service.ts confere no envio).
 // O banco vem de fora (deps.db), como em service.ts.
 import { openStatus } from "@/lib/menu/hours";
-import { isSpecialOpen } from "@/lib/menu/special-schedule";
+import { isSpecialOpen, specialCooldownMs } from "@/lib/menu/special-schedule";
 import type { PublicMenu } from "@/lib/menu/types";
 
 export type ClaimRow = {
@@ -36,7 +36,6 @@ export type ClaimResult =
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MESA = /^[A-Z2-9]{6}$/;
-const HOUR_MS = 3_600_000;
 
 function parse(body: unknown): { mesa: string; device: string; item: string } | null {
   if (!body || typeof body !== "object") return null;
@@ -61,12 +60,17 @@ export async function claimSpecial(deps: ClaimDeps, slug: string, body: unknown)
 
   // Só especial ligado (menu.specials já vem só com os ativos) e dentro do dia e horário agora.
   const item = menu.specials?.items.find((i) => i.id === input.item);
-  if (!item?.special || item.promo_price_cents == null || !isSpecialOpen(item, r.timezone, now)) {
+  // Horário marcado: o celular mostra a oferta até 1 minuto depois da hora e o toque vem
+  // depois da contagem (3 s) e da oferta (até 15 s); o servidor dá mais 1 minuto de folga.
+  const open = (at: Date) => !!item && isSpecialOpen(item, r.timezone, at);
+  const inTime = open(now) || (!!item?.special?.times?.length && open(new Date(now.getTime() - 60_000)));
+  if (!item?.special || item.promo_price_cents == null || !inTime) {
     return { ok: false, code: "unavailable" };
   }
 
-  // Contra abuso: o mesmo celular espera o intervalo; a mesa pega no máximo 3 vezes nele.
-  const since = now.getTime() - item.special.every_h * HOUR_MS;
+  // Contra abuso: o mesmo celular espera o intervalo (ou, com horários marcados, a janela
+  // de 5 minutos); a mesa pega no máximo 3 vezes nesse tempo.
+  const since = now.getTime() - specialCooldownMs(item);
   const recent = (rows: ClaimRow[]) => rows.filter((c) => Date.parse(c.created_at) > since);
   const mine = recent(await deps.db.list<ClaimRow>("special_claims", { restaurant_id: r.id, item_id: item.id, device_id: input.device }));
   if (mine.length) return { ok: false, code: "too_soon" };

@@ -28,7 +28,7 @@ export type Row = Record<string, unknown>;
 export type Where = Record<string, string | number | boolean | null>;
 
 // Colunas JSON e Checkbox voltam em formatos diferentes conforme o banco do NocoDB.
-const JSON_COLS = new Set(["languages", "opening_hours", "payment_methods", "price_options", "tags", "lines", "special_days"]);
+const JSON_COLS = new Set(["languages", "opening_hours", "payment_methods", "price_options", "tags", "lines", "special_days", "special_times"]);
 const BOOL_COLS = new Set([
   "active", "featured", "hide_price", "auto", "show_hours", "show_payments", "half_half", "orders_enabled", "open", "special",
 ]);

@@ -3,7 +3,7 @@ import { specialInfo } from "./specials";
 
 describe("specialInfo", () => {
   it("sem nada preenchido usa os padrões (a cada 2 h, 6 s, limite 1, todos os dias, o dia todo)", () => {
-    expect(specialInfo({})).toEqual({ every_h: 2, show_s: 6, days: [], from: null, to: null, limit: 1 });
+    expect(specialInfo({})).toEqual({ every_h: 2, show_s: 6, days: [], from: null, to: null, limit: 1, times: [] });
   });
 
   it("segura os números dentro das faixas do painel", () => {
@@ -22,5 +22,14 @@ describe("specialInfo", () => {
     expect(ok.from).toBe("19:00");
     expect(ok.to).toBe("22:30");
     expect(specialInfo({ special_from: "25:00" }).from).toBeNull();
+  });
+});
+
+describe("horários marcados", () => {
+  it("guarda horários válidos, sem repetir e em ordem", () => {
+    expect(specialInfo({ special_times: ["20:00", "12:30", "20:00", "25:00", "x"] }).times).toEqual(["12:30", "20:00"]);
+  });
+  it("sem horários marcados, a lista fica vazia (modo a cada X horas)", () => {
+    expect(specialInfo({}).times).toEqual([]);
   });
 });

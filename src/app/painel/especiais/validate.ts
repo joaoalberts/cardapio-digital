@@ -1,6 +1,6 @@
 // Formulário de produto especial (oferta relâmpago): confere e monta a linha do banco.
 // Puro (sem rede), para testar; as ações do painel usam antes de gravar.
-import { SPECIAL_LIMITS } from "@/lib/menu/specials";
+import { SPECIAL_LIMITS, SPECIAL_MAX_TIMES } from "@/lib/menu/specials";
 
 export type SpecialInput = {
   id?: string;
@@ -15,6 +15,9 @@ export type SpecialInput = {
   to: string | null;
   limit: number;
   active: boolean;
+  // "Nos horários marcados" (no lugar de "a cada X horas"): a oferta passa só nesses horários.
+  useTimes?: boolean;
+  times?: string[];
 };
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -40,6 +43,8 @@ export function validateSpecial(input: SpecialInput): { ok: true; row: Record<st
   const to = input.to && HHMM.test(input.to) ? input.to : null;
   if (!!from !== !!to) return { ok: false, error: "Preencha o horário de início e de fim, ou deixe os dois vazios." };
   const days = [...new Set((input.days ?? []).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort();
+  const times = input.useTimes ? [...new Set((input.times ?? []).filter((t) => HHMM.test(t)))].sort().slice(0, SPECIAL_MAX_TIMES) : [];
+  if (input.useTimes && !times.length) return { ok: false, error: 'Adicione pelo menos um horário, ou escolha "a cada X horas".' };
 
   return {
     ok: true,
@@ -51,9 +56,10 @@ export function validateSpecial(input: SpecialInput): { ok: true; row: Record<st
       special_every_h: everyH,
       special_show_s: Math.round(showS),
       special_days: days,
-      special_from: from,
-      special_to: to,
+      special_from: times.length ? null : from, // com horários marcados, o de/até não vale
+      special_to: times.length ? null : to,
       special_limit: limit,
+      special_times: times,
       active: !!input.active,
       price_options: null,
       featured: false,

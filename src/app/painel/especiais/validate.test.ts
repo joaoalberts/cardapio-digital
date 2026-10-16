@@ -44,9 +44,19 @@ describe("validateSpecial", () => {
       ok: true,
       row: {
         name: "Pizza da Rainha", description: "Molho, muçarela e manjericão", price_cents: 12000, promo_price_cents: 6900,
-        special_every_h: 2, special_show_s: 6, special_days: [5, 6], special_from: "19:00", special_to: "23:00", special_limit: 1,
+        special_every_h: 2, special_show_s: 6, special_days: [5, 6], special_from: "19:00", special_to: "23:00", special_limit: 1, special_times: [],
         active: true, price_options: null, featured: false, hide_price: false,
       },
     });
+  });
+
+  it("horários marcados: precisa de pelo menos um e guarda a lista", () => {
+    expect(err({ times: [] as string[], useTimes: true })).toBe("Adicione pelo menos um horário, ou escolha \"a cada X horas\".");
+    const r = validateSpecial({ ...ok, useTimes: true, times: ["20:00", "12:00", "20:00"] });
+    expect(r.ok && r.row.special_times).toEqual(["12:00", "20:00"]);
+  });
+  it("a cada X horas: a lista de horários fica vazia", () => {
+    const r = validateSpecial({ ...ok, useTimes: false, times: ["20:00"] });
+    expect(r.ok && r.row.special_times).toEqual([]);
   });
 });
