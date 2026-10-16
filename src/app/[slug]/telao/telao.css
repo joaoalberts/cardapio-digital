@@ -1,0 +1,703 @@
+/* Telão da Comunidade (TV do salão), fase 1a. Valores da ficha aprovada
+   (docs/prototipos/comunidade/README.md, telas 17 a 20), num palco de 1280×720 escalado
+   para a tela da TV (--tl-k, calculado no cliente).
+   Regras: nenhum backdrop-filter (TV de salão tem pouca GPU); o fundo é a capa já desfocada
+   com filter e os painéis são vidro escuro sem desfoque. Anima só transform, opacity e o
+   ângulo --tl-ring (@property). Cor da marca só por var(--accent); limão (--o-lime) só no
+   anel do tempo. .tl-plain (navegador fraco): fundo sólido, sem capa desfocada nem luzes. */
+
+@property --tl-ring {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 360deg;
+}
+
+.tl {
+  --accent: #e8b04b;
+  --o-lime: #d8f05a;
+  --tl-fg: #f7efe6;
+  --tl-muted: rgba(247, 239, 230, 0.64);
+  --tl-faint: rgba(247, 239, 230, 0.55);
+  --tl-glass: rgba(26, 20, 16, 0.55);
+  --tl-live: #ff6b5b;
+  --tl-ink: #1b1714;
+  --tl-ease: cubic-bezier(0.2, 0.9, 0.25, 1);
+  --tl-text: var(--f-karla), system-ui, sans-serif;
+  --tl-title: var(--f-fell), Georgia, serif;
+  --tl-name: var(--f-yesteryear), "Brush Script MT", cursive;
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  background: #100c0a;
+  color: var(--tl-fg);
+  font-family: var(--tl-text);
+  line-height: 1.17;
+  -webkit-font-smoothing: antialiased;
+}
+.tl *,
+.tl *::before,
+.tl *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+.tl img {
+  display: block;
+}
+.tl button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.tl button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.tl .tl-icon {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+
+/* Palco de 1280×720 no meio da tela, escalado para caber (as sobras ficam no fundo escuro). */
+.tl-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1280px;
+  height: 720px;
+  overflow: hidden;
+  background: #140e0b;
+  transform: translate(-50%, -50%) scale(var(--tl-k, 1));
+}
+
+/* ================= Fundo ================= */
+.tl-bg {
+  position: absolute;
+  inset: -80px;
+  background-position: center;
+  background-size: cover;
+  filter: blur(44px) saturate(0.6) brightness(0.42);
+}
+.tl-wash {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(70% 60% at 30% 40%, rgba(35, 26, 22, 0.1), rgba(20, 14, 11, 0.6) 80%),
+    linear-gradient(180deg, rgba(20, 14, 11, 0.4), rgba(20, 14, 11, 0.75));
+}
+/* Luzes de palco: giram de −14° a 10° em 9 s e 11 s. */
+.tl-beam {
+  position: absolute;
+  top: -120px;
+  width: 420px;
+  height: 900px;
+  transform-origin: 50% 0;
+  filter: blur(22px);
+  opacity: 0.55;
+  mix-blend-mode: screen;
+  animation: tl-beam 9s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+.tl-beam::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 24%, transparent), transparent 72%);
+  clip-path: polygon(44% 0, 56% 0, 100% 100%, 0 100%);
+}
+.tl-beam.b2 {
+  animation-duration: 11s;
+  animation-direction: alternate-reverse;
+}
+@keyframes tl-beam {
+  from {
+    transform: rotate(-14deg);
+  }
+  to {
+    transform: rotate(10deg);
+  }
+}
+.tl-plain .tl-stage {
+  background: #17110e;
+}
+.tl-plain .tl-wash {
+  background: #17110e;
+}
+
+/* ================= Marca ================= */
+.tl-brand {
+  position: absolute;
+  z-index: 3;
+  left: 56px;
+  top: 42px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.tl-brand > img,
+.tl-brand .tl-logo-l {
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: 50% 26%;
+  box-shadow:
+    0 0 0 2.5px var(--accent),
+    0 10px 26px rgba(0, 0, 0, 0.4);
+  flex: none;
+}
+.tl-brand .tl-logo-l {
+  display: grid;
+  place-items: center;
+  font-family: var(--tl-title);
+  font-size: 40px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.tl-brand > div {
+  display: grid;
+  line-height: 1.05;
+  max-width: 560px;
+}
+.tl-brand b {
+  font-family: var(--tl-name);
+  font-weight: 400;
+  font-size: 40px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tl-brand span {
+  font-size: 21px;
+  color: var(--tl-muted);
+  margin-top: 4px;
+}
+/* Reconectando: pílula discreta perto da marca. */
+.tl-brand .tl-rec {
+  align-self: center;
+  margin: 0 0 0 60px;
+  height: 40px;
+  padding: 0 18px 0 14px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  color: rgba(247, 239, 230, 0.85);
+  background: rgba(26, 20, 16, 0.7);
+  white-space: nowrap;
+  animation: tl-fade-in 0.4s ease both;
+}
+.tl-spin {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: rgba(255, 255, 255, 0.85);
+  animation: tl-spin 0.9s linear infinite;
+  flex: none;
+}
+@keyframes tl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes tl-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ================= Enquete ================= */
+.tl-poll,
+.tl-idle {
+  position: absolute;
+  z-index: 3;
+  left: 56px;
+  top: 156px;
+  width: 768px;
+  transition: opacity 0.4s ease;
+}
+.tl.rec .tl-poll,
+.tl.rec .tl-idle {
+  opacity: 0.8;
+}
+.tl-ph {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.tl-lb {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.tl-live {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--tl-live);
+  flex: none;
+  display: inline-block;
+}
+.tl-live::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: rgba(255, 107, 91, 0.45);
+  animation: tl-pulse 1.6s ease-out infinite;
+}
+@keyframes tl-pulse {
+  from {
+    transform: scale(0.45);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+.tl-tm {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 20px;
+  color: var(--tl-muted);
+  white-space: nowrap;
+}
+.tl-tm > b {
+  font-size: 26px;
+  color: var(--tl-fg);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+/* Anel do tempo: o ângulo --tl-ring anda 1 s por segundo. */
+.tl-tmr {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.22);
+  box-shadow: 0 0 12px rgba(216, 240, 90, 0.18);
+  flex: none;
+  transition: --tl-ring 1s linear;
+}
+.tl-tmr i {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(var(--o-lime) var(--tl-ring), rgba(255, 255, 255, 0.16) 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 5.5px), #000 calc(100% - 5px));
+}
+.tl-poll h2 {
+  font-family: var(--tl-title);
+  font-weight: 400;
+  font-size: 62px;
+  line-height: 1.04;
+  margin: 10px 0 22px;
+  text-wrap: balance;
+}
+/* Pergunta longa: duas linhas menores, para as barras não descerem sobre o aviso do QR. */
+.tl-poll h2.long {
+  font-size: 46px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.tl-bars {
+  display: grid;
+  gap: 14px;
+}
+.tl-bar {
+  position: relative;
+  height: 88px;
+  border-radius: 26px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 30px 0 22px;
+  background: var(--tl-glass);
+}
+.tl-bar .tl-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: rgba(255, 255, 255, 0.1);
+  transition: transform 1.2s var(--tl-ease);
+}
+.tl-bar.lead .tl-fill {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 66%, transparent), color-mix(in srgb, var(--accent) 36%, transparent));
+}
+.tl-bar > *:not(.tl-fill) {
+  position: relative;
+}
+.tl-bar .tl-em {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  object-fit: cover;
+  flex: none;
+}
+.tl-bar b {
+  flex: 1;
+  min-width: 0;
+  font-size: 33px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
+}
+.tl-bar .tl-pc {
+  font-size: 48px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.3);
+}
+.tl-vote {
+  position: absolute;
+  z-index: 3;
+  left: 56px;
+  bottom: 38px;
+  height: 46px;
+  padding: 0 20px 0 14px;
+  border-radius: 23px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 20px;
+  color: rgba(247, 239, 230, 0.9);
+  background: var(--tl-glass);
+  white-space: nowrap;
+}
+.tl-vote .tl-icon {
+  width: 26px;
+  height: 26px;
+  margin-right: 4px;
+  color: var(--accent);
+}
+.tl-vote b {
+  font-weight: 700;
+}
+
+/* ================= QR ================= */
+.tl-qr {
+  position: absolute;
+  z-index: 3;
+  right: 56px;
+  top: 42px;
+  bottom: 42px;
+  width: 344px;
+  border-radius: 34px;
+  padding: 34px 30px;
+  background: var(--tl-glass);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+/* Placa creme com os módulos escuros (não é tarja branca). */
+.tl-qrp {
+  width: 278px;
+  height: 278px;
+  padding: 18px;
+  border-radius: 26px;
+  background: var(--tl-fg);
+  flex: none;
+}
+.tl-qrp svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.tl-qr > b {
+  margin-top: 26px;
+  font-family: var(--tl-title);
+  font-weight: 400;
+  font-size: 39px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.tl-qr > span {
+  margin-top: 10px;
+  font-size: 20px;
+  color: var(--tl-muted);
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.tl-qr .tl-steps {
+  margin-top: 22px;
+  padding-top: 18px;
+  width: 100%;
+  border-top: 1px solid rgba(247, 239, 230, 0.1);
+  font-size: 17px;
+  color: var(--tl-faint);
+}
+
+/* ================= Sem enquete ================= */
+.tl-car {
+  position: relative;
+  height: 392px;
+  border-radius: 30px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.35);
+}
+/* Troca a cada 6 s em 1,2 s, com aproximação lenta de 1 a 1,07 em 8 s. */
+.tl-car > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transform: scale(1);
+  transition:
+    opacity 1.2s ease,
+    transform 8s linear;
+}
+.tl-car > img.on {
+  opacity: 1;
+  transform: scale(1.07);
+}
+.tl-car::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.25), transparent 30%, transparent 62%, rgba(0, 0, 0, 0.5));
+}
+.tl-ctag {
+  position: absolute;
+  z-index: 2;
+  left: 20px;
+  top: 20px;
+  height: 40px;
+  padding: 0 16px 0 5px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 600;
+  background: var(--tl-glass);
+}
+.tl-ctag:not(:has(img)) {
+  padding-left: 16px;
+}
+.tl-ctag img {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: 50% 26%;
+}
+.tl-cname {
+  position: absolute;
+  z-index: 2;
+  left: 24px;
+  right: 24px;
+  bottom: 20px;
+  font-family: var(--tl-title);
+  font-size: 44px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.5);
+}
+.tl-row {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 16px;
+  margin-top: 18px;
+}
+.tl-row.one {
+  grid-template-columns: 1fr;
+}
+.tl-card {
+  height: 104px;
+  border-radius: 26px;
+  padding: 0 22px 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  background: var(--tl-glass);
+}
+.tl-card img {
+  width: 74px;
+  height: 74px;
+  border-radius: 18px;
+  object-fit: cover;
+  flex: none;
+}
+.tl-card .tl-icon {
+  width: 44px;
+  height: 44px;
+  color: var(--accent);
+  stroke-width: 1.6;
+  margin-left: 6px;
+}
+.tl-card div {
+  display: grid;
+  line-height: 1.1;
+  min-width: 0;
+}
+.tl-card small {
+  font-size: 17px;
+  color: var(--tl-muted);
+}
+.tl-card small i {
+  font-style: normal;
+  color: var(--accent);
+}
+.tl-card b {
+  font-family: var(--tl-title);
+  font-weight: 400;
+  font-size: 36px;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ================= Som e depuração ================= */
+/* "ligar som": discreto, no vão abaixo do painel do QR, longe da enquete e das fotos. */
+.tl-sound {
+  position: absolute;
+  z-index: 4;
+  right: 56px;
+  bottom: 7px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 15px;
+  color: var(--tl-faint);
+}
+.tl-sound .tl-icon {
+  width: 18px;
+  height: 18px;
+}
+.tl-sound.on {
+  color: var(--tl-muted);
+}
+.tl-debug {
+  position: absolute;
+  z-index: 6;
+  right: 60px;
+  top: 14px;
+  font-size: 13px;
+  color: var(--tl-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ================= Parear, conectando e desligada ================= */
+.tl-pair {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  background:
+    radial-gradient(60% 70% at 50% 40%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
+    #17110e;
+}
+.tl-plain .tl-pair {
+  background: #17110e;
+}
+.tl-in {
+  display: grid;
+  justify-items: center;
+}
+.tl-pair small {
+  font-size: 22px;
+  color: var(--tl-muted);
+}
+.tl-pair h2 {
+  font-family: var(--tl-title);
+  font-weight: 400;
+  font-size: 70px;
+  line-height: 1;
+  margin: 10px 0 40px;
+}
+.tl-code {
+  display: flex;
+  gap: 14px;
+}
+.tl-code i {
+  width: 104px;
+  height: 130px;
+  border-radius: 26px;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 76px;
+  font-weight: 700;
+  color: var(--tl-fg);
+  background: rgba(255, 255, 255, 0.07);
+  font-variant-numeric: tabular-nums;
+}
+.tl-code i.tl-gap {
+  width: 18px;
+  background: none;
+}
+.tl-code.empty i {
+  color: var(--tl-faint);
+}
+.tl-pair p {
+  margin-top: 40px;
+  max-width: 720px;
+  font-size: 24px;
+  color: rgba(247, 239, 230, 0.85);
+  line-height: 1.4;
+  text-wrap: balance;
+}
+.tl-pair p b {
+  color: var(--accent);
+  font-weight: 700;
+}
+.tl-in > h2 + p {
+  margin-top: 0;
+}
+.tl-wait {
+  margin-top: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  color: var(--tl-faint);
+}
+
+/* Reduzir movimento: tudo parado; barras e % direto no valor, carrossel troca sem efeito. */
+@media (prefers-reduced-motion: reduce) {
+  .tl *,
+  .tl *::before,
+  .tl *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

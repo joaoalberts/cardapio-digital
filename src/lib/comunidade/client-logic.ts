@@ -4,7 +4,7 @@ import { formatTime, inWindow } from "@/lib/menu/hours";
 import { thumbSrc } from "@/lib/menu/media";
 import type { MenuItem, PublicMenu } from "@/lib/menu/types";
 import { ct, ctf } from "./i18n";
-import type { OptionId, PollTemplate, PublicOption } from "./types";
+import type { OptionId, PollTemplate, PublicOption, PublicState } from "./types";
 
 // ---------- Balão na capa ----------
 
@@ -163,4 +163,39 @@ export function muralColumns<T>(posts: T[]) {
 export function refFrom(search: string): "telao" | "story" | null {
   const r = new URLSearchParams(search).get("ref");
   return r === "telao" || r === "story" ? r : null;
+}
+
+// ---------- Telão ----------
+
+// O telão lê a mesma resposta da CDN que os celulares, a cada 4 s. Caiu a rede: tenta de
+// novo em 4, 8, 16 e 30 s (máximo), mantendo o último estado na tela.
+export const TV_POLL_MS = 4_000;
+const TV_BACKOFF_MAX_MS = 30_000;
+export function backoff(failures: number): number {
+  if (!(failures > 0)) return TV_POLL_MS; // 0, negativo ou NaN
+  return Math.min(TV_BACKOFF_MAX_MS, TV_POLL_MS * 2 ** Math.floor(failures));
+}
+
+// O que o telão mostra: nada da Comunidade se ela está desligada (ou sem estado); as barras
+// com enquete aberta, ou encerrada com votos (a vencedora, pelos 15 min em que ela fica no
+// estado); senão as fotos da casa, o destaque e a próxima enquete.
+export type TvMode = "off" | "poll" | "idle";
+export function tvMode(s: PublicState | null): TvMode {
+  if (!s || !s.enabled) return "off";
+  if (s.poll && (!s.poll.closed || s.poll.has_votes)) return "poll";
+  return "idle";
+}
+
+// A página do telão recarrega sozinha a cada 3 h, nunca no meio de uma enquete aberta.
+export const TV_RELOAD_MS = 3 * 60 * 60_000;
+export function tvReloadDue(loadedAt: number, now: number, pollOpen: boolean): boolean {
+  return !pollOpen && now - loadedAt >= TV_RELOAD_MS;
+}
+
+// Sinal sonoro quando abre uma enquete nova. prev: a enquete aberta da leitura anterior
+// (undefined = ainda não houve leitura, então a que já estava aberta ao ligar não toca;
+// null = não havia enquete aberta).
+export function pollChime(prev: string | null | undefined, s: PublicState | null): { open: string | null; chime: boolean } {
+  const open = s?.enabled && s.poll && !s.poll.closed ? s.poll.id : null;
+  return { open, chime: prev !== undefined && open !== null && open !== prev };
 }

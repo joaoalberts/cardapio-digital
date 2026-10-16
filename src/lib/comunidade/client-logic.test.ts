@@ -3,8 +3,9 @@ import type { MenuCategory, MenuItem, PublicMenu } from "@/lib/menu/types";
 import {
   BALLOON_MIN_BAND, balloonMode, balloonNeed, buyState, clockSkew, clockText, houseHighlight, leaderOf, localTime,
   muralColumns, pollDelay, pollTiming, questionText, refFrom, relativeTime, shownPcts,
+  backoff, pollChime, TV_POLL_MS, TV_RELOAD_MS, tvMode, tvReloadDue,
 } from "./client-logic";
-import type { PublicOption } from "./types";
+import type { PublicOption, PublicPoll, PublicState } from "./types";
 
 const NOW = new Date("2026-10-16T23:00:00Z"); // 20h em São Paulo
 
@@ -197,5 +198,76 @@ describe("textos que dependem do lugar", () => {
     expect(questionText({ template: "dessert", question: "Qual doce?" }, "pt-BR")).toBe("Qual sobremesa sai hoje?");
     expect(questionText({ template: "music", question: "x" }, "en")).toBe("What should play next?");
     expect(questionText({ template: "custom", question: "Qual sai primeiro?" }, "en")).toBe("Qual sai primeiro?");
+  });
+});
+
+// ---------- Telão ----------
+
+function tvState(over: Partial<PublicState> = {}): PublicState {
+  return { v: "x", enabled: true, open: true, now: NOW.toISOString(), poll: null, next: null, mural: [], has_tv: true, instagram: null, ...over };
+}
+function tvPoll(over: Partial<PublicPoll> = {}): PublicPoll {
+  return {
+    id: "p1", template: "dessert", question: "", starts_at: "2026-10-16T22:50:00Z", ends_at: "2026-10-16T23:10:00Z",
+    closed: false, has_votes: true, winner: null,
+    options: [{ id: "a", label: "A", item_id: null, pct: 60 }, { id: "b", label: "B", item_id: null, pct: 40 }],
+    ...over,
+  };
+}
+
+describe("backoff do telão", () => {
+  it("4, 8, 16 e 30 s no máximo", () => {
+    expect(backoff(0)).toBe(4000);
+    expect(backoff(1)).toBe(8000);
+    expect(backoff(2)).toBe(16000);
+    expect(backoff(3)).toBe(30000);
+    expect(backoff(9)).toBe(30000);
+  });
+  it("valor estranho volta ao começo; a consulta normal é de 4 s", () => {
+    expect(backoff(-1)).toBe(4000);
+    expect(backoff(Number.NaN)).toBe(4000);
+    expect(backoff(Number.POSITIVE_INFINITY)).toBe(30000);
+    expect(TV_POLL_MS).toBe(4000);
+  });
+});
+
+describe("tvMode", () => {
+  it("desligada, ou sem estado: nada da Comunidade na tela", () => {
+    expect(tvMode(null)).toBe("off");
+    expect(tvMode(tvState({ enabled: false }))).toBe("off");
+  });
+  it("enquete aberta: barras; encerrada com votos: barras com a vencedora", () => {
+    expect(tvMode(tvState({ poll: tvPoll() }))).toBe("poll");
+    expect(tvMode(tvState({ poll: tvPoll({ has_votes: false }) }))).toBe("poll");
+    expect(tvMode(tvState({ poll: tvPoll({ closed: true, winner: "a" }) }))).toBe("poll");
+  });
+  it("encerrada sem votos, sem enquete ou fora do horário: fotos e destaque", () => {
+    expect(tvMode(tvState({ poll: tvPoll({ closed: true, has_votes: false }) }))).toBe("idle");
+    expect(tvMode(tvState())).toBe("idle");
+    expect(tvMode(tvState({ open: false }))).toBe("idle");
+  });
+});
+
+describe("tvReloadDue", () => {
+  const t0 = Date.parse("2026-10-16T20:00:00Z");
+  it("recarrega depois de 3 h, só sem enquete aberta", () => {
+    expect(TV_RELOAD_MS).toBe(3 * 60 * 60_000);
+    expect(tvReloadDue(t0, t0 + TV_RELOAD_MS - 1, false)).toBe(false);
+    expect(tvReloadDue(t0, t0 + TV_RELOAD_MS, false)).toBe(true);
+    expect(tvReloadDue(t0, t0 + 5 * TV_RELOAD_MS, true)).toBe(false);
+  });
+});
+
+describe("pollChime", () => {
+  it("toca só quando abre uma enquete nova depois da primeira leitura", () => {
+    expect(pollChime(undefined, tvState({ poll: tvPoll() }))).toEqual({ open: "p1", chime: false });
+    expect(pollChime(null, tvState({ poll: tvPoll() }))).toEqual({ open: "p1", chime: true });
+    expect(pollChime("p1", tvState({ poll: tvPoll() }))).toEqual({ open: "p1", chime: false });
+    expect(pollChime("p0", tvState({ poll: tvPoll() }))).toEqual({ open: "p1", chime: true });
+  });
+  it("enquete encerrada ou sem enquete: não toca e esquece a aberta", () => {
+    expect(pollChime("p1", tvState({ poll: tvPoll({ closed: true }) }))).toEqual({ open: null, chime: false });
+    expect(pollChime("p1", tvState())).toEqual({ open: null, chime: false });
+    expect(pollChime("p1", null)).toEqual({ open: null, chime: false });
   });
 });
