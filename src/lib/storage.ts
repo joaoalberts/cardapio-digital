@@ -69,6 +69,36 @@ export async function removeFiles(paths: (string | null | undefined)[]) {
   }).catch(() => undefined);
 }
 
+// Variante estrita, para a retenção da Comunidade: só termina quando os arquivos saíram, para
+// a linha do banco não sumir deixando um arquivo órfão. No Blob, confere a resposta e lança
+// no erro (rede, HTTP fora de 2xx ou sem BLOB_READ_WRITE_TOKEN); no driver local, lança se o
+// unlink falhar, menos quando o arquivo já não existe (ENOENT). Caminhos que não são deste
+// armazenamento (Supabase antigo, demonstração, URL local inválida) ficam como em removeFiles.
+export async function removeFilesStrict(paths: (string | null | undefined)[]): Promise<void> {
+  if (storageDriver() === "local") {
+    for (const p of paths) {
+      const parts = typeof p === "string" && isLocalUrl(p) ? localUrlSegments(p) : null;
+      const file = parts && localFile(parts);
+      if (!file) continue;
+      try {
+        await unlink(/*turbopackIgnore: true*/ file);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException | null)?.code !== "ENOENT") throw e;
+      }
+    }
+    return;
+  }
+  const urls = paths.filter((p): p is string => !!p && isBlobUrl(p));
+  if (!urls.length) return;
+  if (!storageEnabled()) throw new Error("blob delete: sem BLOB_READ_WRITE_TOKEN");
+  const res = await fetch(`${API}/delete`, {
+    method: "POST",
+    headers: headers({ "content-type": "application/json" }),
+    body: JSON.stringify({ urls }),
+  });
+  if (!res.ok) throw new Error(`blob delete ${res.status}: ${(await res.text().catch(() => "")).slice(0, 300)}`);
+}
+
 // ---------- driver local (teste e Docker) ----------
 
 const LOCAL_PREFIX = "/api/arquivos-locais/";

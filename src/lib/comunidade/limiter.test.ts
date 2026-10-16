@@ -53,6 +53,37 @@ describe("createLimiter (janela móvel)", () => {
     expect(l.hit("a")).toBe(true);
   });
 
+  it("undo devolve a batida mais nova da chave (quem reservou e não usou)", () => {
+    const c = clock(0);
+    const l = createLimiter({ max: 2, windowMs: 100, now: c.now });
+    expect(l.hit("a")).toBe(true);
+    c.set(10);
+    expect(l.hit("a")).toBe(true);
+    expect(l.hit("a")).toBe(false);
+    l.undo("a");
+    // Saiu a de 10: cabe uma agora, e a de 0 continua valendo até 100.
+    c.set(20);
+    expect(l.hit("a")).toBe(true);
+    expect(l.hit("a")).toBe(false);
+    c.set(100);
+    expect(l.hit("a")).toBe(true);
+  });
+
+  it("undo sem batida (ou de outra chave) não faz nada", () => {
+    const c = clock(0);
+    const l = createLimiter({ max: 1, windowMs: 100, now: c.now });
+    l.undo("a");
+    expect(l.size()).toBe(0);
+    expect(l.hit("a")).toBe(true);
+    l.undo("b");
+    expect(l.hit("a")).toBe(false);
+    l.undo("a");
+    l.undo("a");
+    expect(l.size()).toBe(0);
+    expect(l.hit("a")).toBe(true);
+    expect(l.hit("a")).toBe(false);
+  });
+
   it("poda: chave sem batida na janela some da memória", () => {
     const c = clock(0);
     const l = createLimiter({ max: 5, windowMs: 100, now: c.now });

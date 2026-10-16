@@ -12,9 +12,11 @@ import { communityOff } from "./off";
 import { publicPoll } from "./public-state";
 import type { CommunityHead, OptionId, PollRow, PostRow, PublicPoll, TvRow, VoteRow } from "./types";
 
-// Enquete aberta: o resultado ainda muda, 60 s na CDN. Encerrada ou foto da casa: 1 dia.
+// Enquete aberta: o resultado ainda muda, 60 s na CDN. Encerrada: 1 dia. Foto da casa: 1 h,
+// porque a casa pode ocultar a foto no painel e a arte não deve circular por um dia depois.
 export const STORY_CACHE_LIVE = "public, max-age=0, s-maxage=60";
 export const STORY_CACHE_DONE = "public, max-age=0, s-maxage=86400";
+export const STORY_CACHE_POST = "public, max-age=0, s-maxage=3600";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // Cor padrão do cardápio (menu.css, --accent) quando a casa não escolheu uma.
@@ -124,7 +126,8 @@ export function storyLead(p: PublicPoll): OptionId | null {
 }
 
 export function storyCache(src: StorySource, now: Date): string {
-  if (src.kind === "poll" && !src.poll.closed && Date.parse(src.poll.ends_at) > now.getTime()) return STORY_CACHE_LIVE;
+  if (src.kind === "post") return STORY_CACHE_POST;
+  if (!src.poll.closed && Date.parse(src.poll.ends_at) > now.getTime()) return STORY_CACHE_LIVE;
   return STORY_CACHE_DONE;
 }
 

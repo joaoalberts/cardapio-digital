@@ -4,6 +4,7 @@ import type { CommunityHead, OptionId, PollRow, PostRow, VoteRow } from "./types
 import {
   STORY_CACHE_DONE,
   STORY_CACHE_LIVE,
+  STORY_CACHE_POST,
   parseStoryQuery,
   qrPath,
   resolveStory,
@@ -305,15 +306,16 @@ describe("resolveStory: foto da casa", () => {
 });
 
 describe("storyCache", () => {
-  it("enquete aberta: 60 s na CDN; encerrada ou foto da casa: 1 dia", async () => {
+  it("enquete aberta: 60 s na CDN; encerrada: 1 dia; foto da casa: 1 h (a casa pode ocultar)", async () => {
     expect(STORY_CACHE_LIVE).toBe("public, max-age=0, s-maxage=60");
     expect(STORY_CACHE_DONE).toBe("public, max-age=0, s-maxage=86400");
+    expect(STORY_CACHE_POST).toBe("public, max-age=0, s-maxage=3600");
     const open = asPoll(await resolveStory(deps(), "forno", { poll: P_OPEN }));
     const closed = asPoll(await resolveStory(deps(), "forno", { poll: P_CLOSED }));
     const house = asPost(await resolveStory(deps(), "forno", { post: POST_OK }));
     expect(storyCache(open, NOW)).toBe(STORY_CACHE_LIVE);
     expect(storyCache(closed, NOW)).toBe(STORY_CACHE_DONE);
-    expect(storyCache(house, NOW)).toBe(STORY_CACHE_DONE);
+    expect(storyCache(house, NOW)).toBe(STORY_CACHE_POST);
     // A aberta que já passou do fim na hora de responder conta como encerrada.
     expect(storyCache(open, new Date(now + 11 * MIN))).toBe(STORY_CACHE_DONE);
   });

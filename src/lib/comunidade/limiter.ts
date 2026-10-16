@@ -2,10 +2,12 @@
 // últimos `windowMs`. Vale por instância do servidor (melhor esforço): duas instâncias
 // contam separado, e uma instância nova começa do zero. Batida recusada não conta.
 // A memória é podada: a cada janela, some quem não bateu nela; e nunca passa de maxKeys
-// chaves (sai a mais antiga).
+// chaves (sai a mais antiga). Quem reserva uma batida antes de saber se vai usá-la (o código
+// do telão, que só conta quando cria um novo) devolve com undo.
 
 export type Limiter = {
   hit(key: string): boolean; // true = aceita (e conta); false = passou do limite
+  undo(key: string): void; // devolve a batida mais nova da chave (reservou e não usou)
   size(): number; // chaves guardadas (para os testes e para a poda)
 };
 
@@ -55,6 +57,12 @@ export function createLimiter(o: LimiterOptions): Limiter {
       }
       list.push(t);
       return true;
+    },
+    undo(key) {
+      const list = hits.get(key);
+      if (!list) return;
+      list.pop();
+      if (!list.length) hits.delete(key);
     },
     size: () => hits.size,
   };

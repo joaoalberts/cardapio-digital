@@ -16,7 +16,9 @@ import { useComunidade } from "./provider";
 // source = de onde veio o toque (enquete ou post). Sem source (destaque da casa sem enquete
 // nem post), a linha entra sem origem: não há o que atribuir.
 // itemId null = nada ligado (opção da enquete só com o texto da casa): o botão some. O
-// "indisponível" desligado fica só para um prato ligado que saiu do cardápio.
+// "indisponível hoje" desligado fica para o prato ligado que o carrinho recusaria agora:
+// saiu do cardápio, é produto especial ou a categoria dele está fora do horário (pelo
+// relógio por minuto do provider, igual ao destaque da casa).
 
 export type BuySource = { kind: "palco" | "mural"; ref: string } | null;
 
@@ -25,7 +27,15 @@ export function BuyButton({ itemId, source, big = false }: { itemId: string | nu
   const c = useComunidade();
   const btn = useRef<HTMLButtonElement>(null);
   const item = itemId ? o.itemById(itemId) : undefined;
-  const st = buyState(item, { linked: !!itemId, enabled: o.enabled, pick: !!o.pick, inCart: item ? o.inCart(item.id) : 0 });
+  const st = buyState(item, {
+    linked: !!itemId,
+    enabled: o.enabled,
+    pick: !!o.pick,
+    inCart: item ? o.inCart(item.id) : 0,
+    menu: o.menu,
+    // Antes do primeiro tique do relógio (só no primeiro quadro), a hora da leitura.
+    now: new Date(c.minute || (c.state ? Date.parse(c.state.now) : 0)),
+  });
   if (st === "hidden") return null;
   const L = o.lang;
   const cls = `cmu-also${big ? " big" : ""}`;

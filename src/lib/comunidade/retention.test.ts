@@ -364,8 +364,13 @@ const h = vi.hoisted(() => ({
   removeFiles: vi.fn<(paths: unknown[]) => Promise<void>>(async () => {}),
 }));
 vi.mock("@/lib/db/nocodb", () => ({ list: h.list, removeIds: h.removeIds }));
+// A rota usa só a remoção estrita; a comum, que engole erro, faria a linha sair com o
+// arquivo ainda lá.
 vi.mock("@/lib/storage", () => ({
-  removeFiles: h.removeFiles,
+  removeFilesStrict: h.removeFiles,
+  removeFiles: async () => {
+    throw new Error("a rota do cron não pode usar removeFiles");
+  },
   ownsFile: (rid: string, p: string) => p.startsWith(`/api/arquivos-locais/${rid}/`),
 }));
 
@@ -442,5 +447,28 @@ describe("GET /api/cron/comunidade", () => {
     expect(all.status).toBe(500);
     expect(await all.json()).toEqual({ ok: false, failed: 4, deleted: { votes: 0, tallies: 0, posts: 0, tvs: 0 } });
     spy.mockRestore();
+  });
+
+  it("arquivo que não saiu (remoção estrita lança): a linha da foto fica para a próxima rodada", async () => {
+    vi.stubEnv("CRON_SECRET", SECRET);
+    vi.stubEnv("COMMUNITY_OFF", "");
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const old = { Id: 9, ...housePost(R1, ago(8 * DAY), "orfa") };
+    h.list.mockImplementation(async (t: string) => (t === "community_posts" ? [old] : []));
+    h.removeFiles.mockRejectedValueOnce(new Error("blob delete 500"));
+    const res = await call(`Bearer ${SECRET}`);
+    spy.mockRestore();
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ ok: false, failed: 1, deleted: { votes: 0, tallies: 0, posts: 0, tvs: 0 } });
+    expect(h.removeFiles).toHaveBeenCalledWith([old.photo_path, old.thumb_path]);
+    expect(h.removeIds).not.toHaveBeenCalledWith("community_posts", expect.anything());
+    // Na rodada seguinte o arquivo sai e a linha também.
+    const again = await call(`Bearer ${SECRET}`);
+    expect(again.status).toBe(200);
+    expect(h.removeIds).toHaveBeenCalledWith("community_posts", [9]);
+  });
+
+  it("declara maxDuration de 60 s (a varredura lê as tabelas inteiras)", () => {
+    expect(route.maxDuration).toBe(60);
   });
 });

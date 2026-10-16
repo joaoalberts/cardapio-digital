@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- miniaturas e fotos da casa já vêm no tamanho certo */
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { houseHighlight, muralColumns, relativeTime } from "@/lib/comunidade/client-logic";
+import { houseHighlight, muralColumns, orderableNow, relativeTime } from "@/lib/comunidade/client-logic";
 import { ct, ctf } from "@/lib/comunidade/i18n";
 import type { PublicPost } from "@/lib/comunidade/types";
 import { mediaUrl, thumbSrc } from "@/lib/menu/media";
@@ -31,7 +31,8 @@ export function Mural({ onPhoto }: { onPhoto: (p: Photo) => void }) {
   const menu = o.menu;
   const nowSeed = s ? Date.parse(s.now) : 0;
   const now = useClock(c.open, nowSeed, c.skew, 30_000);
-  const highlight = useMemo(() => (menu ? houseHighlight(menu, new Date(nowSeed)) : null), [menu, nowSeed]);
+  const minute = c.minute || nowSeed;
+  const highlight = useMemo(() => (menu ? houseHighlight(menu, new Date(minute)) : null), [menu, minute]);
 
   // Páginas mais antigas, buscadas com "Ver mais". A primeira página vem do estado.
   const [older, setOlder] = useState<PublicPost[]>([]);
@@ -101,14 +102,16 @@ export function Mural({ onPhoto }: { onPhoto: (p: Photo) => void }) {
   const { left, right } = muralColumns(posts);
   const card = ({ post, ar, i }: { post: PublicPost; ar: string; i: number }) => {
     const item = o.itemById(post.item_id);
-    const off = !item;
+    // Fora do cardápio, ou que o carrinho recusaria agora (categoria fora do horário):
+    // "indisponível hoje", como o "Pedir também" do cartão.
+    const off = !item || !menu || !orderableNow(menu, item.id, new Date(minute));
     const name = item?.name ?? ct("unavailable", L);
     return (
       <article key={post.id} className={`cmu-post${off ? " off" : ""}`} style={{ "--i": Math.min(i, 8) } as CSSProperties}>
         <button
           className="cmu-pimg"
           style={{ aspectRatio: ar }}
-          onClick={() => onPhoto({ id: post.id, src: post.photo, name, shareable: !off })}
+          onClick={() => onPhoto({ id: post.id, src: post.photo, name, shareable: !!item })}
           aria-label={ctf("photoOpen", L, { name })}
         >
           <img className="cmu-p" src={post.thumb} alt="" loading="lazy" decoding="async" />

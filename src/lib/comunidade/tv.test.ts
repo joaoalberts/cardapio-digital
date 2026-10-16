@@ -146,7 +146,7 @@ describe("requestPairCode", () => {
     const s = setup({ codes: ["K7M3QX"] });
     const hash = await sha256Hex(SECRET_A);
     const r = await requestPairCode(s.deps, "forno", { hash, restaurant_id: R2 });
-    expect(r).toEqual({ ok: true, code: "K7M3QX", expires_at: iso(now + PAIR_CODE_TTL_MS) });
+    expect(r).toEqual({ ok: true, code: "K7M3QX", expires_at: iso(now + PAIR_CODE_TTL_MS), created: true });
     expect(PAIR_CODE_TTL_MS).toBe(10 * MIN);
     expect(s.tvs).toHaveLength(1);
     expect(s.tvs[0]).toMatchObject({
@@ -167,7 +167,7 @@ describe("requestPairCode", () => {
     expect(r).toMatchObject({ ok: true, expires_at: iso(now + PAIR_CODE_TTL_MS) });
     // O banco devolve a data sem milissegundos, no formato dele.
     s.tvs[0].pair_expires_at = noco(Date.parse(s.tvs[0].pair_expires_at as string));
-    expect(await requestPairCode(s.deps, "forno", { hash })).toEqual(r);
+    expect(await requestPairCode(s.deps, "forno", { hash })).toEqual({ ...r, created: false });
   });
 
   it("corpo malformado: invalid, sem gravar", async () => {
@@ -282,17 +282,18 @@ describe("requestPairCode", () => {
     expect((await requestPairCode(elsewhere.deps, "forno", { hash })).ok).toBe(true);
   });
 
-  it("a mesma TV pedindo de novo com o código no prazo recebe o mesmo código, sem gravar outra linha", async () => {
+  it("a mesma TV pedindo de novo com o código no prazo recebe o mesmo código, sem gravar outra linha (created: false)", async () => {
     let t = now;
     const s = setup({ at: () => t, codes: ["K7M3QX", "P2R8ZW"] });
     const hash = await sha256Hex(SECRET_A);
     const first = await requestPairCode(s.deps, "forno", { hash });
+    expect(first).toMatchObject({ ok: true, created: true });
     t += 4 * MIN;
-    expect(await requestPairCode(s.deps, "forno", { hash })).toEqual(first);
+    expect(await requestPairCode(s.deps, "forno", { hash })).toEqual({ ...first, created: false });
     expect(s.calls.insertOne).toBe(1);
     // Vencido o prazo, sai um código novo.
     t = now + PAIR_CODE_TTL_MS;
-    expect(await requestPairCode(s.deps, "forno", { hash })).toMatchObject({ ok: true, code: "P2R8ZW" });
+    expect(await requestPairCode(s.deps, "forno", { hash })).toMatchObject({ ok: true, code: "P2R8ZW", created: true });
     expect(s.calls.insertOne).toBe(2);
   });
 

@@ -109,8 +109,10 @@ export function pollOverlap(row: { starts_at: string; ends_at: string }, polls: 
   });
 }
 
-// Foto da casa: só arquivo da pasta comunidade do próprio restaurante (Blob ou driver local).
+// Foto da casa: só arquivo da pasta comunidade do próprio restaurante (Blob ou driver local)
+// e só foto (.webp, .jpg, .jpeg ou .png): um vídeo da mesma pasta não vira post do Mural.
 // A posse do arquivo (ownsFile) é conferida à parte, no servidor.
+const PHOTO_EXT = /\.(webp|jpe?g|png)$/i;
 export function inCommunityFolder(restaurantId: string, url: string): boolean {
   if (typeof url !== "string" || !url || url.length > 500) return false;
   let path: string;
@@ -123,7 +125,13 @@ export function inCommunityFolder(restaurantId: string, url: string): boolean {
   const at = parts.indexOf(restaurantId);
   if (at < 0 || parts[at + 1] !== "comunidade") return false;
   const rest = parts.slice(at + 2);
-  return rest.length === 1 && /^[\w.-]{1,90}$/.test(rest[0]) && !rest[0].startsWith(".") && !url.includes("..");
+  return (
+    rest.length === 1 &&
+    /^[\w.-]{1,90}$/.test(rest[0]) &&
+    !rest[0].startsWith(".") &&
+    PHOTO_EXT.test(rest[0]) &&
+    !url.includes("..")
+  );
 }
 
 // Opções já preenchidas ao abrir um modelo, para criar em menos de 1 minuto: sobremesa e

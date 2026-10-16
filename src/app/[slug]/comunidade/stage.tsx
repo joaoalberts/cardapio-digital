@@ -33,7 +33,9 @@ export function Stage({ onShare }: { onShare: () => void }) {
   const nowSeed = s ? Date.parse(s.now) : 0;
   const pollOpen = !!s?.poll && !s.poll.closed;
   const now = useClock(c.open && pollOpen, nowSeed, c.skew);
-  const highlight = useMemo(() => (menu ? houseHighlight(menu, new Date(nowSeed)) : null), [menu, nowSeed]);
+  // Destaque pelo relógio por minuto do provider (anda sem a leitura mudar).
+  const minute = c.minute || nowSeed;
+  const highlight = useMemo(() => (menu ? houseHighlight(menu, new Date(minute)) : null), [menu, minute]);
 
   // Primeira vez: uma linha de explicação, dispensável; some também ao votar ou ao fechar.
   // Só conta como vista quando aparece no Palco (quem abre direto no Mural vê depois).

@@ -132,6 +132,33 @@
 .tl-plain .tl-wash {
   background: #17110e;
 }
+/* Sem desfoque, o vidro (.55 sobre o fundo liso) quase some: painéis, cartões e pílulas em
+   cor sólida mais clara, trilho das barras um tom acima, e contorno de 2 px com contraste
+   de 3,45:1 sobre #17110e (mínimo de 3:1 para limite de componente). */
+.tl.tl-plain {
+  --tl-glass: #2a201b;
+  --tl-track: #3a2d26;
+  --tl-edge: #7a6658;
+}
+.tl-plain .tl-qr,
+.tl-plain .tl-card,
+.tl-plain .tl-car,
+.tl-plain .tl-bar,
+.tl-plain .tl-vote,
+.tl-plain .tl-rec,
+.tl-plain .tl-code i:not(.tl-gap) {
+  border: 2px solid var(--tl-edge);
+}
+.tl-plain .tl-bar,
+.tl-plain .tl-code i:not(.tl-gap) {
+  background: var(--tl-track);
+}
+.tl-plain .tl-bar .tl-fill {
+  background: #54443a;
+}
+.tl-plain .tl-rec {
+  background: var(--tl-glass);
+}
 
 /* ================= Marca ================= */
 .tl-brand {
@@ -697,12 +724,17 @@
 .tl-in > h2 + p {
   margin-top: 0;
 }
+/* O aviso do 429 quebra em duas linhas: a primeira enche os 600 px, para o bloco (que não
+   encolhe ao quebrar) ficar centrado com o giro ao lado. */
 .tl-wait {
   margin-top: 18px;
+  max-width: 600px;
   display: inline-flex;
   align-items: center;
   gap: 10px;
   font-size: 18px;
+  line-height: 1.35;
+  text-align: left;
   color: var(--tl-faint);
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { clockSkew, pollDelay, refFrom } from "@/lib/comunidade/client-logic";
+import { clockSkew, minuteClock, pollDelay, refFrom } from "@/lib/comunidade/client-logic";
 import type { FunnelKey, OptionId, PublicState } from "@/lib/comunidade/types";
 import type { VoteResult } from "@/lib/comunidade/votes";
 import { forgetTableMemory } from "@/lib/orders/table-memory";
@@ -10,7 +10,10 @@ import { useOrder } from "../order/order-context";
 // Comunidade no cardápio (Palco da casa + Mural de pratos). Montado no MenuApp, dentro do
 // OrderProvider: lê a mesa, o celular e o cardápio do pedido.
 // - Consulta a leitura agregada (uma URL por restaurante, servida pela CDN): 12 s com a camada
-//   aberta, 60 s só com o balão, parada com a aba escondida. Sem mesa, só com ?ref=telao.
+//   aberta, 60 s só com o balão, 10 min com a Comunidade desligada, parada com a aba
+//   escondida. Sem mesa, só com ?ref=telao.
+// - Relógio por minuto (minute): o "agora" do destaque da casa e do "Pedir também", que anda
+//   sozinho (a categoria do almoço fecha às 15h mesmo sem a leitura mudar).
 // - Sem rede, mantém o último estado e avisa (offline).
 // - O voto fica lembrado no celular por enquete (cmu-vote:<id>).
 // - O funil é somado aqui e vai em lote (sendBeacon) quando a aba esconde e a cada 60 s com a
@@ -24,6 +27,7 @@ type Api = {
   state: PublicState | null;
   offline: boolean;
   skew: number; // ms a somar ao relógio do celular (0 se ele está certo)
+  minute: number; // minuto cheio do relógio corrigido, em ms (0 antes de montar)
   open: boolean;
   setOpen: (v: boolean, tab?: Tab) => void;
   tab: Tab;
@@ -80,6 +84,7 @@ export function ComunidadeProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PublicState | null>(null);
   const [offline, setOffline] = useState(false);
   const [skew, setSkew] = useState(0);
+  const [minute, setMinute] = useState(0);
   const [open, setOpenState] = useState(false);
   const [tab, setTabState] = useState<Tab>("palco");
   const [ref, setRef] = useState<"telao" | "story" | null>(null);
@@ -197,7 +202,11 @@ export function ComunidadeProvider({ children }: { children: ReactNode }) {
     let alive = true;
     const schedule = () => {
       clearTimeout(timer);
-      const d = pollDelay(openRef.current, document.visibilityState === "visible");
+      const d = pollDelay({
+        open: openRef.current,
+        visible: document.visibilityState === "visible",
+        enabled: stateRef.current ? stateRef.current.enabled : null,
+      });
       if (d != null) timer = setTimeout(tick, d);
     };
     const tick = async () => {
@@ -210,7 +219,8 @@ export function ComunidadeProvider({ children }: { children: ReactNode }) {
     };
     const onVis = () => (document.visibilityState === "visible" ? now() : clearTimeout(timer));
     const onOffline = () => setOffline(true);
-    // Abriu a camada (ou primeira leitura): consulta já; fechou: só reagenda para 60 s.
+    // Abriu a camada (ou primeira leitura): consulta já; fechou: só reagenda (60 s, ou 10 min
+    // com a Comunidade desligada).
     if (openRef.current || !loaded.current) now();
     else schedule();
     document.addEventListener("visibilitychange", onVis);
@@ -224,6 +234,19 @@ export function ComunidadeProvider({ children }: { children: ReactNode }) {
       removeEventListener("offline", onOffline);
     };
   }, [want, open, load]);
+
+  // ---------- Relógio por minuto ----------
+  // Começa no primeiro quadro depois de montar e acorda na virada de cada minuto.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      const c = minuteClock(Date.now() + skew);
+      setMinute(c.minute);
+      timer = setTimeout(tick, c.next + 50);
+    };
+    timer = setTimeout(tick, 0);
+    return () => clearTimeout(timer);
+  }, [skew]);
 
   // ---------- Funil ----------
   const flush = useCallback(() => {
@@ -333,8 +356,8 @@ export function ComunidadeProvider({ children }: { children: ReactNode }) {
   const setTab = useCallback((t: Tab) => setTabState(t), []);
 
   const api = useMemo<Api>(
-    () => ({ state, offline, skew, open, setOpen, tab, setTab, vote, myVote, track, canVote: !!table && !!device, ref }),
-    [state, offline, skew, open, setOpen, tab, setTab, vote, myVote, track, table, device, ref],
+    () => ({ state, offline, skew, minute, open, setOpen, tab, setTab, vote, myVote, track, canVote: !!table && !!device, ref }),
+    [state, offline, skew, minute, open, setOpen, tab, setTab, vote, myVote, track, table, device, ref],
   );
   return (
     <OpenCtx.Provider value={open}>

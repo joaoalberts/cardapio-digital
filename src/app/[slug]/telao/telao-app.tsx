@@ -5,8 +5,8 @@ import {
   Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type SyntheticEvent,
 } from "react";
 import {
-  backoff, clockSkew, clockText, houseHighlight, leaderOf, localTime, pollChime, pollTiming, questionText, TV_POLL_MS, tvMode,
-  tvQuestionLong, tvReloadDue,
+  backoff, clockSkew, clockText, houseHighlight, leaderOf, localTime, PAIR_RENEW_GRACE_MS, pairCodeDue, pairCodeRecord, pollChime,
+  pollTiming, questionText, savedPairCode, TV_POLL_MS, tvMode, tvQuestionLong, tvReloadDue, type SavedPairCode,
 } from "@/lib/comunidade/client-logic";
 import { ct, ctf, type CmuKey } from "@/lib/comunidade/i18n";
 import { sha256Hex } from "@/lib/comunidade/sha256";
@@ -20,7 +20,8 @@ import { useClock } from "../comunidade/parts";
 //   tl-secret:<slug>), pede um código mandando só o SHA-256 dele (JS puro: em http://<IP>
 //   não há crypto.subtle) e prova quem é pelo cabeçalho x-telao. Esperando o painel, consulta
 //   o estado a cada 5 s; pareada, a cada 5 min. 401 apaga o segredo e volta ao código; 404
-//   (Comunidade desligada) não apaga.
+//   (Comunidade desligada) não apaga. O código fica guardado (tl-code:<slug>) e volta igual
+//   na recarga; só se pede outro depois que ele vence (prazo + 1 s).
 // - Dados: a mesma leitura pública da CDN dos celulares, a cada 4 s; em erro, tenta de novo
 //   em 4, 8, 16 e 30 s, com "reconectando…" discreto e o último estado congelado.
 // - Só porcentagem, nunca contagem. Logo, @ e QR sempre visíveis (menos na tela de parear).
@@ -62,6 +63,11 @@ const store = {
   set(k: string, v: string) {
     try {
       localStorage.setItem(k, v);
+    } catch {}
+  },
+  del(k: string) {
+    try {
+      localStorage.removeItem(k);
     } catch {}
   },
 };
@@ -131,13 +137,17 @@ function usePairing(slug: string): PairView {
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const key = `tl-secret:${slug}`;
+    const codeKey = `tl-code:${slug}`;
     const saved = store.get(key);
     // known: este segredo já pediu código antes (pode estar pareado). Um segredo novo vai
     // direto pedir o código, sem gastar um 401.
     let known = !!saved && HEX64.test(saved);
     let secret = known ? (saved as string) : newSecret();
     if (!known) store.set(key, secret);
-    let code: { code: string; exp: number } | null = null;
+    let hash = sha256Hex(secret);
+    // Código ainda no prazo de antes da recarga (do mesmo segredo): mostra o mesmo.
+    let code: SavedPairCode | null = known ? savedPairCode(store.get(codeKey), hash, Date.now()) : null;
+    if (!code) store.del(codeKey);
     let live = false;
 
     const show = (v: PairView) => {
@@ -151,8 +161,10 @@ function usePairing(slug: string): PairView {
     const forget = () => {
       secret = newSecret();
       store.set(key, secret);
+      hash = sha256Hex(secret);
       known = false;
       code = null;
+      store.del(codeKey);
       live = false;
     };
 
@@ -173,7 +185,7 @@ function usePairing(slug: string): PairView {
         const r = await fetch(`/api/comunidade/${slug}/telao/codigo`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ hash: sha256Hex(secret) }),
+          body: JSON.stringify({ hash }),
           cache: "no-store",
         });
         if (r.status === 429) return "too_many";
@@ -199,6 +211,7 @@ function usePairing(slug: string): PairView {
         if (st === "paired") {
           live = true;
           code = null;
+          store.del(codeKey);
           show({ phase: "live", code: null, busy: false });
           return later(PAIRED_CHECK_MS);
         }
@@ -210,12 +223,14 @@ function usePairing(slug: string): PairView {
         if (st === "error") return later(live ? PAIRED_CHECK_MS : PAIR_POLL_MS);
         if (st === 401) forget();
       }
-      // Sem pareamento: o código na tela (o mesmo enquanto vale; outro quando vence).
-      if (!code || Date.now() >= code.exp - 2_000) {
+      // Sem pareamento: o código na tela (o mesmo enquanto vale, até na recarga; outro só
+      // depois que vence, com 1 s de folga, para o servidor já não devolver o mesmo).
+      if (!code || pairCodeDue(code, Date.now())) {
         const c = await codigo();
         if (!alive) return;
         if (c === "too_many") {
           code = null;
+          store.del(codeKey);
           show({ phase: "pair", code: null, busy: true });
           return later(RETRY_LATER_MS);
         }
@@ -230,9 +245,11 @@ function usePairing(slug: string): PairView {
         if (c === "error") return later(PAIR_POLL_MS);
         code = c;
         known = true;
+        store.set(codeKey, pairCodeRecord(c, hash));
       }
       show({ phase: "pair", code: code.code, busy: false });
-      later(PAIR_POLL_MS);
+      // Confere o painel a cada 5 s; na virada do prazo, acorda logo depois dele (+ 1 s).
+      later(Math.max(250, Math.min(PAIR_POLL_MS, code.exp + PAIR_RENEW_GRACE_MS - Date.now())));
     }
 
     void step();

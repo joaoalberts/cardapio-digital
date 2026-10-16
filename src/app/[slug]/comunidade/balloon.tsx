@@ -82,7 +82,8 @@ export function Balloon() {
 
   const poll = s?.poll && !s.poll.closed ? s.poll : null;
   const nowSeed = s ? Date.parse(s.now) : 0;
-  const highlight = useMemo(() => (o.menu ? houseHighlight(o.menu, new Date(nowSeed)) : null), [o.menu, nowSeed]);
+  const minute = c.minute || nowSeed;
+  const highlight = useMemo(() => (o.menu ? houseHighlight(o.menu, new Date(minute)) : null), [o.menu, minute]);
   const kind: "poll" | "mural" | null = poll ? "poll" : s && (s.mural.length || highlight) ? "mural" : null;
   const show = !!s?.enabled && s.open && !!o.table && !!kind && !!geom;
   const now = useClock(show && kind === "poll", nowSeed, c.skew);

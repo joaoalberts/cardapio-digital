@@ -63,6 +63,8 @@ export type RetentionDb = {
 };
 export type RetentionDeps = {
   db: RetentionDb;
+  // Tem de lançar quando o arquivo não saiu (a rota passa removeFilesStrict): é o que segura
+  // a linha da foto para a próxima rodada.
   removeFiles: (paths: string[]) => Promise<void>;
   ownsFile: (restaurantId: string, path: string) => boolean;
   now?: () => Date;

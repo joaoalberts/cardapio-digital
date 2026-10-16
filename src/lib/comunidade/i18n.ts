@@ -234,13 +234,15 @@ export const CMU_TEXTS = {
     "in attesa del pannello · il codice cambia ogni 10 min",
     "warte auf das Panel · der Code ändert sich alle 10 Min.",
   ]),
+  // 429: limite de códigos por hora desta rede ou de códigos vivos do restaurante. A TV tenta
+  // de novo a cada minuto; no pior caso, a vaga abre 1 hora depois do primeiro pedido.
   tvPairBusy: L6([
-    "Muitos códigos pedidos agora. Um código novo aparece aqui em instantes.",
-    "Too many codes requested right now. A new code will show up here shortly.",
-    "Demasiados códigos pedidos ahora. Un código nuevo aparecerá aquí en breve.",
-    "Trop de codes demandés pour l’instant. Un nouveau code s’affichera ici sous peu.",
-    "Troppi codici richiesti ora. Un nuovo codice comparirà qui a breve.",
-    "Gerade zu viele Codes angefragt. Gleich erscheint hier ein neuer Code.",
+    "Muitos códigos pedidos na última hora. A TV tenta de novo a cada minuto; o código pode levar até 1 hora para aparecer.",
+    "Too many codes requested in the last hour. The screen tries again every minute; the code may take up to 1 hour to show up.",
+    "Demasiados códigos pedidos en la última hora. La pantalla vuelve a intentarlo cada minuto; el código puede tardar hasta 1 hora en aparecer.",
+    "Trop de codes demandés au cours de la dernière heure. L’écran réessaie chaque minute ; le code peut mettre jusqu’à 1 heure à s’afficher.",
+    "Troppi codici richiesti nell’ultima ora. Lo schermo riprova ogni minuto; il codice può impiegare fino a 1 ora per comparire.",
+    "In der letzten Stunde wurden zu viele Codes angefragt. Der Bildschirm versucht es jede Minute erneut; der Code kann bis zu 1 Stunde brauchen.",
   ]),
   tvOff: L6(["Comunidade desligada", "Community turned off", "Comunidad desactivada", "Communauté désactivée", "Community disattivata", "Community ausgeschaltet"]),
   tvOffSub: L6([

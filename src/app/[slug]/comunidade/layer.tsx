@@ -64,7 +64,7 @@ export function ComunidadeLayer() {
     const ch = storyChoices(s, {
       mine: s?.poll ? c.myVote(s.poll.id) : null,
       canVote: c.canVote,
-      highlightId: o.menu && s ? (houseHighlight(o.menu, new Date(Date.parse(s.now)))?.id ?? null) : null,
+      highlightId: o.menu && s ? (houseHighlight(o.menu, new Date(c.minute || Date.parse(s.now)))?.id ?? null) : null,
       hasItem: (id) => !!o.itemById(id),
     });
     setStory({ tab, poll: ch.poll, post: post ?? ch.post });

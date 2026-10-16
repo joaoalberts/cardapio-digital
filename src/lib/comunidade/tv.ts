@@ -41,8 +41,10 @@ export type TvDeps = {
   off?: () => boolean; // chave geral (COMMUNITY_OFF=1); padrão: lê o ambiente
 };
 
+// created: true = gravou um código novo agora; false = devolveu o código vivo desta TV
+// (pedido repetido, recarga). A rota só gasta o limite por IP quando created é true.
 export type PairCodeResult =
-  | { ok: true; code: string; expires_at: string }
+  | { ok: true; code: string; expires_at: string; created: boolean }
   | { ok: false; code: "invalid" | "not_found" | "disabled" | "too_many" };
 export type ConfirmResult = { ok: true } | { ok: false; error: string };
 export type CheckResult = { ok: true; paired: boolean } | { ok: false; status: 401 | 404 };
@@ -141,7 +143,7 @@ export async function requestPairCode(d: TvDeps, slug: string, body: unknown): P
   if (all.some((l) => l.secret_hash === hash && l.revoked)) return { ok: false, code: "invalid" };
   const live = all.filter((l) => isLive(l, now));
   const mine = live.filter((l) => l.secret_hash === hash).sort((a, b) => b.expires - a.expires)[0];
-  if (mine?.pair_code) return { ok: true, code: mine.pair_code, expires_at: iso(mine.expires) };
+  if (mine?.pair_code) return { ok: true, code: mine.pair_code, expires_at: iso(mine.expires), created: false };
 
   if (all.filter((l) => holdsCode(l, now)).length >= PAIR_CODES_LIVE_MAX) return { ok: false, code: "too_many" };
 
@@ -170,7 +172,7 @@ export async function requestPairCode(d: TvDeps, slug: string, body: unknown): P
     await d.db.remove("community_tvs", { uid: row.id, restaurant_id: head.id });
     return { ok: false, code: "too_many" };
   }
-  return { ok: true, code, expires_at };
+  return { ok: true, code, expires_at, created: true };
 }
 
 // ---------- Pareamento pelo painel ----------

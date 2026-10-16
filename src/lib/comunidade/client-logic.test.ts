@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { MenuCategory, MenuItem, PublicMenu } from "@/lib/menu/types";
 import {
   BALLOON_MIN_BAND, balloonMode, balloonNeed, buyState, clockSkew, clockText, houseHighlight, leaderOf, localTime,
-  muralColumns, pollDelay, pollTiming, questionText, refFrom, relativeTime, shownPcts,
+  minuteClock, muralColumns, orderableNow, pairCodeDue, pairCodeRecord, pollDelay, pollTiming, questionText, refFrom,
+  relativeTime, savedPairCode, shownPcts, POLL_OFF_MS,
   backoff, pollChime, TV_POLL_MS, TV_RELOAD_MS, tvMode, tvQuestionLong, tvReloadDue, storyChoices,
 } from "./client-logic";
 import type { PublicOption, PublicPoll, PublicPost, PublicState } from "./types";
@@ -87,7 +88,8 @@ describe("houseHighlight", () => {
 });
 
 describe("buyState (Foco 3: prato removido não quebra)", () => {
-  const on = { linked: true, enabled: true, pick: false, inCart: 0 };
+  const m = menu([cat("c1", [item("a")])]);
+  const on = { linked: true, enabled: true, pick: false, inCart: 0, menu: m, now: NOW };
   it("prato que não está mais no cardápio → indisponível", () => {
     expect(buyState(undefined, on)).toBe("unavailable");
   });
@@ -106,12 +108,99 @@ describe("buyState (Foco 3: prato removido não quebra)", () => {
   });
 });
 
-describe("pollDelay", () => {
+describe("buyState: mesma regra do carrinho (horário da categoria e produto especial)", () => {
+  const almoco = item("x");
+  const noite = item("y");
+  const flash = item("z", { special: { every_h: 4, show_s: 10, days: [], from: null, to: null, limit: 1 } });
+  const m: PublicMenu = {
+    ...menu([cat("almoco", [almoco], { available_from: "11:00:00", available_to: "15:00:00" }), cat("noite", [noite])]),
+    specials: cat("especiais", [flash]),
+  };
+  const on = { linked: true, enabled: true, pick: false, inCart: 0, menu: m, now: NOW };
+  it("prato de categoria fora do horário → indisponível (20h, almoço das 11h às 15h)", () => {
+    expect(buyState(almoco, on)).toBe("unavailable");
+    expect(buyState(almoco, { ...on, inCart: 1 })).toBe("unavailable");
+  });
+  it("no horário da categoria → buy", () => {
+    expect(buyState(almoco, { ...on, now: new Date("2026-10-16T15:00:00Z") })).toBe("buy"); // 12h
+    expect(buyState(noite, on)).toBe("buy");
+  });
+  it("produto especial (oferta relâmpago) → indisponível", () => {
+    expect(buyState(flash, on)).toBe("unavailable");
+  });
+  it("sem cardápio carregado → indisponível", () => {
+    expect(buyState(noite, { ...on, menu: null })).toBe("unavailable");
+  });
+  it("orderableNow responde igual ao carrinho", () => {
+    expect(orderableNow(m, "x", NOW)).toBe(false);
+    expect(orderableNow(m, "y", NOW)).toBe(true);
+    expect(orderableNow(m, "z", NOW)).toBe(false);
+    expect(orderableNow(m, "sumiu", NOW)).toBe(false);
+    // Tamanhos sem escolha ainda são pedíveis (a folha do prato escolhe o tamanho).
+    const sizes = menu([cat("c1", [item("t", { price_options: [{ label: "G", price_cents: 5000 }] })])]);
+    expect(orderableNow(sizes, "t", NOW)).toBe(true);
+  });
+});
+
+describe("minuteClock (relógio do provider, que anda a cada minuto)", () => {
+  it("minuto cheio e quanto falta para o próximo", () => {
+    const t = Date.parse("2026-10-16T23:00:42.500Z");
+    expect(minuteClock(t)).toEqual({ minute: Date.parse("2026-10-16T23:00:00Z"), next: 17_500 });
+    expect(minuteClock(Date.parse("2026-10-16T23:01:00Z"))).toEqual({ minute: Date.parse("2026-10-16T23:01:00Z"), next: 60_000 });
+  });
+  it("o almoço volta a ser pedível quando o relógio passa das 11h, sem nova leitura", () => {
+    const m = menu([cat("almoco", [item("x")], { available_from: "11:00:00", available_to: "15:00:00" })]);
+    const on = { linked: true, enabled: true, pick: false, inCart: 0, menu: m };
+    const before = minuteClock(Date.parse("2026-10-16T13:59:30Z")); // 10h59 em São Paulo
+    expect(buyState(item("x"), { ...on, now: new Date(before.minute) })).toBe("unavailable");
+    const after = minuteClock(Date.parse("2026-10-16T13:59:30Z") + before.next);
+    expect(buyState(item("x"), { ...on, now: new Date(after.minute) })).toBe("buy");
+  });
+});
+
+describe("pollDelay({ open, visible, enabled })", () => {
   it("12 s com a camada aberta, 60 s só com o balão, parado com a aba escondida", () => {
-    expect(pollDelay(true, true)).toBe(12000);
-    expect(pollDelay(false, true)).toBe(60000);
-    expect(pollDelay(true, false)).toBeNull();
-    expect(pollDelay(false, false)).toBeNull();
+    expect(pollDelay({ open: true, visible: true, enabled: true })).toBe(12000);
+    expect(pollDelay({ open: false, visible: true, enabled: true })).toBe(60000);
+    expect(pollDelay({ open: true, visible: false, enabled: true })).toBeNull();
+    expect(pollDelay({ open: false, visible: false, enabled: true })).toBeNull();
+  });
+  it("Comunidade desligada (enabled:false): a cada 10 min; escondida, parada", () => {
+    expect(POLL_OFF_MS).toBe(10 * 60_000);
+    expect(pollDelay({ open: false, visible: true, enabled: false })).toBe(600_000);
+    expect(pollDelay({ open: true, visible: true, enabled: false })).toBe(600_000);
+    expect(pollDelay({ open: false, visible: false, enabled: false })).toBeNull();
+  });
+  it("antes da primeira resposta (enabled null): ritmo normal; voltou a ligar, ritmo normal", () => {
+    expect(pollDelay({ open: false, visible: true, enabled: null })).toBe(60000);
+    expect(pollDelay({ open: false, visible: true, enabled: true })).toBe(60000);
+  });
+});
+
+describe("código do telão guardado na TV (tl-code:<slug>)", () => {
+  const HASH = "a".repeat(64);
+  const T = 1_000_000_000;
+  const rec = (exp: number, over: Record<string, unknown> = {}) => JSON.stringify({ code: "K7M3QX", exp, hash: HASH, ...over });
+  it("reaproveita na recarga enquanto vale, só para o mesmo segredo", () => {
+    expect(savedPairCode(rec(T + 5 * 60_000), HASH, T)).toEqual({ code: "K7M3QX", exp: T + 5 * 60_000 });
+    expect(savedPairCode(rec(T + 5 * 60_000), "b".repeat(64), T)).toBeNull();
+    expect(pairCodeRecord({ code: "K7M3QX", exp: T + 60_000 }, HASH)).toBe(rec(T + 60_000));
+  });
+  it("renova só depois de vencer: exp + 1 s", () => {
+    expect(pairCodeDue({ code: "K7M3QX", exp: T }, T + 999)).toBe(false);
+    expect(pairCodeDue({ code: "K7M3QX", exp: T }, T + 1_000)).toBe(true);
+    expect(pairCodeDue(null, T)).toBe(true);
+    expect(savedPairCode(rec(T), HASH, T + 999)).not.toBeNull();
+    expect(savedPairCode(rec(T), HASH, T + 1_000)).toBeNull();
+  });
+  it("lixo, código fora do formato ou prazo absurdo (relógio mexido): ignora", () => {
+    expect(savedPairCode(null, HASH, T)).toBeNull();
+    expect(savedPairCode("{", HASH, T)).toBeNull();
+    expect(savedPairCode("null", HASH, T)).toBeNull();
+    expect(savedPairCode(rec(T + 60_000, { code: "k7m3qx" }), HASH, T)).toBeNull();
+    expect(savedPairCode(rec(T + 60_000, { code: "K7M3Q0" }), HASH, T)).toBeNull();
+    expect(savedPairCode(rec(Number.NaN), HASH, T)).toBeNull();
+    expect(savedPairCode(rec(T + 12 * 60_000), HASH, T)).toBeNull();
   });
 });
 

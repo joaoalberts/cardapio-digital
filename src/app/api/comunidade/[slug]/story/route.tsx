@@ -30,10 +30,12 @@ import { readLocalFile, storageDriver } from "@/lib/storage";
 // Cartão do story 9:16 (ficha do protótipo: telas 15 e 16): PNG 1080×1920 com o resultado
 // da enquete (?poll=<id>) ou uma foto da casa (?post=<id>), a marca, o @ e o QR de
 // /<slug>?ref=story. A arte do protótipo tem 288×512; aqui tudo é ×3,75. Sem desfoque: vira
-// imagem. A CDN guarda o PNG (60 s com a enquete aberta; 1 dia encerrada ou foto da casa).
+// imagem. A CDN guarda o PNG (60 s com a enquete aberta, 1 dia encerrada, 1 h a foto da casa,
+// que a casa pode ocultar).
 //
 // Fontes (SIL Open Font License 1.1), baixadas do repositório google/fonts no GitHub, sem
-// modificação; o aviso de copyright e a licença vão na tabela "name" de cada arquivo:
+// modificação; a licença de cada uma está ao lado, como o repositório traz (OFL-*.txt), e o
+// aviso de copyright vai também na tabela "name" de cada arquivo:
 // - IMFellEnglish-Regular.ttf = ofl/imfellenglish/IMFeENrm28P.ttf (commit 90abd17b),
 //   © 2010 Igino Marini, nome reservado "IM FELL English Roman".
 // - Karla-Bold.ttf = ofl/karla/static/Karla-Bold.ttf, versão 2.002 (commit 568985db),
@@ -45,6 +47,12 @@ import { readLocalFile, storageDriver } from "@/lib/storage";
 // passam pelo sharp, o mesmo que o next/og já carrega para rasterizar quando está instalado
 // (dependência opcional do Next): convertidas e já recortadas no tamanho da arte. Sem sharp,
 // JPEG e PNG passam como estão e WebP fica de fora (a arte sai sem a foto).
+//
+// Tamanho: uma foto de prato em PNG 1080×1920 sem perda dá 2 a 3,4 MB, perto do teto de
+// 4,5 MB da resposta na Vercel e pesado no 4G. A foto entra a 2/3 da arte (720×1280; o
+// fundo já fica sob a sombra e o next/og amplia), e o PNG pronto passa de novo pelo sharp:
+// sem perda com filtro adaptativo e, se ainda passar de 1,5 MB, com paleta de 256 cores
+// (dither; texto, barras e QR ficam iguais à vista). Sem sharp, o PNG sai como o next/og fez.
 
 const W = 1080;
 const H = 1920;
@@ -63,6 +71,10 @@ const NO_STORE = "no-store";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const IMAGE_TIMEOUT_MS = 5_000;
+// Foto de fundo a 2/3 da arte, ampliada pelo next/og; PNG final até ~1,5 MB.
+const PHOTO_W = 720;
+const PHOTO_H = 1280;
+const PNG_TARGET_BYTES = 1_500_000;
 
 type Ctx = { params: Promise<{ slug: string }> };
 
@@ -144,6 +156,24 @@ async function artImage(url: string | null, w: number, h: number, format: "jpeg"
   }
 }
 
+// PNG pronto mais leve, sem biblioteca nova: o sharp de novo (ver o topo). Qualquer falha
+// devolve o PNG como veio.
+async function smallerPng(png: ArrayBuffer): Promise<Uint8Array<ArrayBuffer>> {
+  const raw = new Uint8Array(png);
+  try {
+    const sharp = await loadSharp();
+    if (!sharp) return raw;
+    let best: Uint8Array<ArrayBuffer> = raw;
+    const lossless = new Uint8Array(await sharp(raw).png({ compressionLevel: 9, adaptiveFiltering: true }).toBuffer());
+    if (lossless.byteLength < best.byteLength) best = lossless;
+    if (best.byteLength <= PNG_TARGET_BYTES) return best;
+    const palette = new Uint8Array(await sharp(raw).png({ palette: true, quality: 90, compressionLevel: 9 }).toBuffer());
+    return palette.byteLength < best.byteLength ? palette : best;
+  } catch {
+    return raw;
+  }
+}
+
 // ---------- Rota ----------
 
 export async function GET(request: NextRequest, { params }: Ctx) {
@@ -169,7 +199,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
     const photoUrl = src.kind === "poll" ? src.photo : src.post.photo_path;
     const [font, photo, logo] = await Promise.all([
       loadFonts(),
-      artImage(photoUrl, W, H, "jpeg"),
+      artImage(photoUrl, PHOTO_W, PHOTO_H, "jpeg"),
       artImage(mediaUrl(src.head.logo_path), 144, 144, "png"),
     ]);
     const qr = QRCode.create(link, { errorCorrectionLevel: "M" });
@@ -177,7 +207,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       <Art src={src} photo={photo} logo={logo} qr={{ size: qr.modules.size, d: qrPath(qr.modules.size, (r, c) => !!qr.modules.get(r, c)) }} />
     );
     // Desenha antes de responder, para um erro virar 503 em vez de um PNG cortado.
-    const png = await new ImageResponse(art, { width: W, height: H, fonts: font }).arrayBuffer();
+    const png = await smallerPng(await new ImageResponse(art, { width: W, height: H, fonts: font }).arrayBuffer());
     return new NextResponse(png, {
       headers: {
         "content-type": "image/png",

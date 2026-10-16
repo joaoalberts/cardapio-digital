@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 // storage.ts é só do servidor; no teste o marcador "server-only" não tem o que proteger.
 vi.mock("server-only", () => ({}));
 
-import { ownsFile, putFile, readLocalFile, removeFiles, storageDriver, storageEnabled } from "./storage";
+import { ownsFile, putFile, readLocalFile, removeFiles, removeFilesStrict, storageDriver, storageEnabled } from "./storage";
 
 const R1 = "00000000-0000-4000-8000-000000000001";
 const buf = (s: string) => new TextEncoder().encode(s).buffer as ArrayBuffer;
@@ -144,5 +144,54 @@ describe("leitura para a rota /api/arquivos-locais", () => {
     expect(await readLocalFile(["r1", "comunidade", "e.html"])).toBeNull();
     expect(await readLocalFile(["r1", "comunidade", "nao-existe.webp"])).toBeNull();
     expect(await readLocalFile([])).toBeNull();
+  });
+});
+
+describe("removeFilesStrict (retenção: a linha só sai quando o arquivo saiu)", () => {
+  const blob = `https://abc123.public.blob.vercel-storage.com/${R1}/comunidade/a.webp`;
+
+  it("driver local: apaga; arquivo que já não existe não é erro", async () => {
+    const url = await putFile("r1/comunidade/estrito.webp", buf("foto"), "image/webp");
+    await removeFilesStrict([url]);
+    expect(existsSync(path.join(root, "r1/comunidade/estrito.webp"))).toBe(false);
+    await expect(removeFilesStrict([url, null, undefined])).resolves.toBeUndefined();
+    expect(fetchStub).not.toHaveBeenCalled();
+  });
+
+  it("driver local: unlink que falha por outro motivo lança", async () => {
+    // Uma pasta no lugar do arquivo: unlink falha com EPERM/EISDIR, não ENOENT.
+    await mkdir(path.join(root, "r1/comunidade/pasta.webp"), { recursive: true });
+    await expect(removeFilesStrict(["/api/arquivos-locais/r1/comunidade/pasta.webp"])).rejects.toThrow();
+  });
+
+  it("driver local: nunca fala com o Blob e ignora '..'", async () => {
+    process.env.BLOB_READ_WRITE_TOKEN = "teste";
+    await putFile("r2/comunidade/fica2.webp", buf("foto"), "image/webp");
+    await removeFilesStrict([blob, "/api/arquivos-locais/r1/../r2/comunidade/fica2.webp"]);
+    expect(existsSync(path.join(root, "r2/comunidade/fica2.webp"))).toBe(true);
+    expect(fetchStub).not.toHaveBeenCalled();
+  });
+
+  it("Blob: confere a resposta; 200 passa, erro HTTP ou de rede lança", async () => {
+    delete process.env.STORAGE_DRIVER;
+    process.env.BLOB_READ_WRITE_TOKEN = "teste";
+    fetchStub.mockImplementationOnce(async () => new Response("{}", { status: 200 }) as never);
+    await expect(removeFilesStrict([blob, null])).resolves.toBeUndefined();
+    const [url, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toMatch(/\/delete$/);
+    expect(JSON.parse(String(init.body))).toEqual({ urls: [blob] });
+    fetchStub.mockImplementationOnce(async () => new Response("falhou", { status: 500 }) as never);
+    await expect(removeFilesStrict([blob])).rejects.toThrow(/500/);
+    fetchStub.mockImplementationOnce(async () => {
+      throw new Error("rede caiu");
+    });
+    await expect(removeFilesStrict([blob])).rejects.toThrow(/rede caiu/);
+  });
+
+  it("Blob sem token: lança (o arquivo ficaria órfão); sem URL do Blob, não faz nada", async () => {
+    delete process.env.STORAGE_DRIVER;
+    await expect(removeFilesStrict([blob])).rejects.toThrow();
+    await expect(removeFilesStrict([`${R1}/items/antigo.webp`, null])).resolves.toBeUndefined();
+    expect(fetchStub).not.toHaveBeenCalled();
   });
 });

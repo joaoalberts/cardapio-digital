@@ -3,6 +3,7 @@
 import { formatTime, inWindow } from "@/lib/menu/hours";
 import { thumbSrc } from "@/lib/menu/media";
 import type { MenuItem, PublicMenu } from "@/lib/menu/types";
+import { buildIndex, resolveLine } from "@/lib/orders/pricing";
 import { ct, ctf } from "./i18n";
 import type { OptionId, PollTemplate, PublicOption, PublicState } from "./types";
 
@@ -41,17 +42,28 @@ export function houseHighlight(menu: PublicMenu, now: Date): MenuItem | null {
 
 export type BuyState = "hidden" | "unavailable" | "in_cart" | "buy";
 
+// O carrinho aceitaria este prato agora? Mesma regra do priceCart (pricing.ts): produto
+// especial (oferta relâmpago) só entra pela oferta, e prato de categoria fora do horário é
+// recusado (closed_category). Tamanho ainda não escolhido não conta: a folha do prato escolhe.
+export function orderableNow(menu: PublicMenu, itemId: string, now: Date): boolean {
+  if (menu.specials?.items.some((i) => i.id === itemId)) return false;
+  const r = resolveLine(buildIndex(menu), { item: itemId, option: null, half: null }, now);
+  return r.ok || (r.reason !== "unavailable" && r.reason !== "closed_category");
+}
+
 // Mesma regra do "Pedir" do story: some sem pedido ligado (sem mesa), com preço escondido ou
 // no meio da escolha da outra metade. linked = há um prato ligado (opção da enquete só com o
 // texto da casa, como no modelo Música, não tem): sem prato ligado, o botão some. Prato
-// ligado que saiu do cardápio vira "indisponível".
+// ligado que saiu do cardápio, especial ou de categoria fora do horário (pelo relógio now,
+// que anda a cada minuto) vira "indisponível hoje", como o carrinho recusaria.
 export function buyState(
   item: MenuItem | undefined,
-  o: { linked: boolean; enabled: boolean; pick: boolean; inCart: number },
+  o: { linked: boolean; enabled: boolean; pick: boolean; inCart: number; menu: PublicMenu | null; now: Date },
 ): BuyState {
   if (!o.linked || !o.enabled || o.pick) return "hidden";
   if (!item) return "unavailable";
   if (item.hide_price) return "hidden";
+  if (!o.menu || !orderableNow(o.menu, item.id, o.now)) return "unavailable";
   return o.inCart > 0 ? "in_cart" : "buy";
 }
 
@@ -68,11 +80,27 @@ export function relativeTime(iso: string, now: Date, lang: string): string {
   return ctf("relD", lang, { n: Math.floor(ms / 86_400_000) });
 }
 
-// Consulta da leitura agregada: 12 s com a camada aberta, 60 s só com o balão, parada com a
-// aba escondida (null).
-export function pollDelay(open: boolean, visible: boolean): number | null {
-  if (!visible) return null;
-  return open ? 12_000 : 60_000;
+// Relógio do provider: o minuto cheio (ms) do relógio corrigido e quanto falta para o
+// próximo. É o "agora" do destaque da casa e do "Pedir também", que muda de categoria no
+// horário mesmo sem a leitura mudar (o v só muda quando a Comunidade muda).
+export const MINUTE_MS = 60_000;
+export function minuteClock(ms: number): { minute: number; next: number } {
+  const minute = Math.floor(ms / MINUTE_MS) * MINUTE_MS;
+  return { minute, next: minute + MINUTE_MS - ms };
+}
+
+// Consulta da leitura agregada. enabled = a última resposta (null antes da primeira):
+// - aba escondida: parada (null);
+// - Comunidade desligada (enabled:false): a cada 10 min, para não gastar Edge Requests nas
+//   casas que não usam a Comunidade; a resposta que vier ligada volta ao ritmo normal;
+// - senão, 12 s com a camada aberta e 60 s só com o balão.
+export const POLL_OPEN_MS = 12_000;
+export const POLL_BALLOON_MS = 60_000;
+export const POLL_OFF_MS = 10 * 60_000;
+export function pollDelay(o: { open: boolean; visible: boolean; enabled: boolean | null }): number | null {
+  if (!o.visible) return null;
+  if (o.enabled === false) return POLL_OFF_MS;
+  return o.open ? POLL_OPEN_MS : POLL_BALLOON_MS;
 }
 
 // "1:42"; arredonda para cima, para "0:00" só aparecer quando acabou. Com 1 h ou mais (enquete
@@ -213,6 +241,41 @@ export function tvMode(s: PublicState | null): TvMode {
 export function tvQuestionLong(height: number, fontPx: number): boolean {
   if (!(height > 0) || !(fontPx > 0)) return false;
   return height > fontPx * 1.5;
+}
+
+// Código de pareamento guardado na TV (localStorage tl-code:<slug>): { code, exp, hash }, com
+// exp no relógio da própria TV e hash = SHA-256 do segredo que pediu o código. Na recarga, a
+// TV mostra o mesmo código sem pedir outro (o pedido novo gasta o limite por IP da rota).
+// Renova só depois de vencer, com 1 s de folga: antes disso o servidor devolveria o mesmo.
+export type SavedPairCode = { code: string; exp: number };
+export const PAIR_RENEW_GRACE_MS = 1_000;
+// O servidor dá 10 min; um prazo maior que 11 min daqui é relógio mexido ou lixo.
+const PAIR_SAVED_MAX_MS = 11 * 60_000;
+const PAIR_CODE = /^[A-HJ-NP-Z2-9]{6}$/;
+const HEX64 = /^[0-9a-f]{64}$/;
+
+export function pairCodeDue(c: SavedPairCode | null, nowMs: number): boolean {
+  return !c || nowMs >= c.exp + PAIR_RENEW_GRACE_MS;
+}
+
+export function pairCodeRecord(c: SavedPairCode, hash: string): string {
+  return JSON.stringify({ code: c.code, exp: c.exp, hash });
+}
+
+export function savedPairCode(raw: string | null, hash: string, nowMs: number): SavedPairCode | null {
+  if (!raw || !HEX64.test(hash)) return null;
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!v || typeof v !== "object") return null;
+  const { code, exp, hash: h } = v as Record<string, unknown>;
+  if (h !== hash || typeof code !== "string" || !PAIR_CODE.test(code) || typeof exp !== "number" || !Number.isFinite(exp)) return null;
+  const c = { code, exp };
+  if (pairCodeDue(c, nowMs) || exp - nowMs > PAIR_SAVED_MAX_MS) return null;
+  return c;
 }
 
 // A página do telão recarrega sozinha a cada 3 h, nunca no meio de uma enquete aberta.

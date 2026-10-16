@@ -60,6 +60,7 @@ const h = vi.hoisted(() => {
     getCommunityContent: vi.fn(async (): Promise<{ polls: unknown[]; posts: unknown[]; tvs: unknown[] }> => ({ polls: [], posts: [], tvs: [] })),
     getCommunityTables: vi.fn(async () => []),
     recordFunnel: vi.fn(async () => {}),
+    getPublicMenu: vi.fn(async () => null),
   };
 });
 
@@ -74,6 +75,8 @@ vi.mock("@/lib/comunidade/server", () => ({
   getCommunityContent: h.getCommunityContent,
   getCommunityTables: h.getCommunityTables,
 }));
+// O pedido lê o cardápio pelo data.ts (só do servidor, com cache do Next): aqui, nenhum.
+vi.mock("@/lib/menu/data", () => ({ getPublicMenu: h.getPublicMenu }));
 vi.mock("@/lib/comunidade/funnel", async (orig) => ({
   ...(await orig<typeof import("./funnel")>()),
   recordFunnel: h.recordFunnel,
@@ -84,6 +87,7 @@ const eventos = await import("@/app/api/comunidade/[slug]/eventos/route");
 const codigo = await import("@/app/api/comunidade/[slug]/telao/codigo/route");
 const estado = await import("@/app/api/comunidade/[slug]/telao/estado/route");
 const leitura = await import("@/app/api/comunidade/[slug]/route");
+const pedidos = await import("@/app/api/pedidos/[slug]/route");
 const { sha256Hex } = await import("./tv");
 
 type Handler = (r: NextRequest, c: { params: Promise<{ slug: string }> }) => Promise<Response>;
@@ -106,13 +110,16 @@ afterEach(() => {
 });
 
 describe("corpo lido em fluxo, com teto, em todas as rotas POST", () => {
-  const routes: [string, Handler, string][] = [
-    ["votar", votar.POST, "/api/comunidade/forno/votar"],
-    ["eventos", eventos.POST, "/api/comunidade/forno/eventos"],
-    ["telao/codigo", codigo.POST, "/api/comunidade/forno/telao/codigo"],
-    ["telao/estado", estado.POST, "/api/comunidade/forno/telao/estado"],
+  // [nome, rota, URL, pedaços de 1 KB que bastam para passar do teto da rota]
+  const routes: [string, Handler, string, number][] = [
+    ["votar", votar.POST, "/api/comunidade/forno/votar", 10],
+    ["eventos", eventos.POST, "/api/comunidade/forno/eventos", 10],
+    ["telao/codigo", codigo.POST, "/api/comunidade/forno/telao/codigo", 10],
+    ["telao/estado", estado.POST, "/api/comunidade/forno/telao/estado", 10],
+    // Pedido: teto de 20.000 bytes, cerca de 20 pedaços.
+    ["pedidos", pedidos.POST, "/api/pedidos/forno", 25],
   ];
-  for (const [name, handler, url] of routes) {
+  for (const [name, handler, url, chunks] of routes) {
     it(`${name}: corpo sem fim e sem content-length → 413, lendo só o começo`, async () => {
       let made = 0;
       const body = new ReadableStream<Uint8Array>({
@@ -124,7 +131,7 @@ describe("corpo lido em fluxo, com teto, em todas as rotas POST", () => {
       const res = await handler(post(url, body, { "x-forwarded-for": freshIp() }), ctx("forno"));
       expect(res.status).toBe(413);
       expect(res.headers.get("cache-control")).toBe("no-store");
-      expect(made).toBeLessThan(10);
+      expect(made).toBeLessThan(chunks);
       expect(h.db.list).not.toHaveBeenCalled();
       expect(h.db.insertOne).not.toHaveBeenCalled();
     });
@@ -183,6 +190,38 @@ describe("eventos: limites em memória", () => {
   });
 });
 
+describe("pedidos: corpo com teto de 20.000 bytes, lido em fluxo", () => {
+  const send = (body: BodyInit | null, headers: Record<string, string> = {}) => pedidos.POST(post("/api/pedidos/forno", body, headers), ctx("forno"));
+
+  it("content-length acima do teto: 413 antes de ler o corpo", async () => {
+    const res = await send("{}", { "content-length": "20001" });
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ ok: false, code: "invalid" });
+    expect(h.getPublicMenu).not.toHaveBeenCalled();
+  });
+
+  it("corpo no teto passa adiante; texto que não é JSON vira pedido inválido (400)", async () => {
+    h.getPublicMenu.mockClear();
+    // Pedido válido com observações longas (cada uma até 1.000 letras), perto do teto.
+    const lines = Array.from({ length: 18 }, (_, i) => ({ item: U(100 + i), qty: 1, note: "a".repeat(1_000) }));
+    const order = JSON.stringify({ mesa: "4VEUC7", device: U(98), ref: U(99), lines });
+    expect(order.length).toBeGreaterThan(18_000);
+    expect(order.length).toBeLessThanOrEqual(20_000);
+    const res = await send(order);
+    // Sem cardápio (mock), o serviço responde not_found: chegou até ele.
+    expect(res.status).toBe(404);
+    expect(h.getPublicMenu).toHaveBeenCalled();
+    const bad = await send("{nao é json");
+    expect(bad.status).toBe(400);
+    expect(bad.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("acentos contam em bytes: 10.001 letras 'ã' (20.002 bytes) passam do teto", async () => {
+    const res = await send(JSON.stringify({ note: "ã".repeat(10_001) }));
+    expect(res.status).toBe(413);
+  });
+});
+
 describe("telao/codigo: 5 por hora por IP e slug", () => {
   const ask = async (slug: string, xff: string, secret: string) =>
     codigo.POST(post(`/api/comunidade/${slug}/telao/codigo`, JSON.stringify({ hash: await sha256Hex(secret) }), { "x-forwarded-for": xff }), ctx(slug));
@@ -206,6 +245,48 @@ describe("telao/codigo: 5 por hora por IP e slug", () => {
     // Uma hora depois do primeiro, cabe de novo.
     vi.setSystemTime(Date.now() + 60 * 60_000);
     expect((await ask("telao-a", ip, "tv-a-7")).status).toBe(200);
+  });
+
+  it("só gasta o limite quando cria um código novo: a mesma TV pedindo de novo (recarga) não conta", async () => {
+    const ip = freshIp();
+    const first = await ask("telao-c", ip, "tv-c-0");
+    expect(first.status).toBe(200);
+    const body = await first.json();
+    expect(body).toMatchObject({ ok: true, created: true });
+    for (let i = 0; i < 8; i++) {
+      const again = await ask("telao-c", ip, "tv-c-0");
+      expect(again.status).toBe(200);
+      expect(await again.json()).toEqual({ ...body, created: false });
+    }
+    // 1 código criado até aqui: cabem mais 4 TVs novas deste IP; a 5ª nova é 429.
+    for (let i = 1; i <= 4; i++) expect((await ask("telao-c", ip, `tv-c-${i}`)).status).toBe(200);
+    expect((await ask("telao-c", ip, "tv-c-5")).status).toBe(429);
+  });
+
+  it("pedido recusado (hash inválido ou teto de códigos vivos do restaurante) não gasta o limite", async () => {
+    const ip = freshIp();
+    const bad = await codigo.POST(
+      post("/api/comunidade/telao-d/telao/codigo", JSON.stringify({ hash: "nao-e-hash" }), { "x-forwarded-for": ip }),
+      ctx("telao-d"),
+    );
+    expect(bad.status).toBe(400);
+    // Restaurante com 20 códigos vivos de outras TVs: too_many, sem gastar o limite do IP.
+    const head = h.headOf("telao-e");
+    const later = new Date(Date.now() + 5 * 60_000).toISOString();
+    for (let i = 0; i < 20; i++) {
+      await h.db.insertOne("community_tvs", {
+        restaurant_id: head.id,
+        secret_hash: String(i).padStart(64, "e"),
+        pair_code: `LV${"ABCDEFGHJKLMNPQRSTUVWXYZ"[i]}222`,
+        pair_expires_at: later,
+        revoked: false,
+      });
+    }
+    for (let i = 0; i < 6; i++) expect((await ask("telao-e", ip, `tv-e-${i}`)).status).toBe(429);
+    h.store.community_tvs = (h.store.community_tvs ?? []).filter((r) => r.restaurant_id !== head.id);
+    // Os 6 recusados não contaram: este IP ainda tem os 5 códigos da hora.
+    for (let i = 0; i < 5; i++) expect((await ask("telao-e", ip, `tv-e-ok-${i}`)).status).toBe(200);
+    expect((await ask("telao-e", ip, "tv-e-ok-5")).status).toBe(429);
   });
 });
 

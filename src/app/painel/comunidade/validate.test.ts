@@ -184,6 +184,12 @@ describe("inCommunityFolder", () => {
     expect(inCommunityFolder(R, `/api/arquivos-locais/${R}/comunidade/`)).toBe(false);
     expect(inCommunityFolder(R, 42 as unknown as string)).toBe(false);
   });
+  it("só foto: .webp, .jpg, .jpeg ou .png (maiúsculas valem); vídeo, html e sem extensão não", () => {
+    const at = (name: string) => inCommunityFolder(R, `/api/arquivos-locais/${R}/comunidade/${name}`);
+    for (const ok of ["a.webp", "a.jpg", "a.jpeg", "a.png", "A-FULL.WEBP", "x.y.JPG"]) expect(at(ok)).toBe(true);
+    for (const no of ["a.mp4", "a.mov", "a.webm", "a.html", "a.svg", "a.gif", "a", "a.webp.html", "webp", "a.webp_"]) expect(at(no)).toBe(false);
+    expect(inCommunityFolder(R, `https://abc123.public.blob.vercel-storage.com/${R}/comunidade/x-full.mp4`)).toBe(false);
+  });
 });
 
 describe("suggestOptions", () => {
