@@ -133,6 +133,16 @@ describe("readSnapshot", () => {
     expect(listCalls("apareca_videos")).toBe(3);
   });
 
+  it("aplica resolveStuck: ai_review há mais de 30 s aparece pending; há menos, continua ai_review", async () => {
+    const stuck = video({ status: "ai_review", decided_by: null, decided_at: "2026-10-16T14:59:29.000Z" });
+    const fresh = video({ status: "ai_review", decided_by: null, decided_at: "2026-10-16T14:59:31.000Z" });
+    h.store.apareca_videos = [stuck, fresh];
+    const { d } = deps();
+    const snap = await S.readSnapshot(d, RID);
+    expect(snap.videos.find((v) => v.id === stuck.id)?.status).toBe("pending");
+    expect(snap.videos.find((v) => v.id === fresh.id)?.status).toBe("ai_review");
+  });
+
   it("leituras concorrentes dividem a mesma consulta", async () => {
     h.store.apareca_videos = [video()];
     const { d } = deps();

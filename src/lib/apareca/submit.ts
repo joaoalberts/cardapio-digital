@@ -4,6 +4,7 @@ import type { PollRow, TvRow } from "@/lib/comunidade/types";
 import type * as nocodb from "@/lib/db/nocodb";
 import { featureState } from "./config";
 import { tetoUsd, uploadGate } from "./cost";
+import { onAssetReady } from "./moderation";
 import { mp4Url, type AssetInfo, type assetInfo, type createAparecaUpload } from "./mux-video";
 import { cleanName } from "./name";
 import { estimateWait, pollLeftMs, queuePosition, tvsIn } from "./queue";
@@ -37,7 +38,11 @@ export type SubmitDeps = {
   getHead: (slug: string) => Promise<AparecaHead | null>;
   mux: { createUpload: typeof createAparecaUpload; assetInfo: typeof assetInfo };
   monthUsd: () => Promise<number>;
-  onReady: (v: VideoRow, head: AparecaHead) => Promise<void>; // T9 liga a moderação aqui
+  // Chamado (por defer) quando o vídeo pronto passou na duração: pending ou ai_review. A rota liga
+  // aqui a moderação da IA (runModeration), que só age em ai_review.
+  onReady: (v: VideoRow, head: AparecaHead) => Promise<void>;
+  // IA disponível para este restaurante? Padrão: desligada (a rota usa aiAvailable com a chave).
+  aiOn?: (head: AparecaHead) => boolean;
   now?: () => Date;
   off?: () => boolean;
   origin: string;
@@ -280,25 +285,56 @@ function parseOwner(body: unknown): { id: string; device: string } | null {
   return { id, device };
 }
 
-// Upload terminou? Grava os dados do asset, passa a pending e chama onReady (uma vez por instância).
+const SETTLING = new Set<VideoRow["status"]>(["uploading", "processing"]);
+
+// Relê a linha no banco: o retrato pode ter até 5 s, e outra instância pode já ter decidido.
+// null = a linha sumiu (vencida e apagada); quem chama fica com o que tinha.
+const reread = (d: SubmitDeps, v: VideoRow) => d.db.first<VideoRow>("apareca_videos", { uid: v.id });
+
+// Upload terminou? Confere a duração (acima de MAX_ASSET_S reprova e apaga o asset, sem nunca passar
+// por pending), grava os dados do asset com a decisão (pending ou ai_review) e chama onReady
+// (uma vez por instância). Só grava se a linha ainda estiver uploading/processing no banco.
 async function settleUpload(d: SubmitDeps, head: AparecaHead, v: VideoRow, now: Date): Promise<VideoRow> {
   const info = await checkMux(d, v, now);
   if (!info || info.status === "processing") return v;
+  const cur = await reread(d, v);
+  if (!cur) return v;
+  if (!SETTLING.has(cur.status)) return cur;
   if (info.status === "failed") {
-    await d.db.updateRows("apareca_videos", [{ Id: v.Id, status: "failed" }]);
+    await d.db.updateRows("apareca_videos", [{ Id: cur.Id, status: "failed" }]);
     forgetSnapshot(head.id);
-    return { ...v, status: "failed" };
+    return { ...cur, status: "failed" };
   }
-  const patch = {
-    status: "pending" as const,
+  const asset = {
     mux_asset_id: info.assetId,
     mux_playback_id: info.playbackId,
     duration_ms: Math.round(info.durationS * 1000),
   };
-  await d.db.updateRows("apareca_videos", [{ Id: v.Id, ...patch }]);
+  const decision = onAssetReady({ duration_s: info.durationS }, head.config.mode, d.aiOn?.(head) ?? false);
+  if (decision.status === "rejected") {
+    const patch = {
+      status: "rejected" as const,
+      ...asset,
+      decided_by: decision.by,
+      decided_at: now.toISOString(),
+      ai_reason: decision.reason, // só no banco
+    };
+    await d.db.updateRows("apareca_videos", [{ Id: cur.Id, ...patch }]);
+    forgetSnapshot(head.id);
+    // Falhou? A linha já está rejected (nunca vai à fila nem à TV) e a retenção apaga o asset depois.
+    await d.store.mux.deleteAsset(info.assetId).catch((e: unknown) => {
+      console.warn("apareca: apagar asset longo", String(e).slice(0, 200));
+    });
+    return { ...cur, ...patch };
+  }
+  const patch =
+    decision.status === "ai_review"
+      ? { status: "ai_review" as const, ...asset, decided_at: now.toISOString() } // carimbo do resolveStuck
+      : { status: "pending" as const, ...asset };
+  await d.db.updateRows("apareca_videos", [{ Id: cur.Id, ...patch }]);
   forgetSnapshot(head.id);
   if (info.mp4) mp4Known.add(v.id);
-  const ready: VideoRow = { ...v, ...patch };
+  const ready: VideoRow = { ...cur, ...patch };
   if (!readied.has(v.id)) {
     remember(readied, () => readied.clear());
     readied.add(v.id);

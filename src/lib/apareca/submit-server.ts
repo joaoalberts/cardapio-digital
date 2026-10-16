@@ -3,14 +3,24 @@ import { after } from "next/server";
 import { clientIp } from "@/lib/comunidade/http";
 import { getCommunityContent } from "@/lib/comunidade/server";
 import * as db from "@/lib/db/nocodb";
+import { aiAvailable, aiModel } from "./ai";
 import { estimateUsd } from "./cost";
+import { runModeration, type ModerationDeps } from "./moderation";
 import { assetInfo, createAparecaUpload, deleteMuxAsset } from "./mux-video";
 import { aparecaOff } from "./off";
-import { getAparecaHead, getHouseVideos, monthUsage, type StoreDeps } from "./store";
+import { forgetSnapshot, getAparecaHead, getHouseVideos, monthUsage, type StoreDeps } from "./store";
 import type { SubmitDeps } from "./submit";
 
 // Dependências reais das rotas do cliente: NocoDB, Mux, cache do Next e after() para o que
-// pode rodar depois da resposta (apagar vencido e chamar onReady).
+// pode rodar depois da resposta (apagar vencido e chamar a moderação da IA).
+
+// IA: interruptor do restaurante E chave E sem APARECA_OFF. A ANTHROPIC_API_KEY sozinha não liga nada.
+const aiKey = () => process.env.ANTHROPIC_API_KEY || undefined;
+const aiOn = (head: Parameters<typeof aiAvailable>[0]) => aiAvailable(head, { key: aiKey(), off: aparecaOff() });
+
+function moderationDeps(): ModerationDeps {
+  return { db, deleteAsset: deleteMuxAsset, key: aiKey(), model: aiModel(), off: aparecaOff, forget: forgetSnapshot };
+}
 
 // Mês do teto no fuso de Brasília (os restaurantes são daqui; o tally usa o fuso de cada casa).
 const monthOf = (now: Date) =>
@@ -27,8 +37,12 @@ export function routeDeps(request: Request): SubmitDeps {
     getHead: getAparecaHead,
     mux: { createUpload: createAparecaUpload, assetInfo },
     monthUsd: async () => estimateUsd(await monthUsage({ db, ...store }, monthOf(new Date()))),
-    // T9 liga a moderação aqui; até lá o vídeo fica "pending" e vai para a fila manual.
-    onReady: async () => {},
+    // O vídeo chega aqui já em pending ou ai_review (a duração foi conferida no settleUpload).
+    // Só ai_review chama a IA; runModeration relê a linha e não grava sobre decisão já tomada.
+    onReady: async (v, head) => {
+      if (v.status === "ai_review") await runModeration(moderationDeps(), v, head);
+    },
+    aiOn,
     off: aparecaOff,
     // Como startVideoUpload: o Mux só aceita o PUT vindo desta origem.
     origin: request.headers.get("origin") ?? "*",

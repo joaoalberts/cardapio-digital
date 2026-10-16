@@ -405,6 +405,87 @@ describe("myStatus", () => {
     expect(JSON.stringify(r)).not.toContain("pbA");
   });
 
+  it("Foco 1: asset pronto com 30 s → rejected e deleteMuxAsset chamado; nunca fica pending", async () => {
+    const v = video({ status: "uploading" });
+    tables.apareca_videos = [v];
+    const { d, assetInfo, deleteAsset, onReady, runDeferred } = mk();
+    assetInfo.mockResolvedValue({ status: "ready", assetId: "assetLong", playbackId: "pbLong", durationS: 30, mp4: true });
+    const r = await myStatus(d, SLUG, ask(v));
+    await runDeferred();
+    expect(r).toEqual({ state: "not_shown", position: null, eta_ms: null, first_shown_at: null, download: null });
+    expect(videos()[0]).toMatchObject({ status: "rejected", decided_by: "ia", ai_reason: "duração acima de 7 s", mux_asset_id: "assetLong" });
+    expect(deleteAsset).toHaveBeenCalledWith("assetLong");
+    const statuses = db.updateRows.mock.calls.flatMap((c) => (c[1] as Row[]).map((p) => p.status));
+    expect(statuses).not.toContain("pending");
+    expect(onReady).not.toHaveBeenCalled();
+    expect(JSON.stringify(r)).not.toContain("duração");
+  });
+
+  it("Foco 1: apagar o asset longo falhou → a linha continua rejected", async () => {
+    const v = video({ status: "uploading" });
+    tables.apareca_videos = [v];
+    const { d, assetInfo, deleteAsset } = mk();
+    deleteAsset.mockRejectedValue(new Error("mux 503"));
+    assetInfo.mockResolvedValue({ status: "ready", assetId: "assetLong", playbackId: "pbLong", durationS: 120, mp4: false });
+    expect(await myStatus(d, SLUG, ask(v))).toMatchObject({ state: "not_shown" });
+    expect(videos()[0].status).toBe("rejected");
+  });
+
+  it("IA disponível e modo híbrido → ai_review com decided_at e onReady chamado", async () => {
+    head = mkHead({ mode: "hibrido" }, { ai_allowed: true });
+    const v = video({ status: "uploading" });
+    tables.apareca_videos = [v];
+    const { d, assetInfo, onReady, runDeferred } = mk({ aiOn: (h) => h.ai_allowed });
+    assetInfo.mockResolvedValue({ status: "ready", assetId: "aH", playbackId: "pbH", durationS: 6, mp4: false });
+    expect(await myStatus(d, SLUG, ask(v))).toMatchObject({ state: "review" });
+    expect(videos()[0]).toMatchObject({ status: "ai_review", decided_at: T0.toISOString() });
+    await runDeferred();
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(onReady.mock.calls[0][0]).toMatchObject({ status: "ai_review" });
+  });
+
+  it("sem aiOn, a IA fica desligada: híbrido com ai_allowed vira pending", async () => {
+    head = mkHead({ mode: "hibrido" }, { ai_allowed: true });
+    const v = video({ status: "uploading" });
+    tables.apareca_videos = [v];
+    const { d, assetInfo } = mk();
+    assetInfo.mockResolvedValue({ status: "ready", assetId: "aH", playbackId: "pbH", durationS: 6, mp4: false });
+    await myStatus(d, SLUG, ask(v));
+    expect(videos()[0].status).toBe("pending");
+  });
+
+  it("decisão 2: linha já rejected no banco (retrato velho com uploading) → não volta a pending", async () => {
+    const v = video({ status: "uploading" });
+    tables.apareca_videos = [{ ...v, status: "rejected", decided_by: "equipe" }];
+    const { d, assetInfo, onReady, runDeferred } = mk();
+    assetInfo.mockResolvedValue({ status: "ready", assetId: "aX", playbackId: "pbX", durationS: 6, mp4: true });
+    vi.mocked(db.list).mockImplementationOnce(async () => [{ ...v }]); // outra instância ainda vê uploading
+    const r = await myStatus(d, SLUG, ask(v));
+    await runDeferred();
+    expect(r).toMatchObject({ state: "not_shown" });
+    expect(db.updateRows).not.toHaveBeenCalled();
+    expect(onReady).not.toHaveBeenCalled();
+    expect(videos()[0]).toMatchObject({ status: "rejected", decided_by: "equipe" });
+  });
+
+  it("decisão 2: duas leituras seguidas com o asset pronto (retrato velho) gravam uma vez só", async () => {
+    const v = video({ status: "uploading" });
+    tables.apareca_videos = [v];
+    const { d, assetInfo, onReady, runDeferred } = mk();
+    assetInfo.mockResolvedValue({ status: "ready", assetId: "aY", playbackId: "pbY", durationS: 6, mp4: true });
+    const stale = { ...v }; // cópia: a linha da tabela é o próprio v e muda com o updateRows
+    vi.mocked(db.list).mockImplementationOnce(async () => [{ ...stale }]).mockImplementationOnce(async () => [{ ...stale }]);
+    await myStatus(d, SLUG, ask(v));
+    now = new Date(T0.getTime() + 5_000);
+    forgetSnapshot(RID);
+    await myStatus(d, SLUG, ask(v));
+    await runDeferred();
+    const writes = db.updateRows.mock.calls.filter((c) => c[0] === "apareca_videos");
+    expect(writes).toHaveLength(1);
+    expect(videos()[0].status).toBe("pending");
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
+
   it("upload com erro no Mux → failed e not_shown", async () => {
     const v = video({ status: "uploading" });
     tables.apareca_videos = [v];

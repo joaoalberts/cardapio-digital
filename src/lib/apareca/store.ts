@@ -4,6 +4,7 @@ import * as nocodb from "@/lib/db/nocodb";
 import { SLUG_PATTERN } from "@/lib/slug";
 import { toHead } from "@/lib/comunidade/votes";
 import { parseConfig } from "./config";
+import { resolveStuck } from "./moderation";
 import { releaseMuxUpload } from "./mux-video";
 import type { MonthUsage } from "./cost";
 import { isExpired, isStuckUpload, purgePlan } from "./retention";
@@ -23,7 +24,9 @@ const RECENT_MS = 30_000;
 const DEFAULT_TZ = "America/Sao_Paulo";
 
 export type StoreDb = Pick<typeof nocodb, "list" | "first" | "insert" | "removeIds">;
-export type Snapshot = { at: number; videos: VideoRow[] }; // sem vencidos
+// Sem vencidos; ai_review parado além do prazo da IA aparece como pending (resolveStuck), só na
+// leitura: a linha no banco continua ai_review e o veredito atrasado só grava sobre ai_review.
+export type Snapshot = { at: number; videos: VideoRow[] };
 export type StoreDeps = {
   db: StoreDb;
   // releaseUpload: opcional (padrão releaseMuxUpload); confere o upload de envio parado sem asset.
@@ -111,7 +114,7 @@ export async function readSnapshot(d: StoreDeps, rid: string): Promise<Snapshot>
   const videos: VideoRow[] = [];
   const toPurge: VideoRow[] = [];
   for (const v of rows) {
-    if (!gone(v, now)) videos.push(v);
+    if (!gone(v, now)) videos.push(resolveStuck(v, now) ? { ...v, status: "pending" } : v);
     else if (!purging.has(v.id) && !wasPurged(v.id, t)) {
       purging.add(v.id);
       toPurge.push(v);
