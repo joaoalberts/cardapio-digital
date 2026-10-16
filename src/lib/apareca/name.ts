@@ -2,21 +2,24 @@
 // filtro de palavrões em pt-BR. O texto é normalizado antes de comparar: sem acento, minúsculo,
 // números e símbolos trocados por letras (p0rr4 → porra) e letras repetidas encurtadas.
 // Formato do filtro (minha escolha, spec "a decidir"): duas listas.
-// - RAIZES: pedaços inequívocos, procurados dentro de cada palavra e do texto todo colado
-//   (pega "p.o.r.r.a" e "@putaria").
-// - INTEIRAS: só batem como palavra inteira, porque aparecem dentro de palavras comuns
-//   ("cu" em "cuscuz", "puta" em "computador", "pica" em "picanha").
+// - RAIZES: pedaços longos e inequívocos, procurados dentro de cada palavra ("@putaria",
+//   "arrombado"). Nada curto que apareça em nome ou sobrenome comum.
+// - INTEIRAS: só batem como palavra inteira, porque aparecem dentro de palavras e nomes comuns
+//   ("cu" em "cuscuz", "puta" em "computador", "otari" em "Botari", "babaca" em "Baba").
+// O texto todo colado só é procurado quando todas as palavras têm até 2 letras ("p.o.r.r.a",
+// "p o r r a"); colar nomes normais criaria palavrões na emenda ("Leonardo Tarifa").
 
 export const NAME_MAX = 30;
 
 const RAIZES = [
-  "porra", "caralh", "buceta", "bucet", "piroca", "merda", "arrombad", "cuzao", "xoxota", "xereca", "punheta", "boquete",
-  "siririca", "putaria", "filhodaputa", "fodase", "foder", "fodido", "escrot", "vagabund", "estupr", "pedofil", "nazis",
-  "hitler", "bosta", "caceta", "babaca", "viadinh", "otari",
+  "porra", "caralh", "buceta", "piroca", "merda", "arrombad", "cuzao", "xoxota", "xereca", "punheta", "boquete",
+  "siririca", "putaria", "filhodaputa", "fodase", "fodido", "vagabund", "estupr", "pedofil", "hitler",
 ];
 const INTEIRAS = new Set([
-  "cu", "puta", "puto", "putas", "putos", "foda", "fode", "fdp", "vsf", "pqp", "krl", "crl", "tnc", "pau", "pica",
-  "cacete", "viado", "vadia", "corno", "piranha", "retardado", "retardada", "bct", "cuzinho", "xota",
+  "cu", "puta", "puto", "putas", "putos", "foda", "fode", "foder", "fdp", "vsf", "pqp", "krl", "crl", "tnc", "pau", "pica",
+  "cacete", "caceta", "viado", "viadinho", "vadia", "corno", "piranha", "retardado", "retardada", "bct", "cuzinho", "xota",
+  "otario", "otaria", "otarios", "babaca", "babacas", "nazi", "nazis", "nazista", "nazistas", "bosta", "bostas",
+  "escroto", "escrota", "bucetas",
 ]);
 
 const LEET: Record<string, string> = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "@": "a", $: "s", "!": "i" };
@@ -34,10 +37,11 @@ function normalize(s: string): string {
 function hasBadWord(name: string): boolean {
   const n = normalize(name);
   const words = n.split(/[^a-z]+/).filter(Boolean);
-  const glued = words.join("");
   const collapse = (w: string) => w.replace(/([a-z])\1+/g, "$1");
-  for (const w of words) if (INTEIRAS.has(w) || INTEIRAS.has(collapse(w))) return true;
-  return RAIZES.some((r) => glued.includes(r) || words.some((w) => w.includes(r)));
+  // Letras soltas ("p.o.r.r.a"): junta e trata como uma palavra só.
+  const parts = words.length > 1 && words.every((w) => w.length <= 2) ? [words.join("")] : words;
+  for (const w of parts) if (INTEIRAS.has(w) || INTEIRAS.has(collapse(w))) return true;
+  return RAIZES.some((r) => parts.some((w) => w.includes(r)));
 }
 
 export function cleanName(raw: unknown): { ok: true; name: string | null } | { ok: false; error: "long" | "bad_word" } {

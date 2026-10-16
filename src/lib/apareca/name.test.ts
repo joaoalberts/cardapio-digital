@@ -46,11 +46,18 @@ describe("cleanName", () => {
     "fdp",
     "p.o.r.r.a",
     "porrrrra",
+    "p o r r a",
+    "f.d.p",
+    "otário",
+    "BABACA",
+    "b0st4",
+    "nazista",
+    "escroto",
   ])("%s é bad_word", (raw) => {
     expect(cleanName(raw)).toEqual({ ok: false, error: "bad_word" });
   });
 
-  it.each(["Cassia", "Cássia", "Pescador", "Computador", "Temporada", "Picanha da Ana", "Ana Pinto", "@cuscuz_da_vo", "Maria Luiza"])(
+  it.each(["Cassia", "Cássia", "Pescador", "Computador", "Temporada", "Picanha da Ana", "Ana Pinto", "@cuscuz_da_vo", "Maria Luiza", "Pedro Botari", "Ana Zisman", "Baba Cardoso", "Leonardo Tarifa", "Ana Bostani", "Escrotini Neto", "Homer Dantas"])(
     "%s passa (sem falso positivo por pedaço de palavra)",
     (raw) => {
       expect(cleanName(raw)).toEqual({ ok: true, name: raw });

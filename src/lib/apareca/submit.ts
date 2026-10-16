@@ -51,7 +51,10 @@ export type SubmitDeps = {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MESA = /^[A-Z2-9]{6}$/;
 const HOUR_MS = 60 * 60_000;
-const IP_PER_HOUR = 10; // minha escolha (brief)
+// No Wi-Fi do restaurante todos os clientes saem pelo mesmo IP público, e o João pediu até
+// 100 vídeos por noite: o limite por IP é por restaurante e largo (60/h, decisão do controlador
+// na correção 1 da T7). O limite principal por pessoa é o device_per_hour (padrão 2).
+const IP_PER_HOUR = 60;
 const DOWNLOADS_PER_HOUR = 5; // minha escolha: o contador de downloads não infla com toques repetidos
 const CONSENT_SKEW_MS = 10 * 60_000;
 const MUX_CHECK_MS = 5_000; // Mux consultado no máximo 1 vez a cada 5 s por vídeo
@@ -143,7 +146,7 @@ export async function startSubmission(d: SubmitDeps, slug: string, body: unknown
   const limits = d.limits ?? defaultLimits();
   const devLimiter = limits.device(cfg.device_per_hour);
   const devKey = `${head.id}:${input.device}`;
-  const ipKey = d.ip ?? "anon";
+  const ipKey = `${d.ip ?? "anon"}|${head.id}`; // molde do telao/codigo: IP por restaurante
   if (!devLimiter.hit(devKey)) return { ok: false, code: "too_many" };
   if (!limits.ip.hit(ipKey)) {
     devLimiter.undo(devKey);

@@ -76,7 +76,7 @@ function limits(): SubmitLimits {
   const clock = () => now.getTime();
   const byMax = new Map<number, ReturnType<typeof createLimiter>>();
   return {
-    ip: createLimiter({ max: 10, windowMs: HOUR, now: clock }),
+    ip: createLimiter({ max: 60, windowMs: HOUR, now: clock }), // igual ao IP_PER_HOUR
     device: (max) => {
       let l = byMax.get(max);
       if (!l) byMax.set(max, (l = createLimiter({ max, windowMs: HOUR, now: clock })));
@@ -121,7 +121,7 @@ beforeEach(() => {
   tables.dining_tables = [
     { Id: 1, id: TABLE_UID, uid: TABLE_UID, restaurant_id: RID, code: "ABC234", active: true },
     { Id: 2, id: "t-off", uid: "t-off", restaurant_id: RID, code: "OFF234", active: false },
-    { Id: 3, id: "t-other", uid: "t-other", restaurant_id: OTHER_RID, code: "XYZ234", active: true },
+    { Id: 3, id: "00000000-0000-4000-8000-0000000000c9", uid: "00000000-0000-4000-8000-0000000000c9", restaurant_id: OTHER_RID, code: "XYZ234", active: true },
   ];
   now = T0;
   head = mkHead();
@@ -217,14 +217,24 @@ describe("startSubmission: recusas", () => {
     expect(await startSubmission(d, SLUG, body())).toEqual({ ok: false, code: "too_many" });
   });
 
-  it("11º envio do mesmo IP na mesma hora → too_many", async () => {
+  it("61º envio do mesmo IP no mesmo restaurante → too_many; o mesmo IP em outro restaurante não conta", async () => {
     const { d } = mk();
-    for (let i = 0; i < 10; i++) {
-      const dev = `00000000-0000-4000-8000-${String(900 + i).padStart(12, "0")}`;
-      expect((await startSubmission(d, SLUG, body({ device: dev }))).ok).toBe(true);
-    }
+    const dev = (i: number) => `00000000-0000-4000-8000-${String(900 + i).padStart(12, "0")}`;
+    for (let i = 0; i < 60; i++) expect((await startSubmission(d, SLUG, body({ device: dev(i) }))).ok).toBe(true);
     expect(await startSubmission(d, SLUG, body({ device: DEV2 }))).toEqual({ ok: false, code: "too_many" });
-    expect(videos()).toHaveLength(10);
+    expect(videos()).toHaveLength(60);
+
+    // Outro restaurante, mesmo IP e mesmos limitadores: começa do zero.
+    const other = mkHead({}, { id: OTHER_RID, slug: "outra-casa" });
+    const d2: SubmitDeps = { ...d, getHead: async (s) => (s === "outra-casa" ? other : s === SLUG ? head : null) };
+    expect((await startSubmission(d2, "outra-casa", body({ mesa: "XYZ234", device: DEV2 }))).ok).toBe(true);
+  });
+
+  it("limitadores padrão do processo: 60 por hora por IP e restaurante (IP_PER_HOUR)", async () => {
+    const { d } = mk({ limits: undefined, ip: "203.0.113.77" });
+    const dev = (i: number) => `00000000-0000-4000-8000-${String(5000 + i).padStart(12, "0")}`;
+    for (let i = 0; i < 60; i++) expect((await startSubmission(d, SLUG, body({ device: dev(i) }))).ok).toBe(true);
+    expect(await startSubmission(d, SLUG, body({ device: dev(60) }))).toEqual({ ok: false, code: "too_many" });
   });
 
   it("Mux falhou → mux, sem linha, e a tentativa não gasta o limite", async () => {
