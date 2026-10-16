@@ -3,9 +3,9 @@ import type { MenuCategory, MenuItem, PublicMenu } from "@/lib/menu/types";
 import {
   BALLOON_MIN_BAND, balloonMode, balloonNeed, buyState, clockSkew, clockText, houseHighlight, leaderOf, localTime,
   muralColumns, pollDelay, pollTiming, questionText, refFrom, relativeTime, shownPcts,
-  backoff, pollChime, TV_POLL_MS, TV_RELOAD_MS, tvMode, tvQuestionLong, tvReloadDue,
+  backoff, pollChime, TV_POLL_MS, TV_RELOAD_MS, tvMode, tvQuestionLong, tvReloadDue, storyChoices,
 } from "./client-logic";
-import type { PublicOption, PublicPoll, PublicState } from "./types";
+import type { PublicOption, PublicPoll, PublicPost, PublicState } from "./types";
 
 const NOW = new Date("2026-10-16T23:00:00Z"); // 20h em São Paulo
 
@@ -285,5 +285,44 @@ describe("tvQuestionLong", () => {
     expect(tvQuestionLong(Number.NaN, 62)).toBe(false);
     expect(tvQuestionLong(129, 0)).toBe(false);
     expect(tvQuestionLong(129, Number.NaN)).toBe(false);
+  });
+});
+
+describe("storyChoices (o que a folha do story oferece)", () => {
+  const post = (id: string, item_id: string): PublicPost => ({
+    id, item_id, thumb: `/t/${id}`, photo: `/f/${id}`, on_tv: false, created_at: "2026-10-16T22:00:00Z",
+  });
+  const has = (id: string) => id !== "sumiu";
+  const base = { mine: null, canVote: true, highlightId: null, hasItem: has };
+
+  it("enquete com votos: só depois de votar, sem mesa (vê o resultado) ou encerrada", () => {
+    const open = tvState({ poll: tvPoll() });
+    expect(storyChoices(open, base).poll).toBeNull(); // ainda não votou: a arte mostraria o resultado antes
+    expect(storyChoices(open, { ...base, mine: "a" }).poll).toBe("p1");
+    expect(storyChoices(open, { ...base, canVote: false }).poll).toBe("p1");
+    expect(storyChoices(tvState({ poll: tvPoll({ closed: true, winner: "a" }) }), base).poll).toBe("p1");
+  });
+
+  it("enquete sem votos não vira arte (encerrada sem votos mostra o destaque, sem compartilhar)", () => {
+    expect(storyChoices(tvState({ poll: tvPoll({ has_votes: false }) }), { ...base, mine: "a" }).poll).toBeNull();
+    expect(storyChoices(tvState({ poll: tvPoll({ closed: true, has_votes: false }) }), base).poll).toBeNull();
+    expect(storyChoices(tvState(), base).poll).toBeNull();
+  });
+
+  it("foto da casa: a pedida; senão a do destaque; senão a mais nova; sempre de prato no cardápio", () => {
+    const s = tvState({ mural: [post("x1", "sumiu"), post("x2", "i2"), post("x3", "i3")] });
+    expect(storyChoices(s, base).post).toBe("x2");
+    expect(storyChoices(s, { ...base, highlightId: "i3" }).post).toBe("x3");
+    expect(storyChoices(s, { ...base, post: "x3" }).post).toBe("x3");
+    expect(storyChoices(s, { ...base, post: "x1" }).post).toBe("x2"); // a pedida saiu do cardápio
+    expect(storyChoices(tvState({ mural: [post("x1", "sumiu")] }), base).post).toBeNull();
+  });
+
+  it("desligada ou sem estado: nada", () => {
+    expect(storyChoices(null, base)).toEqual({ poll: null, post: null });
+    expect(storyChoices(tvState({ enabled: false, poll: tvPoll({ closed: true }), mural: [post("x2", "i2")] }), base)).toEqual({
+      poll: null,
+      post: null,
+    });
   });
 });

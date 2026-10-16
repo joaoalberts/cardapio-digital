@@ -51,7 +51,8 @@ function cleanOptions(p: PollRow): PollOption[] {
   });
 }
 
-function publicPoll(p: PollRow, votes: VoteRow[], now: Date): PublicPoll {
+// Exportada para o cartão do story (story.ts), que mostra a mesma porcentagem do Palco.
+export function publicPoll(p: PollRow, votes: VoteRow[], now: Date): PublicPoll {
   const options = cleanOptions(p);
   const ids = options.map((o) => o.id);
   const valid = votes.filter((v) => v.poll_id === p.id && ids.includes(v.option_id));

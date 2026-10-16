@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  clockText, houseHighlight, leaderOf, localTime, pollTiming, questionText, shownPcts,
+  clockText, houseHighlight, leaderOf, localTime, pollTiming, questionText, shownPcts, storyChoices,
 } from "@/lib/comunidade/client-logic";
 import { ct, ctf, type CmuKey } from "@/lib/comunidade/i18n";
 import type { OptionId, PublicPoll } from "@/lib/comunidade/types";
@@ -13,16 +13,18 @@ import { useOrder } from "../order/order-context";
 import { BuyButton, type BuySource } from "./buy-button";
 import { IconChevron, IconClock, IconQr, IconTv, Live, Ring, useClock } from "./parts";
 import { useComunidade } from "./provider";
+import { ShareStoryButton } from "./share";
 
 // Palco da casa (ficha: telas 06 a 10, 13 e 14). Cartão da casa "ao vivo agora" (com o selo
 // "no telão" quando há telão), a enquete com voto em 1 toque e as barras em % depois, o tempo
 // com anel; encerrada, a vencedora, com "Pedir também" só quando ligada a um prato (sem
 // votos, o destaque da casa); sem enquete, a próxima e o destaque. Quem não tem mesa vê o
-// resultado e o aviso do QR da mesa.
+// resultado e o aviso do QR da mesa. "Compartilhar no story" aparece com o resultado à mostra
+// (enquete com votos, depois do voto, sem mesa ou encerrada; storyChoices).
 
 const TIP_KEY = "cmu-dica-vista";
 
-export function Stage() {
+export function Stage({ onShare }: { onShare: () => void }) {
   const c = useComunidade();
   const o = useOrder();
   const s = c.state;
@@ -68,6 +70,7 @@ export function Stage() {
   const logo = mediaUrl(menu.restaurant.logo_path);
   const poll = s.poll;
   const hlSource: BuySource = poll ? { kind: "palco", ref: poll.id } : null;
+  const canShare = !!storyChoices(s, { mine: poll ? c.myVote(poll.id) : null, canVote: c.canVote, highlightId: null, hasItem: () => false }).poll;
 
   return (
     <>
@@ -100,6 +103,7 @@ export function Stage() {
         <HighlightRow item={highlight} source={hlSource} />
       )}
       {poll?.closed && <ClosedCard poll={poll} highlight={highlight} />}
+      {canShare && <ShareStoryButton onClick={onShare} />}
       {s.next && (
         <div className="cmu-next">
           <IconClock />

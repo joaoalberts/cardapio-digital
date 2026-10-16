@@ -157,6 +157,26 @@ export function muralColumns<T>(posts: T[]) {
   return { left, right };
 }
 
+// ---------- Story ----------
+
+// O que a folha "Compartilhar no story" oferece (ids para a rota do cartão):
+// - a enquete, se tem votos e esta pessoa já vê o resultado (votou, não tem mesa ou ela
+//   encerrou): a arte com as porcentagens não aparece antes do voto;
+// - uma foto da casa de prato ainda no cardápio: a pedida (foto aberta no Mural), senão a do
+//   destaque da casa, senão a mais nova.
+export function storyChoices(
+  s: PublicState | null,
+  o: { mine: OptionId | null; canVote: boolean; highlightId: string | null; hasItem: (id: string) => boolean; post?: string | null },
+): { poll: string | null; post: string | null } {
+  if (!s?.enabled) return { poll: null, post: null };
+  const p = s.poll;
+  const poll = p && p.has_votes && (p.closed || !!o.mine || !o.canVote) ? p.id : null;
+  const ok = s.mural.filter((x) => o.hasItem(x.item_id));
+  const post =
+    ok.find((x) => x.id === o.post) ?? (o.highlightId ? ok.find((x) => x.item_id === o.highlightId) : undefined) ?? ok[0] ?? null;
+  return { poll, post: post?.id ?? null };
+}
+
 // ---------- Chegada ----------
 
 // De onde a pessoa veio: QR do telão ou do story (contado no funil uma vez por carga).

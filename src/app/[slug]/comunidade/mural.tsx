@@ -11,6 +11,7 @@ import { useOrder } from "../order/order-context";
 import { BuyButton } from "./buy-button";
 import { IconCamera, IconClose, useClock } from "./parts";
 import { useComunidade } from "./provider";
+import { ShareStoryButton } from "./share";
 
 // Mural de pratos, fase 1a: só fotos da casa (ficha: telas 11 e 12). Mosaico de 2 colunas
 // desencontradas, miniatura no mosaico (carregada só perto da tela) e a foto grande ao
@@ -18,7 +19,11 @@ import { useComunidade } from "./provider";
 // que saiu do cardápio fica cinza com "indisponível hoje". Sem fotos: o destaque da casa.
 // Páginas de 20; "Ver mais" busca as mais antigas (?antes=<created_at da última>).
 
-export function Mural({ onPhoto }: { onPhoto: (p: { src: string; name: string }) => void }) {
+// Foto aberta em tamanho grande; shareable = o prato ainda está no cardápio (a rota do story
+// recusa post de prato que saiu).
+export type Photo = { id: string; src: string; name: string; shareable: boolean };
+
+export function Mural({ onPhoto }: { onPhoto: (p: Photo) => void }) {
   const c = useComunidade();
   const o = useOrder();
   const s = c.state;
@@ -103,7 +108,7 @@ export function Mural({ onPhoto }: { onPhoto: (p: { src: string; name: string })
         <button
           className="cmu-pimg"
           style={{ aspectRatio: ar }}
-          onClick={() => onPhoto({ src: post.photo, name })}
+          onClick={() => onPhoto({ id: post.id, src: post.photo, name, shareable: !off })}
           aria-label={ctf("photoOpen", L, { name })}
         >
           <img className="cmu-p" src={post.thumb} alt="" loading="lazy" decoding="async" />
@@ -148,12 +153,25 @@ export function Mural({ onPhoto }: { onPhoto: (p: { src: string; name: string })
   );
 }
 
-// Foto grande, por cima da camada (sem outro desfoque: um só por camada).
-export function PhotoView({ photo, onClose, lang }: { photo: { src: string; name: string }; onClose: () => void; lang: string }) {
+// Foto grande, por cima da camada (sem outro desfoque: um só por camada), com "Compartilhar
+// no story" quando o prato ainda está no cardápio.
+export function PhotoView({
+  photo, onClose, onShare, lang,
+}: {
+  photo: Photo;
+  onClose: () => void;
+  onShare: (postId: string) => void;
+  lang: string;
+}) {
   return (
     <div className="cmu-photo" role="dialog" aria-label={photo.name} onClick={onClose}>
       <img src={photo.src} alt={photo.name} />
       <b>{photo.name}</b>
+      {photo.shareable && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <ShareStoryButton onClick={() => onShare(photo.id)} className="cmu-share-photo" />
+        </div>
+      )}
       <button className="cmu-x" onClick={onClose} aria-label={ct("photoClose", lang)}>
         <IconClose />
       </button>

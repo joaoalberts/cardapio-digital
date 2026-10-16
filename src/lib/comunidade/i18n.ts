@@ -254,6 +254,56 @@ export const CMU_TEXTS = {
   tvSoundOn: L6(["ligar som", "turn on sound", "activar sonido", "activer le son", "attiva l’audio", "Ton an"]),
   tvSoundIsOn: L6(["som ligado", "sound on", "sonido activado", "son activé", "audio attivo", "Ton ist an"]),
 
+  // ---------- Story (folha de compartilhar) ----------
+  shareStory: L6(["Compartilhar no story", "Share to your story", "Compartir en tu historia", "Partager en story", "Condividi nella storia", "In der Story teilen"]),
+  storyResult: L6(["Resultado", "Result", "Resultado", "Résultat", "Risultato", "Ergebnis"]),
+  storyHouse: L6(["Foto da casa", "House photo", "Foto de la casa", "Photo de la maison", "Foto della casa", "Foto vom Haus"]),
+  storyShare: L6(["Compartilhar", "Share", "Compartir", "Partager", "Condividi", "Teilen"]),
+  storySave: L6(["Salvar imagem", "Save image", "Guardar imagen", "Enregistrer l’image", "Salva immagine", "Bild speichern"]),
+  storyHold: L6([
+    "Segure a imagem para salvar",
+    "Press and hold the image to save it",
+    "Mantén pulsada la imagen para guardarla",
+    "Appuyez longuement sur l’image pour l’enregistrer",
+    "Tieni premuto sull’immagine per salvarla",
+    "Bild gedrückt halten zum Speichern",
+  ]),
+  storyNote: L6([
+    "O QR da arte abre o cardápio da casa, marcado como vindo do story.",
+    "The QR code in the image opens the house menu, marked as coming from your story.",
+    "El QR de la imagen abre la carta de la casa, marcada como llegada desde tu historia.",
+    "Le QR de l’image ouvre la carte de la maison, marquée comme venant de votre story.",
+    "Il QR dell’immagine apre il menù della casa, segnato come arrivato dalla storia.",
+    "Der QR-Code im Bild öffnet die Karte des Hauses, markiert als aus deiner Story.",
+  ]),
+  storyLoading: L6(["Preparando a imagem", "Preparing the image", "Preparando la imagen", "Préparation de l’image", "Preparo l’immagine", "Bild wird vorbereitet"]),
+  storyErr: L6([
+    "Não deu para preparar a imagem agora.",
+    "Couldn’t prepare the image right now.",
+    "No se pudo preparar la imagen ahora.",
+    "Impossible de préparer l’image pour l’instant.",
+    "Non è stato possibile preparare l’immagine ora.",
+    "Das Bild konnte gerade nicht vorbereitet werden.",
+  ]),
+  storyRetry: L6(["Tentar de novo", "Try again", "Intentar de nuevo", "Réessayer", "Riprova", "Erneut versuchen"]),
+  storyClose: L6(["Fechar o story", "Close the story", "Cerrar la historia", "Fermer la story", "Chiudi la storia", "Story schließen"]),
+  storyAlt: L6(["Arte para o story", "Image for your story", "Imagen para tu historia", "Image pour votre story", "Immagine per la storia", "Bild für deine Story"]),
+
+  // ---------- Story (textos da arte; a rota desenha no idioma do cardápio) ----------
+  artPollClosed: L6(["Enquete da casa · encerrada", "House poll · closed", "Encuesta de la casa · cerrada", "Sondage de la maison · terminé", "Sondaggio della casa · chiuso", "Umfrage des Hauses · beendet"]),
+  artPollLive: L6(["Enquete da casa · ao vivo", "House poll · live", "Encuesta de la casa · en vivo", "Sondage de la maison · en direct", "Sondaggio della casa · in diretta", "Umfrage des Hauses · live"]),
+  artVote: L6(["Vem votar com a gente", "Come vote with us", "Ven a votar con nosotros", "Venez voter avec nous", "Vieni a votare con noi", "Stimm mit uns ab"]),
+  artPoint: L6([
+    "aponte a câmera para o cardápio",
+    "point your camera to see the menu",
+    "apunta la cámara para ver la carta",
+    "visez avec l’appareil pour voir la carte",
+    "inquadra per vedere il menù",
+    "Kamera draufhalten für die Karte",
+  ]),
+  artKitchen: L6(["Saindo agora da cozinha", "Fresh out of the kitchen", "Recién salido de la cocina", "Tout juste sorti de la cuisine", "Appena uscito dalla cucina", "Frisch aus der Küche"]),
+  artOrder: L6(["Peça o seu", "Order yours", "Pide el tuyo", "Commandez le vôtre", "Ordina il tuo", "Bestell deins"]),
+
   // ---------- Modelos de enquete (o painel usa o pt-BR como pergunta) ----------
   tplDessert: L6(["Qual sobremesa sai hoje?", "Which dessert wins tonight?", "¿Qué postre sale hoy?", "Quel dessert ce soir ?", "Quale dolce esce stasera?", "Welches Dessert gewinnt heute?"]),
   tplDrink: L6(["Qual drink sai hoje?", "Which drink wins tonight?", "¿Qué trago sale hoy?", "Quel cocktail ce soir ?", "Quale drink esce stasera?", "Welcher Drink gewinnt heute?"]),
