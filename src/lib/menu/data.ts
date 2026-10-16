@@ -63,7 +63,10 @@ const media = (m: M): MenuMedia => ({
 export async function getPublicMenu(slug: string, lang = "pt-BR"): Promise<PublicMenu | null> {
   "use cache: remote";
   cacheTag(menuTag(slug));
-  cacheLife("minutes");
+  // O painel atualiza o cache na hora ao salvar (updateTag). Fora isso, confere o banco
+  // em segundo plano a cada 5 min e nunca deixa o cliente esperar por ele: a cópia vale
+  // por 30 dias, então mesmo depois de horas sem visita a abertura sai do cache.
+  cacheLife({ stale: 60, revalidate: 300, expire: 60 * 60 * 24 * 30 });
 
   const s = slug.toLowerCase();
   if (!SLUG.test(s)) return null;

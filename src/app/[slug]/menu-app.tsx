@@ -108,7 +108,9 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   const gate = useStartGate();
   const hasHeroVideo = !!(initialMenu.restaurant.cover?.kind === "video" || (!initialMenu.restaurant.cover && initialMenu.restaurant.cover_video_path));
   useEffect(() => {
-    const t = setTimeout(openStartGate, hasHeroVideo ? 3500 : 300);
+    // No iPhone o banner pode levar uns segundos para "tocar"; os cards não esperam mais
+    // que 1 s (esperar mais deixava a capa com cards parados, parecendo travados).
+    const t = setTimeout(openStartGate, hasHeroVideo ? 1000 : 0);
     const now = () => openStartGate();
     addEventListener("scroll", now, { passive: true, once: true });
     addEventListener("pointerdown", now, { passive: true, once: true });
@@ -1479,9 +1481,14 @@ function LoopVideo({
   useEffect(() => {
     const v = own.current;
     if (!v || !eager) return;
-    if (!v.paused && v.currentTime > 0) openStartGate();
+    // Basta o banner ter o primeiro quadro pronto para liberar o resto.
+    if (v.readyState >= 2) openStartGate();
+    v.addEventListener("loadeddata", openStartGate, { once: true });
     v.addEventListener("playing", openStartGate, { once: true });
-    return () => v.removeEventListener("playing", openStartGate);
+    return () => {
+      v.removeEventListener("loadeddata", openStartGate);
+      v.removeEventListener("playing", openStartGate);
+    };
   }, [eager]);
   useAutoplay(own);
   // Perto da tela: lista lida e pronto para começar; baixa os trechos só quando aparece.
