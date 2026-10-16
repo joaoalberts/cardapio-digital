@@ -27,7 +27,10 @@ export type Table =
   | "community_votes"
   | "community_posts"
   | "community_tvs"
-  | "community_tally";
+  | "community_tally"
+  | "apareca_videos"
+  | "apareca_house_videos"
+  | "apareca_tally";
 
 export type Row = Record<string, unknown>;
 // Igualdade em todas as colunas; null = coluna vazia.
@@ -36,15 +39,16 @@ export type Where = Record<string, string | number | boolean | null>;
 // Colunas JSON e Checkbox voltam em formatos diferentes conforme o banco do NocoDB.
 const JSON_COLS = new Set([
   "languages", "opening_hours", "payment_methods", "price_options", "tags", "lines", "special_days",
-  "options", "counts", "tables_qr", "tables_open",
+  "options", "counts", "tables_qr", "tables_open", "apareca_config", "hours",
 ]);
 const BOOL_COLS = new Set([
   "active", "featured", "hide_price", "auto", "show_hours", "show_payments", "half_half", "orders_enabled", "open", "special",
-  "community_enabled", "on_tv", "revoked", "discarded",
+  "community_enabled", "on_tv", "revoked", "discarded", "apareca_allowed", "apareca_ai_allowed", "apareca_enabled",
 ]);
 const NUM_COLS = new Set([
   "menu_version", "position", "price_cents", "promo_price_cents", "serves", "total_cents",
   "special_every_h", "special_show_s", "special_limit", "unit_cents", "qty_max",
+  "duration_ms", "plays", "plays_target", "downloads",
 ]);
 const SYSTEM = new Set(["CreatedAt", "UpdatedAt", "nc_created_by", "nc_updated_by", "nc_order"]);
 

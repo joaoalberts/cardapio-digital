@@ -56,4 +56,25 @@ describe("setup.mjs: esquema da Comunidade", () => {
       uid: TEXT, restaurant_id: TEXT, day: TEXT, counts: JSONT, tables_qr: JSONT, tables_open: JSONT, created_at: DATE,
     });
   });
+  it("Apareça na TV: tabelas novas", () => {
+    expect(cols("apareca_videos")).toEqual({
+      uid: TEXT, restaurant_id: TEXT, kind: TEXT, table_id: TEXT, zone_id: TEXT, device_id: TEXT, name: TEXT,
+      consent_at: DATE, mux_upload_id: TEXT, mux_asset_id: TEXT, mux_playback_id: TEXT, duration_ms: "Number",
+      status: TEXT, decided_by: TEXT, decided_at: DATE, ai_reason: LONG, plays: "Number", plays_target: "Number",
+      first_shown_at: DATE, downloads: "Number", expires_at: DATE, created_at: DATE,
+    });
+    expect(cols("apareca_house_videos")).toEqual({
+      uid: TEXT, restaurant_id: TEXT, title: TEXT, mux_upload_id: TEXT, mux_asset_id: TEXT, mux_playback_id: TEXT,
+      duration_ms: "Number", aspect: TEXT, position: "Number", active: BOOL, status: TEXT, created_at: DATE,
+    });
+    expect(cols("apareca_tally")).toEqual({
+      uid: TEXT, restaurant_id: TEXT, day: TEXT, month: TEXT, counts: JSONT, hours: JSONT, created_at: DATE,
+    });
+  });
+
+  it("restaurants ganha os interruptores do Apareça", () => {
+    expect(cols("restaurants")).toMatchObject({
+      apareca_allowed: BOOL, apareca_ai_allowed: BOOL, apareca_enabled: BOOL, apareca_config: JSONT,
+    });
+  });
 });

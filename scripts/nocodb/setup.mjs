@@ -38,7 +38,10 @@ export const TABLES = {
     text("wifi_password"), json("payment_methods"), bool("show_hours"),
     bool("show_payments"), bool("orders_enabled"),
     // Comunidade: interruptor (vazio = desligada) e a hora em que vira o dia ("HH:MM", vazio = "05:00").
-    bool("community_enabled"), text("community_day_start"), created,
+    bool("community_enabled"), text("community_day_start"),
+    // Apareça na TV: apareca_allowed e apareca_ai_allowed são do João (super admin); apareca_enabled é do dono
+    // (exige Comunidade ligada); apareca_config guarda modo, regra, zonas, horário e retenção.
+    bool("apareca_allowed"), bool("apareca_ai_allowed"), bool("apareca_enabled"), json("apareca_config"), created,
   ],
   members: [text("restaurant_id"), text("user_id"), text("role"), created],
   categories: [
@@ -97,6 +100,23 @@ export const TABLES = {
   // Funil somado em memória e gravado em lote (uma linha por instância a cada >= 30 s com movimento).
   community_tally: [
     id, text("restaurant_id"), text("day"), json("counts"), json("tables_qr"), json("tables_open"), created,
+  ],
+  // Apareça na TV: vídeo de 6 s do cliente. device_id, table_id, mux_upload_id e ai_reason nunca saem por rota
+  // pública; mux_playback_id só sai com status = approved. A linha e o asset do Mux vencem em expires_at.
+  apareca_videos: [
+    id, text("restaurant_id"), text("kind"), text("table_id"), text("zone_id"), text("device_id"), text("name"),
+    date("consent_at"), text("mux_upload_id"), text("mux_asset_id"), text("mux_playback_id"), num("duration_ms"),
+    text("status"), text("decided_by"), date("decided_at"), long("ai_reason"), num("plays"), num("plays_target"),
+    date("first_shown_at"), num("downloads"), date("expires_at"), created,
+  ],
+  // Apareça na TV: vídeos institucionais da casa (loop da TV). Não vencem; ficam até o dono apagar.
+  apareca_house_videos: [
+    id, text("restaurant_id"), text("title"), text("mux_upload_id"), text("mux_asset_id"), text("mux_playback_id"),
+    num("duration_ms"), text("aspect"), num("position"), bool("active"), text("status"), created,
+  ],
+  // Apareça na TV: contagens por restaurante e dia (sem dado pessoal), gravadas antes de a linha do vídeo sumir.
+  apareca_tally: [
+    id, text("restaurant_id"), text("day"), text("month"), json("counts"), json("hours"), created,
   ],
 };
 
