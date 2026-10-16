@@ -26,7 +26,10 @@ export async function GET(request: NextRequest) {
 
   try {
     // Enquete que ganhou result: a agenda em cache passa a trazê-lo (os votos já saíram).
-    const revalidate = (rid: string) => revalidateTag(communityTags.rid(rid), "max");
+    // { expire: 0 } e não "max": com "max", o próximo pedido ainda recebe a agenda velha, sem
+    // o result e com os votos já apagados (o story sairia "Deu X 100%" e ficaria 1 dia na CDN).
+    // Isso só limpa esta instância; nas outras, story.ts e votes.ts leem a linha na hora.
+    const revalidate = (rid: string) => revalidateTag(communityTags.rid(rid), { expire: 0 });
     const report = await runRetention({ db, removeFiles: removeFilesStrict, ownsFile, revalidate });
     return NextResponse.json({ ok: report.failed === 0, ...report }, { status: report.failed ? 500 : 200, headers: NO_STORE });
   } catch (e) {

@@ -7,6 +7,7 @@ import QRCode from "qrcode";
 import { communityOff } from "@/lib/comunidade/off";
 import { getCommunityContent, getCommunityHead } from "@/lib/comunidade/server";
 import {
+  STORY_CACHE_PENDING,
   parseStoryQuery,
   qrPath,
   resolveStory,
@@ -23,6 +24,7 @@ import {
   type StorySource,
 } from "@/lib/comunidade/story";
 import type { VoteRow } from "@/lib/comunidade/types";
+import { toPoll } from "@/lib/comunidade/votes";
 import * as db from "@/lib/db/nocodb";
 import { getPublicMenu } from "@/lib/menu/data";
 import { mediaUrl } from "@/lib/menu/media";
@@ -81,6 +83,8 @@ const deps: StoryDeps = {
   getContent: getCommunityContent,
   // Lidos na hora (sem cache), em ordem de gravação; story.ts filtra pelo restaurante.
   getVotes: (pollId) => db.list<VoteRow>("community_votes", { poll_id: pollId }, { sort: "Id" }),
+  // No NocoDB o uuid fica na coluna uid (o "id" do app); story.ts confere o restaurante.
+  getPoll: async (pollId) => toPoll(await db.first("community_polls", { uid: pollId })),
   getMenu: (slug) => getPublicMenu(slug),
   off: communityOff,
 };
@@ -184,13 +188,14 @@ export async function GET(request: NextRequest, { params }: Ctx) {
   const q = parseStoryQuery(request.nextUrl.searchParams);
   if (!q) return new NextResponse(null, { status: 400, headers: { "cache-control": NO_STORE } });
 
-  let src: StorySource | null;
+  let src: StorySource | "pending" | null;
   try {
     src = await resolveStory(deps, slug, q);
   } catch {
     return new NextResponse(null, { status: 503, headers: { "cache-control": CACHE_ERROR } });
   }
   if (!src) return new NextResponse(null, { status: 404, headers: { "cache-control": CACHE_NOT_FOUND } });
+  if (src === "pending") return new NextResponse(null, { status: 404, headers: { "cache-control": STORY_CACHE_PENDING } });
 
   // O QR leva ao cardápio sem mesa, pelo mesmo endereço por onde a arte foi pedida.
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host;

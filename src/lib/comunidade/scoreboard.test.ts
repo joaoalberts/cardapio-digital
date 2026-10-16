@@ -260,4 +260,20 @@ describe("salesGoals (por noite e acumulado de 4 semanas)", () => {
     expect(g.month.ticket.hit).toBe(true);
     expect(g.month.interactions).toEqual({ perTable: 4 / 3, goal: 1.5, hit: false });
   });
+
+  it("ticket por mesa: dois pedidos da mesma mesa contam uma mesa (não uma por pedido)", () => {
+    const orders = [
+      // hoje: mesa t1 pede 2× (R$ 60 + R$ 60) e t2 1× (R$ 60) = R$ 180 em 2 mesas = R$ 90
+      order([line(6000)], { table_id: "t1", created_at: at("2026-10-16", "22:00") }),
+      order([line(6000)], { table_id: "t1", created_at: at("2026-10-16", "23:30") }),
+      order([line(6000)], { table_id: "t2", created_at: at("2026-10-16") }),
+      // 09/10: mesa t1 pede 2× R$ 50 = R$ 100 em 1 mesa
+      order([line(5000)], { table_id: "t1", created_at: at("2026-10-09", "22:00") }),
+      order([line(5000)], { table_id: "t1", created_at: at("2026-10-09", "23:30") }),
+    ];
+    const g = salesGoals(orders, [], goalNights("2026-10-16", TZ, "05:00"));
+    // Por mesa: R$ 90 contra R$ 100 = -10%, abaixo da meta. Contando por pedido daria
+    // R$ 60 contra R$ 50 = +20% e "meta batida".
+    expect(g.night.ticket).toEqual({ cents: 9000, baseline: 10_000, delta: -10, goal: 5, hit: false });
+  });
 });

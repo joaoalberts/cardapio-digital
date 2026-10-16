@@ -6,7 +6,7 @@ import { openStatus } from "@/lib/menu/hours";
 import type { OpeningHours } from "@/lib/menu/types";
 import { DAY_START_DEFAULT, currentPoll, pollPhase } from "./clock";
 import { communityOff } from "./off";
-import { buildPublicState, cacheControl, disabledState, parseResult } from "./public-state";
+import { buildPublicState, cacheControl, disabledState, needsFreshResult, parseResult } from "./public-state";
 import { VOTE_CAP_PER_RESTAURANT, VOTE_CAP_PER_TABLE, effectiveVotes } from "./tally";
 import type { CommunityHead, OptionId, PollOption, PollRow, PollTemplate, PostRow, PublicState, TvRow, VoteRow } from "./types";
 
@@ -221,12 +221,31 @@ export async function readPublicState(deps: VoteDeps, slug: string, before?: str
     const known = posts.some((p) => p.restaurant_id === head.id && p.status === "approved" && Date.parse(p.created_at) === cut);
     if (!known) return { ok: false, code: "invalid" };
   }
+  let agenda = polls;
   const cur = currentPoll(polls.filter((p) => p.restaurant_id === head.id), now);
   // Com o result gravado (votos da enquete já apagados ou a apagar), nem lê os votos.
-  const votes = cur && !cur.result
+  let votes = cur && !cur.result
     ? await deps.db.list<VoteRow>("community_votes", { restaurant_id: head.id, poll_id: cur.id }, { sort: "Id" })
     : [];
-  return { ok: true, state: buildPublicState({ head, open: true, polls, votes, posts, tvs, now, before }) };
+  // Encerrada, de antes da virada do dia e sem result no cache: o cron pode ter apagado parte
+  // dos votos. A linha é lida na hora, depois dos votos: o cron grava o result antes de
+  // apagar, então, se ela ainda vem sem result, os votos lidos acima estavam inteiros.
+  if (cur && needsFreshResult(cur, head, now)) {
+    const fresh = toPoll(await deps.db.first<Raw>("community_polls", { uid: cur.id, restaurant_id: head.id }));
+    if (fresh?.result && fresh.id === cur.id && fresh.restaurant_id === head.id) {
+      agenda = polls.map((p) => (p.id === fresh.id ? fresh : p));
+      votes = [];
+    }
+  }
+  return { ok: true, state: buildPublicState({ head, open: true, polls: agenda, votes, posts, tvs, now, before }) };
+}
+
+// Parâmetros da GET agregada: só ?antes=, uma vez. Qualquer outro (ou repetido) é recusado:
+// cada URL diferente seria uma entrada nova na CDN e cairia na função e no banco.
+export function parsePublicQuery(sp: URLSearchParams): { antes: string | null } | null {
+  const keys = [...sp.keys()];
+  if (keys.some((k) => k !== "antes") || keys.length > 1) return null;
+  return { antes: sp.get("antes") };
 }
 
 // Resposta da GET agregada (a rota só confere o slug e copia status, corpo e cache).

@@ -498,7 +498,7 @@ const h = vi.hoisted(() => ({
   list: vi.fn<(t: string, w?: unknown) => Promise<unknown[]>>(async () => []),
   removeIds: vi.fn<(t: string, ids: number[]) => Promise<void>>(async () => {}),
   updateRows: vi.fn<(t: string, rows: unknown[]) => Promise<void>>(async () => {}),
-  revalidateTag: vi.fn<(tag: string, profile: string) => void>(() => {}),
+  revalidateTag: vi.fn<(tag: string, profile: string | { expire?: number }) => void>(() => {}),
   removeFiles: vi.fn<(paths: unknown[]) => Promise<void>>(async () => {}),
 }));
 vi.mock("@/lib/db/nocodb", () => ({ list: h.list, removeIds: h.removeIds, updateRows: h.updateRows }));
@@ -570,7 +570,7 @@ describe("GET /api/cron/comunidade", () => {
     expect(h.removeIds).toHaveBeenCalledWith("community_votes", [7]);
   });
 
-  it("grava o result e invalida o cache do conteúdo do restaurante (comunidade:<id>)", async () => {
+  it("grava o result e expira na hora o cache do conteúdo do restaurante (comunidade:<id>), sem servir o velho", async () => {
     vi.stubEnv("CRON_SECRET", SECRET);
     vi.stubEnv("COMMUNITY_OFF", "");
     h.updateRows.mockClear();
@@ -581,7 +581,8 @@ describe("GET /api/cron/comunidade", () => {
     const res = await call(`Bearer ${SECRET}`);
     expect(res.status).toBe(200);
     expect(h.updateRows).toHaveBeenCalledWith("community_polls", [{ Id: 3, result: { a: 100, b: 0, c: 0, has_votes: true, winner: "a" } }]);
-    expect(h.revalidateTag).toHaveBeenCalledWith(`comunidade:${R1}`, "max");
+    // "max" serviria a agenda velha (sem result) com os votos já apagados: { expire: 0 } não.
+    expect(h.revalidateTag).toHaveBeenCalledWith(`comunidade:${R1}`, { expire: 0 });
   });
 
   it("falha numa tabela ou em todas: 500 com a contagem", async () => {

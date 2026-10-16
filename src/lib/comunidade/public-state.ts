@@ -133,6 +133,17 @@ export function publicPoll(p: PollRow, votes: VoteRow[], now: Date): PublicPoll 
   };
 }
 
+// Enquete encerrada, sem result e que começou antes da virada do dia atual da Comunidade:
+// a retenção da manhã apaga os votos dela criados antes da virada logo depois de gravar o
+// result, e a agenda em cache (de cada instância) pode seguir sem ele. Contar os votos que
+// sobraram daria um resultado errado ("Deu C 100%"), então quem mostra a enquete lê a linha
+// direto do banco. Enquete que começou hoje ainda tem todos os votos: segue o cache.
+export function needsFreshResult(p: PollRow, head: CommunityHead, now: Date): boolean {
+  if (p.result || pollPhase(p, now) !== "closed") return false;
+  const { from } = dayBounds(communityDay(now, head.timezone, head.day_start), head.timezone, head.day_start);
+  return ms(p.starts_at) < from.getTime();
+}
+
 function publicPost(p: PostRow): PublicPost {
   return { id: p.id, item_id: p.item_id, thumb: p.thumb_path, photo: p.photo_path, on_tv: p.on_tv === true, created_at: p.created_at };
 }

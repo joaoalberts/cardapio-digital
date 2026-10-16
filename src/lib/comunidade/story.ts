@@ -9,7 +9,7 @@ import { houseHighlight, leaderOf, questionText } from "./client-logic";
 import { pollPhase } from "./clock";
 import { ct, ctf } from "./i18n";
 import { communityOff } from "./off";
-import { publicPoll } from "./public-state";
+import { needsFreshResult, publicPoll } from "./public-state";
 import type { CommunityHead, OptionId, PollRow, PostRow, PublicPoll, TvRow, VoteRow } from "./types";
 
 // Enquete aberta: o resultado ainda muda, 60 s na CDN. Encerrada: 1 dia. Foto da casa: 1 h,
@@ -17,6 +17,9 @@ import type { CommunityHead, OptionId, PollRow, PostRow, PublicPoll, TvRow, Vote
 export const STORY_CACHE_LIVE = "public, max-age=0, s-maxage=60";
 export const STORY_CACHE_DONE = "public, max-age=0, s-maxage=86400";
 export const STORY_CACHE_POST = "public, max-age=0, s-maxage=3600";
+// Enquete de antes da virada do dia ainda sem result no banco (o cron não rodou ou falhou):
+// sem arte (404) por 10 s, para a arte certa sair logo que o result for gravado.
+export const STORY_CACHE_PENDING = "public, max-age=0, s-maxage=10";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // Cor padrão do cardápio (menu.css, --accent) quando a casa não escolheu uma.
@@ -34,6 +37,8 @@ export type StoryDeps = {
   getHead: (slug: string) => Promise<CommunityHead | null>;
   getContent: (rid: string) => Promise<{ polls: PollRow[]; posts: PostRow[]; tvs: TvRow[] }>;
   getVotes: (pollId: string) => Promise<VoteRow[]>;
+  // A linha da enquete lida direto do banco, sem cache (ver needsFreshResult).
+  getPoll: (pollId: string) => Promise<PollRow | null>;
   getMenu: (slug: string) => Promise<PublicMenu | null>;
   now?: () => Date;
   off?: () => boolean;
@@ -74,7 +79,7 @@ export async function resolveStory(
   d: StoryDeps,
   slug: string,
   q: { poll?: string | null; post?: string | null },
-): Promise<StorySource | null> {
+): Promise<StorySource | "pending" | null> {
   const pollId = q.poll ?? null;
   const postId = q.post ?? null;
   if ((pollId === null) === (postId === null)) return null; // exatamente um dos dois
@@ -89,8 +94,15 @@ export async function resolveStory(
   if (pollId) {
     // Da agenda em cache (terminadas há até 24 h ou futuras), só deste restaurante. Agendada
     // ou sem votos não tem resultado para mostrar.
-    const row = polls.find((p) => p.id === pollId && p.restaurant_id === head.id);
+    let row = polls.find((p) => p.id === pollId && p.restaurant_id === head.id);
     if (!row || pollPhase(row, now) === "scheduled") return null;
+    // Votos de antes da virada podem já ter saído: só com o result da linha lida na hora.
+    // Ainda sem ele, "pending" (404 de cache curto), nunca a conta com os votos que sobraram.
+    if (needsFreshResult(row, head, now)) {
+      const fresh = await d.getPoll(row.id);
+      if (!fresh?.result || fresh.id !== row.id || fresh.restaurant_id !== head.id) return "pending";
+      row = fresh;
+    }
     // Com o result gravado pelo cron (os votos duram 1 dia), nem lê os votos.
     const votes = row.result ? [] : (await d.getVotes(row.id)).filter((v) => v.restaurant_id === head.id && v.poll_id === row.id);
     const pub = publicPoll(row, votes, now);

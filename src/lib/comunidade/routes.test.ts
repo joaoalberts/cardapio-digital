@@ -325,6 +325,17 @@ describe("GET agregada", () => {
     h.getCommunityContent.mockResolvedValue({ polls: [], posts: [], tvs: [] });
   });
 
+  it("parâmetro além de ?antes= (ou antes repetido): 400 no-store, sem ler o banco", async () => {
+    for (const qs of ["?x=1", "?_=1697000000", "?antes=a&antes=b", "?antes=2026-10-16T22:55:00.000Z&v=2"]) {
+      h.getCommunityContent.mockClear();
+      const res = await get("forno", qs);
+      expect(res.status).toBe(400);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(h.getCommunityContent).not.toHaveBeenCalled();
+    }
+    expect((await get("forno")).status).toBe(200);
+  });
+
   it("slug inexistente: 404 com 60 s de CDN", async () => {
     const res = await get("nada");
     expect(res.status).toBe(404);
