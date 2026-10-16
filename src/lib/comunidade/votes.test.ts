@@ -2,7 +2,17 @@ import { describe, expect, it, vi } from "vitest";
 import type { OpeningHours } from "@/lib/menu/types";
 import { disabledState } from "./public-state";
 import type { CommunityHead, OptionId, PollRow, PostRow } from "./types";
-import { castVote, parseBefore, readPublicState, toContent, toHead, type CommunityDb, type VoteDeps } from "./votes";
+import {
+  PUBLIC_CACHE_ERROR,
+  answerPublicRead,
+  castVote,
+  parseBefore,
+  readPublicState as readResult,
+  toContent,
+  toHead,
+  type CommunityDb,
+  type VoteDeps,
+} from "./votes";
 
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const TZ = "America/Sao_Paulo";
@@ -290,9 +300,15 @@ describe("castVote", () => {
   });
 });
 
+// Os testes de estado olham só o estado; quem não for ok vira null.
+async function readPublicState(deps: VoteDeps, slug: string, before?: string) {
+  const r = await readResult(deps, slug, before);
+  return r.ok ? r.state : null;
+}
+
 describe("readPublicState", () => {
-  it("restaurante que não existe: null", async () => {
-    expect(await readPublicState(setup().deps, "nada")).toBeNull();
+  it("restaurante que não existe: not_found", async () => {
+    expect(await readResult(setup().deps, "nada")).toEqual({ ok: false, code: "not_found" });
   });
 
   it("desligada no restaurante ou pela chave geral: disabledState, sem ler agenda nem votos", async () => {
@@ -354,6 +370,79 @@ describe("readPublicState", () => {
     expect(all?.mural.map((p) => p.id)).toEqual([U(6001), U(6002), U(6003)]);
     const older = await readPublicState(s.deps, "forno", post(2).created_at);
     expect(older?.mural.map((p) => p.id)).toEqual([U(6003)]);
+  });
+
+  it("antes que não é o created_at de um post do conteúdo: invalid, sem ler votos", async () => {
+    const posts = [post(1), post(2), post(3)];
+    const s = setup({ posts });
+    s.seed(P_OPEN, "a", DEV, MESA_7);
+    for (const before of [iso(now - 2 * MIN + 1), iso(now - 90 * MIN), iso(now + MIN)]) {
+      expect(await readResult(s.deps, "forno", before)).toEqual({ ok: false, code: "invalid" });
+    }
+    expect(s.calls.list).toHaveLength(0);
+    // O do post 2 vale e lê os votos uma vez.
+    expect((await readResult(s.deps, "forno", post(2).created_at)).ok).toBe(true);
+    expect(s.calls.list).toHaveLength(1);
+  });
+
+  it("antes de um post de outro restaurante (mesmo que o cache erre) não vale", async () => {
+    const s = setup({ posts: [post(1)] });
+    s.getContent.mockResolvedValueOnce({ polls: [], posts: [post(1), post(5, { restaurant_id: "r2" })], tvs: [] });
+    expect(await readResult(s.deps, "forno", post(5).created_at)).toEqual({ ok: false, code: "invalid" });
+  });
+
+  it("antes com a Comunidade desligada ou o restaurante fechado: invalid (não há Mural para paginar)", async () => {
+    const before = post(1).created_at;
+    for (const s of [setup({ off: true }), setup({ head: head({ enabled: false }) }), setup({ head: head({ opening_hours: LUNCH_ONLY }) })]) {
+      expect(await readResult(s.deps, "forno", before)).toEqual({ ok: false, code: "invalid" });
+      expect(s.calls.list).toHaveLength(0);
+    }
+    // Sem antes, o estado desligado continua respondendo normal.
+    expect(await readResult(setup({ off: true }).deps, "forno")).toEqual({ ok: true, state: disabledState(NOW) });
+  });
+});
+
+describe("answerPublicRead (resposta da GET agregada)", () => {
+  it("200 com o cache do estado: 4 s com enquete aberta", async () => {
+    const s = setup();
+    const r = await answerPublicRead(s.deps, "forno", null);
+    expect(r.status).toBe(200);
+    expect(r.cache).toBe("public, max-age=0, s-maxage=4, stale-while-revalidate=4");
+    expect(r.body).toMatchObject({ enabled: true, open: true, poll: { closed: false } });
+  });
+
+  it("antes malformado ou que não bate com um post: 400 no-store", async () => {
+    const s = setup({ posts: [post(1)] });
+    for (const raw of ["ontem", "", iso(now - 7 * MIN)]) {
+      expect(await answerPublicRead(s.deps, "forno", raw)).toEqual({ status: 400, body: { ok: false, code: "invalid" }, cache: "no-store" });
+    }
+    // No formato do NocoDB, o mesmo instante do post vale.
+    const noco = post(1).created_at.replace("T", " ").replace(/\.\d+Z$/, "+00:00");
+    expect((await answerPublicRead(s.deps, "forno", noco)).status).toBe(200);
+  });
+
+  it("slug inexistente: 404 com 60 s de CDN", async () => {
+    expect(await answerPublicRead(setup().deps, "nada", null)).toEqual({
+      status: 404,
+      body: { ok: false, code: "not_found" },
+      cache: "public, max-age=0, s-maxage=60",
+    });
+  });
+
+  it("erro do banco: 503 com 5 s de CDN (nunca no-store), para a queda não virar enxurrada no NocoDB", async () => {
+    expect(PUBLIC_CACHE_ERROR).toBe("public, max-age=0, s-maxage=5");
+    const fail = async () => {
+      throw new Error("nocodb GET: 500");
+    };
+    const a = setup();
+    a.getContent.mockImplementationOnce(fail);
+    const b = setup();
+    b.deps.db.list = fail;
+    const c = setup();
+    c.deps.getHead = fail;
+    for (const s of [a, b, c]) {
+      expect(await answerPublicRead(s.deps, "forno", null)).toEqual({ status: 503, body: { ok: false, code: "error" }, cache: PUBLIC_CACHE_ERROR });
+    }
   });
 });
 

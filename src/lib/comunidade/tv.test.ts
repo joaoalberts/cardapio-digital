@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CommunityHead } from "./types";
 import {
+  PAIR_CODES_LIVE_MAX,
   PAIR_CODES_PER_HOUR,
   PAIR_CODE_TTL_MS,
   checkTv,
@@ -46,24 +47,34 @@ const HEX64 = /^[0-9a-f]{64}$/;
 type Where = Record<string, string | number | boolean | null>;
 type Raw = Record<string, unknown>;
 
+// Como o NocoDB: cada leitura é uma cópia (quem leu antes não vê o que mudou depois) e
+// cada linha nova ganha o "Id" numérico seguinte.
 function fakeDb(rows: Raw[] = []) {
   const tvs: Raw[] = rows.map((r) => ({ uid: r.id, ...r }));
   let n = 9000;
-  const calls = { insertOne: 0, update: [] as { w: Where; p: Raw }[] };
+  let nextId = 1000;
+  const calls = { insertOne: 0, list: 0, update: [] as { w: Where; p: Raw }[], remove: [] as Where[] };
+  // Corrida simulada: algo que outra instância grava logo depois deste insert.
+  let afterInsert: (() => void) | null = null;
   const match = (r: Raw, w: Where) => Object.entries(w).every(([k, v]) => (r[k] ?? null) === v);
   const db: TvDb = {
     async list(_t, w) {
-      return tvs.filter((r) => match(r, w)) as never;
+      calls.list++;
+      return tvs.filter((r) => match(r, w)).map((r) => ({ ...r })) as never;
     },
     async first(_t, w) {
-      return (tvs.find((r) => match(r, w)) ?? null) as never;
+      const r = tvs.find((x) => match(x, w));
+      return (r ? { ...r } : null) as never;
     },
     async insertOne(_t, row) {
       calls.insertOne++;
       const uid = U(++n);
-      const full = { uid, id: uid, created_at: noco(now), ...row };
+      const full = { Id: ++nextId, uid, id: uid, created_at: noco(now), ...row };
       tvs.push(full);
-      return full as never;
+      const hook = afterInsert;
+      afterInsert = null;
+      hook?.();
+      return { ...full } as never;
     },
     async update(_t, w, p) {
       calls.update.push({ w, p });
@@ -71,8 +82,15 @@ function fakeDb(rows: Raw[] = []) {
       for (const r of hit) Object.assign(r, p);
       return hit.length;
     },
+    async remove(_t, w) {
+      calls.remove.push(w);
+      const keep = tvs.filter((r) => !match(r, w));
+      const gone = tvs.length - keep.length;
+      tvs.splice(0, tvs.length, ...keep);
+      return gone;
+    },
   };
-  return { db, tvs, calls };
+  return { db, tvs, calls, onInsert: (f: () => void) => (afterInsert = f) };
 }
 
 function setup(o: { rows?: Raw[]; head?: CommunityHead | null; off?: boolean; at?: () => number; codes?: string[] } = {}) {
@@ -93,6 +111,7 @@ function setup(o: { rows?: Raw[]; head?: CommunityHead | null; off?: boolean; at
 
 // Linha de telão como o NocoDB a devolve.
 const tv = (n: number, over: Raw = {}): Raw => ({
+  Id: 100 + n,
   id: U(500 + n),
   restaurant_id: R1,
   label: null,
@@ -174,28 +193,93 @@ describe("requestPairCode", () => {
     expect(off.calls.insertOne + geral.calls.insertOne).toBe(0);
   });
 
-  it("o 6º código do restaurante na mesma hora: too_many, sem gravar", async () => {
+  it("sem teto por hora no restaurante: o 6º código da mesma hora sai (o limite por IP fica na rota)", async () => {
+    // 5 por hora agora é por IP e slug, na rota; aqui não há conta de códigos por hora.
     expect(PAIR_CODES_PER_HOUR).toBe(5);
     let t = now;
     const s = setup({ at: () => t });
-    for (let i = 0; i < 5; i++) {
-      const r = await requestPairCode(s.deps, "forno", { hash: await sha256Hex(`tv-${i}`) });
-      expect(r.ok).toBe(true);
+    for (let i = 0; i < 8; i++) {
+      expect((await requestPairCode(s.deps, "forno", { hash: await sha256Hex(`tv-${i}`) })).ok).toBe(true);
       t += 5 * MIN;
     }
-    // 25 min depois do 1º: os 5 ainda estão na mesma hora.
-    expect(await requestPairCode(s.deps, "forno", { hash: await sha256Hex("tv-5") })).toEqual({ ok: false, code: "too_many" });
-    expect(s.calls.insertOne).toBe(5);
-    // Uma hora depois do 1º, ele sai da conta e cabe um novo.
-    t = now + 60 * MIN + 1;
-    expect((await requestPairCode(s.deps, "forno", { hash: await sha256Hex("tv-6") })).ok).toBe(true);
+    expect(s.calls.insertOne).toBe(8);
   });
 
-  it("os códigos de outro restaurante não contam no teto", async () => {
-    const recent = Array.from({ length: 5 }, (_, i) => tv(i, { restaurant_id: R2, created_at: noco(now - MIN) }));
-    const s = setup({ rows: recent });
+  // 19 códigos vivos de TVs diferentes, com Id menor que qualquer linha nova.
+  const liveRows = (k: number, over: Raw = {}) =>
+    Array.from({ length: k }, (_, i) =>
+      tv(i, { pair_code: `LV${"ABCDEFGHJKLMNPQRSTUVWXYZ"[i]}222`, pair_expires_at: noco(now + 5 * MIN), secret_hash: `${i}`.padStart(64, "e"), created_at: noco(now - MIN), ...over }),
+    );
+
+  it("teto de 20 códigos vivos por restaurante: o 21º é too_many, sem gravar", async () => {
+    expect(PAIR_CODES_LIVE_MAX).toBe(20);
+    const s = setup({ rows: liveRows(19) });
     expect((await requestPairCode(s.deps, "forno", { hash: await sha256Hex(SECRET_A) })).ok).toBe(true);
-    expect((await requestPairCode(s.deps, "outro", { hash: await sha256Hex(SECRET_B) })).ok).toBe(false);
+    expect(await requestPairCode(s.deps, "forno", { hash: await sha256Hex(SECRET_B) })).toEqual({ ok: false, code: "too_many" });
+    expect(s.calls.insertOne).toBe(1);
+    expect(s.tvs).toHaveLength(20);
+  });
+
+  it("vencido, pareado e de outro restaurante não contam no teto de vivos", async () => {
+    const rows = [
+      ...liveRows(7, { pair_expires_at: noco(now - 1000) }),
+      ...liveRows(7, { paired_at: noco(now - MIN) }).map((r, i) => ({ ...r, Id: 200 + i, id: U(700 + i) })),
+      ...liveRows(20, { restaurant_id: R2 }).map((r, i) => ({ ...r, Id: 300 + i, id: U(800 + i) })),
+    ];
+    const s = setup({ rows });
+    expect((await requestPairCode(s.deps, "forno", { hash: await sha256Hex(SECRET_A) })).ok).toBe(true);
+    // No outro restaurante, os 20 vivos dele já enchem o teto.
+    expect(await requestPairCode(s.deps, "outro", { hash: await sha256Hex(SECRET_B) })).toEqual({ ok: false, code: "too_many" });
+  });
+
+  it("corrida: 3 TVs pedem juntas com 19 vivos; depois de gravar, cada uma reconta e só o menor Id fica", async () => {
+    const s = setup({ rows: liveRows(19) });
+    const hashes = await Promise.all([SECRET_A, SECRET_B, SECRET_C].map(sha256Hex));
+    const rs = await Promise.all(hashes.map((hash) => requestPairCode(s.deps, "forno", { hash })));
+    // As 3 viram 19 vivos e gravaram; na recontagem, só a primeira gravada (menor Id) cabe.
+    expect(s.calls.insertOne).toBe(3);
+    expect(rs.filter((r) => r.ok)).toHaveLength(1);
+    expect(rs.filter((r) => !r.ok)).toEqual([{ ok: false, code: "too_many" }, { ok: false, code: "too_many" }]);
+    const winner = rs.findIndex((r) => r.ok);
+    expect(s.tvs).toHaveLength(20);
+    expect(s.tvs.filter((r) => hashes.includes(r.secret_hash as string)).map((r) => r.secret_hash)).toEqual([hashes[winner]]);
+    // Cada perdedora apagou só a própria linha, no restaurante dela.
+    expect(s.calls.remove).toHaveLength(2);
+    for (const w of s.calls.remove) expect(w).toMatchObject({ restaurant_id: R1, uid: expect.any(String) });
+  });
+
+  it("mutação: na recontagem vale o Id, não a ordem da lista", async () => {
+    const hash = await sha256Hex(SECRET_A);
+    const other = (id: number) => ({
+      ...tv(90, { Id: id, pair_code: "QQQ222", pair_expires_at: noco(now + 5 * MIN), secret_hash: "d".repeat(64), created_at: noco(now) }),
+      uid: U(590),
+    });
+    // Outra TV grava ao mesmo tempo e o NocoDB dá a ela um Id MENOR que o desta, embora a
+    // linha dela chegue depois na lista: esta perde, apaga a própria linha e a outra fica.
+    const lose = setup({ rows: liveRows(19) });
+    lose.onInsert(() => lose.tvs.push(other(150)));
+    expect(await requestPairCode(lose.deps, "forno", { hash })).toEqual({ ok: false, code: "too_many" });
+    expect(lose.tvs.map((r) => r.secret_hash)).not.toContain(hash);
+    expect(lose.tvs).toHaveLength(20);
+    // Com Id MAIOR, esta fica (a outra se apaga na recontagem dela).
+    const win = setup({ rows: liveRows(19) });
+    win.onInsert(() => win.tvs.push(other(5_000)));
+    expect((await requestPairCode(win.deps, "forno", { hash })).ok).toBe(true);
+    expect(win.calls.remove).toHaveLength(0);
+  });
+
+  it("hash de uma linha revogada é recusado (invalid), sem gravar", async () => {
+    const hash = await sha256Hex(SECRET_A);
+    const revokedPaired = tv(1, { secret_hash: hash, paired_at: noco(now - 60 * MIN), revoked: true });
+    const s = setup({ rows: [revokedPaired] });
+    expect(await requestPairCode(s.deps, "forno", { hash })).toEqual({ ok: false, code: "invalid" });
+    const revokedPending = tv(2, { secret_hash: hash, pair_code: "K7M3QX", pair_expires_at: noco(now + 5 * MIN), revoked: true });
+    const p = setup({ rows: [revokedPending] });
+    expect(await requestPairCode(p.deps, "forno", { hash })).toEqual({ ok: false, code: "invalid" });
+    expect(s.calls.insertOne + p.calls.insertOne).toBe(0);
+    // Revogada em outro restaurante não atrapalha este.
+    const elsewhere = setup({ rows: [{ ...revokedPaired, restaurant_id: R2 }] });
+    expect((await requestPairCode(elsewhere.deps, "forno", { hash })).ok).toBe(true);
   });
 
   it("a mesma TV pedindo de novo com o código no prazo recebe o mesmo código, sem gravar outra linha", async () => {
@@ -271,6 +355,23 @@ describe("confirmPair", () => {
     const off = setup({ rows: [await pending()], off: true });
     expect((await confirmPair(off.deps, R1, "K7M3QX", "TV")).ok).toBe(false);
     expect(s.calls.update.length + off.calls.update.length).toBe(0);
+  });
+
+  it("restaurantId que não é uuid é recusado sem consultar o banco", async () => {
+    const s = setup({ rows: [await pending()] });
+    for (const rid of ["", "r1", "ABCDEF00-0000-4000-8000-000000000001", `${R1} `, `${R1}0`, "1,2", "(x)~or"]) {
+      expect((await confirmPair(s.deps, rid, "K7M3QX", "TV")).ok).toBe(false);
+    }
+    expect(s.calls.list).toBe(0);
+    expect(s.calls.update).toHaveLength(0);
+  });
+
+  it("o update leva o código no filtro: dois 'Parear' ao mesmo tempo, só um vence", async () => {
+    const s = setup({ rows: [await pending()] });
+    const [a, b] = await Promise.all([confirmPair(s.deps, R1, "K7M3QX", "Salão"), confirmPair(s.deps, R1, "K7M3QX", "Varanda")]);
+    expect([a.ok, b.ok].sort()).toEqual([false, true]);
+    expect(s.tvs[0].label).toBe(a.ok ? "Salão" : "Varanda");
+    for (const u of s.calls.update) expect(u.w).toMatchObject({ uid: U(501), restaurant_id: R1, pair_code: "K7M3QX" });
   });
 
   it("nome vazio fica sem nome; nome longo é cortado em 40 caracteres", async () => {

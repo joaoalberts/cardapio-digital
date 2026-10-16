@@ -144,6 +144,19 @@ describe("pedidos do aparelho e da cozinha", () => {
     expect(Object.keys(mine[0]).sort()).toEqual(["created_at", "id", "lines", "status", "table_label", "total_cents"]);
     expect(await listDeviceOrders(s.deps, "forno", "nao-e-uuid")).toEqual([]);
   });
+  it("Meus pedidos não mostra o pedido descartado (envio repetido ou oferta perdida)", async () => {
+    const s = setup();
+    // Dois envios simultâneos do mesmo pedido: um fica, o outro é fechado como descartado.
+    await Promise.all([createOrder(s.deps, "forno", body()), createOrder(s.deps, "forno", body())]);
+    expect(s.tables.orders.filter((o) => o.discarded)).toHaveLength(1);
+    const mine = await listDeviceOrders(s.deps, "forno", DEV);
+    expect(mine).toHaveLength(1);
+    expect(mine[0].id).toBe(s.tables.orders.find((o) => !o.discarded)?.id);
+    // Linha antiga sem a coluna (undefined) ou com false aparece.
+    const t = new Date(NOON.getTime() - 60_000).toISOString();
+    s.tables.orders.push({ uid: "x", id: "x", restaurant_id: "r1", device_id: DEV, status: "new", total_cents: 1, lines: [], table_label: "Mesa 7", created_at: t, discarded: false });
+    expect((await listDeviceOrders(s.deps, "forno", DEV)).map((o) => o.id)).toContain("x");
+  });
   it("Meus pedidos mostra só as últimas 6 h; created_at ilegível aparece", async () => {
     const s = setup();
     const at = (min: number) => new Date(NOON.getTime() - min * 60_000).toISOString();

@@ -218,9 +218,11 @@ export async function listDeviceOrders(deps: Deps, slug: string, device: string)
   if (!menu) return [];
   const now = (deps.now?.() ?? new Date()).getTime();
   const rows = await deps.db.list<OrderRow>("orders", { restaurant_id: menu.restaurant.id, device_id: device }, { sort: "-Id", limit: 20 });
-  // created_at ilegível não pode esconder o pedido do cliente.
+  // created_at ilegível não pode esconder o pedido do cliente. O descartado (envio repetido
+  // ou oferta perdida) foi fechado e saiu da cozinha: também não aparece em "Meus pedidos".
   return rows
     .filter((o) => {
+      if (o.discarded === true) return false;
       const t = Date.parse(o.created_at);
       return Number.isNaN(t) || now - t < RECENT_MS;
     })

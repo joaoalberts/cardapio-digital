@@ -9,15 +9,18 @@
 // Funções puras, com o banco, a cabeça e o relógio vindos de fora (molde de votes.ts);
 // sem nada server-only, para a página do telão poder usar sha256Hex.
 import type { CommunityHead } from "./types";
-import { communityOff } from "./votes";
+import { communityOff } from "./off";
 
-// O código vale 10 min; cada restaurante pede no máximo 5 por hora (janela móvel).
+// O código vale 10 min. Cada IP pede no máximo 5 por hora em cada restaurante (limitador
+// em memória na rota) e cada restaurante tem no máximo 20 códigos vivos ao mesmo tempo
+// (conferido aqui, no banco, antes e depois de gravar).
 export const PAIR_CODE_TTL_MS = 10 * 60_000;
 export const PAIR_CODES_PER_HOUR = 5;
-const HOUR_MS = 60 * 60_000;
+export const PAIR_CODES_LIVE_MAX = 20;
 const LABEL_MAX = 40;
 
 const HEX64 = /^[0-9a-f]{64}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const CODE = /^[A-Z2-9]{6}$/;
 // Sem I nem O, que na TV se confundem com 1 e 0. São 32 símbolos: um byte & 31 sorteia sem viés.
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -28,6 +31,7 @@ export type TvDb = {
   first<T>(t: "community_tvs", w: Where): Promise<T | null>;
   insertOne<T extends Record<string, unknown>>(t: "community_tvs", r: T): Promise<T & { id: string }>;
   update(t: "community_tvs", w: Where, p: Record<string, unknown>): Promise<number>;
+  remove(t: "community_tvs", w: Where): Promise<number>;
 };
 export type TvDeps = {
   db: TvDb;
@@ -63,6 +67,7 @@ export function randomPairCode(): string {
 
 type Raw = Record<string, unknown>;
 type TvLine = {
+  Id: number; // Id numérico do NocoDB (ordem de gravação); NaN se não veio
   id: string;
   restaurant_id: string;
   pair_code: string | null;
@@ -70,7 +75,6 @@ type TvLine = {
   secret_hash: string;
   paired: number; // NaN = ainda não pareada
   revoked: boolean;
-  created: number;
 };
 
 // O NocoDB devolve "AAAA-MM-DD HH:MM:SS+00:00"; o T no lugar do espaço vale em qualquer motor.
@@ -80,6 +84,7 @@ const iso = (t: number) => new Date(t).toISOString();
 function toLine(r: Raw): TvLine | null {
   if (typeof r.id !== "string" || !r.id || typeof r.restaurant_id !== "string" || !r.restaurant_id) return null;
   return {
+    Id: typeof r.Id === "number" && Number.isFinite(r.Id) ? r.Id : NaN,
     id: r.id,
     restaurant_id: r.restaurant_id,
     pair_code: typeof r.pair_code === "string" && r.pair_code ? r.pair_code : null,
@@ -87,7 +92,6 @@ function toLine(r: Raw): TvLine | null {
     secret_hash: typeof r.secret_hash === "string" ? r.secret_hash : "",
     paired: ms(r.paired_at),
     revoked: r.revoked === true,
-    created: ms(r.created_at),
   };
 }
 
@@ -98,8 +102,13 @@ async function lines(d: TvDeps, w: Where & { restaurant_id: string }): Promise<T
 }
 
 const isPaired = (l: TvLine) => Number.isFinite(l.paired);
-// Pendente com código no prazo: a única que o painel pode parear.
-const isLive = (l: TvLine, now: number) => !!l.pair_code && !l.revoked && !isPaired(l) && l.expires > now;
+// Código ocupando lugar no teto: com código, no prazo e ainda não pareada (revogada ou não).
+const holdsCode = (l: TvLine, now: number) => !!l.pair_code && !isPaired(l) && l.expires > now;
+// Pendente com código no prazo e não revogada: a única que o painel pode parear.
+const isLive = (l: TvLine, now: number) => holdsCode(l, now) && !l.revoked;
+// Ordem de gravação pelo Id do NocoDB; sem Id vai para o fim, e o uid desempata.
+const byId = (a: TvLine, b: TvLine) =>
+  (Number.isFinite(a.Id) ? a.Id : Infinity) - (Number.isFinite(b.Id) ? b.Id : Infinity) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 const isOff = (d: TvDeps) => (d.off ?? communityOff)();
 const nowMs = (d: TvDeps) => (d.now?.() ?? new Date()).getTime();
@@ -114,7 +123,11 @@ function parseHash(body: unknown): string | null {
 
 // Corpo { hash }: o SHA-256 do segredo da TV. Grava uma linha pendente no restaurante do
 // slug. A mesma TV pedindo de novo com o código ainda no prazo (recarregou a página)
-// recebe o mesmo código, sem gravar nem gastar o teto.
+// recebe o mesmo código, sem gravar nem gastar o teto. Hash de uma linha revogada deste
+// restaurante é recusado (invalid): a TV tem de gerar um segredo novo.
+// Teto: 20 códigos vivos por restaurante. Sem transação no NocoDB, a conta é refeita
+// depois de gravar: se a corrida passou do teto, ficam as 20 linhas de menor Id e esta
+// apaga a própria linha.
 export async function requestPairCode(d: TvDeps, slug: string, body: unknown): Promise<PairCodeResult> {
   const hash = parseHash(body);
   if (!hash) return { ok: false, code: "invalid" };
@@ -125,13 +138,12 @@ export async function requestPairCode(d: TvDeps, slug: string, body: unknown): P
 
   const now = nowMs(d);
   const all = await lines(d, { restaurant_id: head.id });
+  if (all.some((l) => l.secret_hash === hash && l.revoked)) return { ok: false, code: "invalid" };
   const live = all.filter((l) => isLive(l, now));
   const mine = live.filter((l) => l.secret_hash === hash).sort((a, b) => b.expires - a.expires)[0];
   if (mine?.pair_code) return { ok: true, code: mine.pair_code, expires_at: iso(mine.expires) };
 
-  // Data ilegível não conta (quem grava created_at é sempre o servidor).
-  const recent = all.filter((l) => now - l.created < HOUR_MS).length;
-  if (recent >= PAIR_CODES_PER_HOUR) return { ok: false, code: "too_many" };
+  if (all.filter((l) => holdsCode(l, now)).length >= PAIR_CODES_LIVE_MAX) return { ok: false, code: "too_many" };
 
   // Um código que ainda vale em outra TV do restaurante não se repete.
   const taken = new Set(live.map((l) => l.pair_code));
@@ -142,7 +154,7 @@ export async function requestPairCode(d: TvDeps, slug: string, body: unknown): P
 
   // Em segundos inteiros, que é o que o NocoDB guarda: a TV recebe o mesmo prazo de novo.
   const expires_at = iso(Math.floor((now + PAIR_CODE_TTL_MS) / 1000) * 1000);
-  await d.db.insertOne("community_tvs", {
+  const row = await d.db.insertOne("community_tvs", {
     restaurant_id: head.id,
     secret_hash: hash,
     pair_code: code,
@@ -150,6 +162,14 @@ export async function requestPairCode(d: TvDeps, slug: string, body: unknown): P
     revoked: false,
     created_at: iso(now),
   });
+
+  // Recontagem: entre a leitura e a gravação, outras TVs podem ter gravado também.
+  const held = (await lines(d, { restaurant_id: head.id })).filter((l) => holdsCode(l, now)).sort(byId);
+  const rank = held.findIndex((l) => l.id === row.id);
+  if (rank < 0 || rank >= PAIR_CODES_LIVE_MAX) {
+    await d.db.remove("community_tvs", { uid: row.id, restaurant_id: head.id });
+    return { ok: false, code: "too_many" };
+  }
   return { ok: true, code, expires_at };
 }
 
@@ -167,7 +187,7 @@ function cleanLabel(label: unknown): string | null {
 export async function confirmPair(d: TvDeps, restaurantId: string, code: string, label: string): Promise<ConfirmResult> {
   if (isOff(d)) return { ok: false, error: ERR_OFF };
   const c = typeof code === "string" ? code.replace(/\s+/g, "").toUpperCase() : "";
-  if (!CODE.test(c) || typeof restaurantId !== "string" || !restaurantId) return { ok: false, error: ERR_CODE };
+  if (!CODE.test(c) || typeof restaurantId !== "string" || !UUID.test(restaurantId)) return { ok: false, error: ERR_CODE };
 
   const now = nowMs(d);
   const found = (await lines(d, { restaurant_id: restaurantId, pair_code: c })).filter((l) => l.pair_code === c);
@@ -178,9 +198,10 @@ export async function confirmPair(d: TvDeps, restaurantId: string, code: string,
     return { ok: false, error: expired ? ERR_EXPIRED : ERR_CODE };
   }
 
+  // O código no filtro: dois "Parear" ao mesmo tempo, o segundo não acha mais a linha.
   const n = await d.db.update(
     "community_tvs",
-    { uid: live[0].id, restaurant_id: restaurantId },
+    { uid: live[0].id, restaurant_id: restaurantId, pair_code: c },
     { paired_at: iso(now), label: cleanLabel(label), pair_code: null },
   );
   return n ? { ok: true } : { ok: false, error: ERR_CODE };

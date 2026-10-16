@@ -5,7 +5,8 @@
 import { openStatus } from "@/lib/menu/hours";
 import type { OpeningHours } from "@/lib/menu/types";
 import { DAY_START_DEFAULT, currentPoll, pollPhase } from "./clock";
-import { buildPublicState, disabledState } from "./public-state";
+import { communityOff } from "./off";
+import { buildPublicState, cacheControl, disabledState } from "./public-state";
 import { VOTE_CAP_PER_RESTAURANT, VOTE_CAP_PER_TABLE, effectiveVotes } from "./tally";
 import type { CommunityHead, OptionId, PollOption, PollRow, PollTemplate, PostRow, PublicState, TvRow, VoteRow } from "./types";
 
@@ -29,9 +30,15 @@ export type VoteDeps = {
 export type VoteResult =
   | { ok: true; option: OptionId }
   | { ok: false; code: "invalid" | "not_found" | "disabled" | "table" | "closed" | "poll" | "too_many" };
+// not_found = slug inexistente; invalid = ?antes= que não é o created_at de um post do Mural.
+export type PublicRead = { ok: true; state: PublicState } | { ok: false; code: "not_found" | "invalid" };
+export type PublicAnswer = { status: 200 | 400 | 404 | 503; body: unknown; cache: string };
 
-// Chave geral: COMMUNITY_OFF=1 no ambiente desliga a Comunidade em todos os restaurantes.
-export const communityOff = () => process.env.COMMUNITY_OFF === "1";
+// Cache da GET agregada fora do estado: slug inexistente fica 60 s na CDN; erro do banco,
+// 5 s (nunca no-store: numa queda do NocoDB, o polling de todo mundo bateria na função).
+export const PUBLIC_CACHE_NOT_FOUND = "public, max-age=0, s-maxage=60";
+export const PUBLIC_CACHE_ERROR = "public, max-age=0, s-maxage=5";
+const NO_STORE = "no-store";
 
 // A agenda em cache guarda as enquetes que terminaram nas últimas 24 h e as futuras.
 export const POLL_WINDOW_MS = 24 * 60 * 60_000;
@@ -176,22 +183,49 @@ export function toContent(
 
 // ---------- Leitura agregada ----------
 
-// null = slug inexistente (a rota devolve 404). Os votos são lidos sem cache, só quando há
-// enquete no Palco (aberta ou encerrada há ≤ 15 min), em ordem de gravação.
-export async function readPublicState(deps: VoteDeps, slug: string, before?: string): Promise<PublicState | null> {
+// Os votos são lidos sem cache, só quando há enquete no Palco (aberta ou encerrada há
+// ≤ 15 min), em ordem de gravação. before (?antes= do Mural, já em ISO) só vale se for o
+// created_at de um post aprovado deste restaurante no conteúdo em cache: um valor qualquer
+// não chega à leitura dos votos. Desligada ou fechada não tem Mural, então before é invalid.
+export async function readPublicState(deps: VoteDeps, slug: string, before?: string): Promise<PublicRead> {
   const now = deps.now?.() ?? new Date();
-  if (isOff(deps)) return disabledState(now);
+  const paging = before !== undefined;
+  if (isOff(deps)) return paging ? { ok: false, code: "invalid" } : { ok: true, state: disabledState(now) };
   const head = await deps.getHead(slug);
-  if (!head) return null;
-  if (!head.enabled) return disabledState(now);
-  if (!isOpen(head, now)) return buildPublicState({ head, open: false, polls: [], votes: [], posts: [], tvs: [], now });
+  if (!head) return { ok: false, code: "not_found" };
+  if (paging && (!head.enabled || !isOpen(head, now))) return { ok: false, code: "invalid" };
+  if (!head.enabled) return { ok: true, state: disabledState(now) };
+  if (!isOpen(head, now)) {
+    return { ok: true, state: buildPublicState({ head, open: false, polls: [], votes: [], posts: [], tvs: [], now }) };
+  }
 
   const { polls, posts, tvs } = await deps.getContent(head.id);
+  if (paging) {
+    const cut = Date.parse(before);
+    const known = posts.some((p) => p.restaurant_id === head.id && p.status === "approved" && Date.parse(p.created_at) === cut);
+    if (!known) return { ok: false, code: "invalid" };
+  }
   const cur = currentPoll(polls.filter((p) => p.restaurant_id === head.id), now);
   const votes = cur
     ? await deps.db.list<VoteRow>("community_votes", { restaurant_id: head.id, poll_id: cur.id }, { sort: "Id" })
     : [];
-  return buildPublicState({ head, open: true, polls, votes, posts, tvs, now, before });
+  return { ok: true, state: buildPublicState({ head, open: true, polls, votes, posts, tvs, now, before }) };
+}
+
+// Resposta da GET agregada (a rota só confere o slug e copia status, corpo e cache).
+// rawBefore = ?antes= como veio na URL (null se ausente).
+export async function answerPublicRead(deps: VoteDeps, slug: string, rawBefore: string | null): Promise<PublicAnswer> {
+  const invalid: PublicAnswer = { status: 400, body: { ok: false, code: "invalid" }, cache: NO_STORE };
+  const before = rawBefore === null ? undefined : parseBefore(rawBefore);
+  if (before === null) return invalid;
+  try {
+    const r = await readPublicState(deps, slug, before);
+    if (r.ok) return { status: 200, body: r.state, cache: cacheControl(r.state) };
+    if (r.code === "invalid") return invalid;
+    return { status: 404, body: { ok: false, code: "not_found" }, cache: PUBLIC_CACHE_NOT_FOUND };
+  } catch {
+    return { status: 503, body: { ok: false, code: "error" }, cache: PUBLIC_CACHE_ERROR };
+  }
 }
 
 // ---------- Voto ----------

@@ -5,7 +5,7 @@
 // instância cair, perde-se no máximo 30 s de funil. Evento nunca invalida cache.
 import { communityDay } from "./clock";
 import type { CommunityHead, FunnelKey, TallyRow } from "./types";
-import { communityOff } from "./votes";
+import { communityOff } from "./off";
 
 // Intervalo mínimo entre duas gravações da mesma instância.
 export const TALLY_FLUSH_MS = 30_000;
