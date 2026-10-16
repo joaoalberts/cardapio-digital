@@ -59,10 +59,19 @@ function publicPoll(p: PollRow, votes: VoteRow[], now: Date): PublicPoll {
   const pct = percentages(counted, ids);
   const closed = pollPhase(p, now) === "closed";
   const has_votes = counted.length > 0;
-  // Maior porcentagem; no empate, a primeira opção. Sem votos não há vencedora.
+  // Vence a maior contagem efetiva (nunca a porcentagem já arredondada: com 101 votos,
+  // 50 e 51 dão 50% e 50%). No empate de contagem, a primeira opção. Sem votos não há
+  // vencedora. Como o maior resto é monotônico, ela também tem a maior porcentagem.
   let winner: OptionId | null = null;
   if (closed && has_votes) {
-    for (const id of ids) if (winner === null || pct[id] > pct[winner]) winner = id;
+    const counts = ids.map((id) => counted.filter((v) => v.option_id === id).length);
+    let best = -1;
+    for (let i = 0; i < ids.length; i++) {
+      if (counts[i] > best) {
+        best = counts[i];
+        winner = ids[i];
+      }
+    }
   }
   return {
     id: p.id,

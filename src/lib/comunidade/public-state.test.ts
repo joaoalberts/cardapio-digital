@@ -193,6 +193,14 @@ describe("buildPublicState: enquete", () => {
     expect(buildPublicState(input({ polls: [closed], votes: votes(1, 1, 1) })).poll?.winner).toBe("a");
   });
 
+  it("winner vem da contagem, não da porcentagem arredondada (votos 0, 50, 51)", () => {
+    // Com 101 votos o maior resto dá 50% a b e a c; quem teve 51 votos é que vence.
+    const closed = poll({ starts_at: iso(now - 20 * MIN), ends_at: iso(now - 2 * MIN) });
+    const s = buildPublicState(input({ polls: [closed], votes: votes(0, 50, 51) }));
+    expect(s.poll?.options.map((o) => o.pct)).toEqual([0, 50, 50]);
+    expect(s.poll?.winner).toBe("c");
+  });
+
   it("aberta não tem winner; encerrada sem votos também não", () => {
     expect(buildPublicState(input({ votes: votes(3, 0, 0) })).poll?.winner).toBeNull();
     const closed = poll({ starts_at: iso(now - 20 * MIN), ends_at: iso(now - 2 * MIN) });
