@@ -5,7 +5,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { cleanName, NAME_MAX } from "@/lib/apareca/name";
 import { FLOW_START, flowNext, inAppBrowser, PROBLEM_TEXT } from "@/lib/apareca/recording";
 import { uuid } from "@/lib/uuid";
-import { TvIcon } from "./invite";
+import { mineKey, pruneMine, TvIcon, type MineSaved } from "./invite";
 import { Recorder, type Clip } from "./recorder";
 
 // Tela do cliente: nome ou @ e aceite → gravação (recorder.tsx) → envio direto ao Mux → fila.
@@ -17,10 +17,11 @@ type Props = { slug: string; mesa: string; mesaLabel: string; name: string; logo
 
 type MyState = "sending" | "preparing" | "review" | "queue" | "on_tv" | "shown" | "not_shown" | "gone";
 type Status = { state: MyState; position: number | null; eta_ms: number | null; first_shown_at: string | null; download: string | null };
-type Mine = { id: string; device: string; expires_at: string; ext: "mp4" | "webm"; thumb: string | null; buzzed?: boolean };
+type Mine = MineSaved;
 
 const DEVICE_KEY = "cardapio-device";
 const POLL_MS = 8_000;
+const VIS_GAP_MS = 2_000; // minha escolha: trocar de aba várias vezes não vira rajada de consultas
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SEND_FAIL = "Não foi possível enviar. Tente de novo.";
 const SEND_TEXT: Record<string, string> = {
@@ -32,7 +33,6 @@ const SEND_TEXT: Record<string, string> = {
   off: "Os vídeos para a TV não estão disponíveis agora.",
 };
 
-const mineKey = (slug: string) => `apa-meu:${slug}`;
 
 const ls = {
   get(k: string): string | null {
@@ -54,18 +54,14 @@ const ls = {
   },
 };
 
+// O vídeo guardado neste aparelho, se ainda vale e é deste device (senão, a chave é apagada).
 function readMine(slug: string, device: string, now: number): Mine | null {
-  const raw = ls.get(mineKey(slug));
-  if (!raw) return null;
-  try {
-    const m = JSON.parse(raw) as Partial<Mine>;
-    const exp = typeof m.expires_at === "string" ? Date.parse(m.expires_at) : Number.NaN;
-    if (typeof m.id !== "string" || !UUID.test(m.id) || m.device !== device || !(exp > now)) throw new Error("velho");
-    return { id: m.id, device, expires_at: m.expires_at!, ext: m.ext === "webm" ? "webm" : "mp4", thumb: typeof m.thumb === "string" ? m.thumb : null, buzzed: m.buzzed === true };
-  } catch {
+  const m = pruneMine(slug, now);
+  if (m && m.device !== device) {
     ls.del(mineKey(slug));
     return null;
   }
+  return m;
 }
 
 // PUT do vídeo inteiro na URL assinada do Mux, com progresso (até 8 MB: um pedido só basta).
@@ -94,6 +90,7 @@ function etaText(ms: number | null): string | null {
 export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
   const [device, setDevice] = useState<string | null>(null);
   const [mine, setMine] = useState<Mine | null>(null);
+  const [thumb, setThumb] = useState<string | null>(null); // só na memória; recarregar mostra o ícone
   const [flow, dispatch] = useReducer(flowNext, FLOW_START);
   const [nick, setNick] = useState("");
   const [consentAt, setConsentAt] = useState<string | null>(null);
@@ -119,6 +116,11 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
       if (inApp && !m) dispatch({ type: "problem", problem: "in_app" });
     });
   }, [slug]);
+
+  // Cancelar (volta ao intro) esquece o envio aberto: o próximo leva o nome e o aceite de agora.
+  useEffect(() => {
+    if (flow.step === "intro") pending.current = null;
+  }, [flow.step]);
 
   // Um vídeo gravado por vez: o anterior é solto ao regravar e ao sair da tela.
   const onClip = useCallback((c: Clip | null) => {
@@ -168,8 +170,9 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
       }
       await putBlob(p.upload_url, c.blob, setProgress);
       pending.current = null;
-      const m: Mine = { id: p.id, device, expires_at: p.expires_at, ext: c.mime.includes("webm") ? "webm" : "mp4", thumb: c.thumb };
+      const m: Mine = { id: p.id, device, expires_at: p.expires_at, ext: c.mime.includes("webm") ? "webm" : "mp4" };
       ls.set(mineKey(slug), JSON.stringify(m));
+      setThumb(c.thumb);
       setMine(m);
       dispatch({ type: "sent" });
     } catch {
@@ -207,7 +210,7 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
     return (
       <main className="apa-page">
         {head}
-        <Queue slug={slug} mine={mine} clip={clip} onGone={forget} onBuzz={buzz} back={back} />
+        <Queue slug={slug} mine={mine} thumb={thumb} clip={clip} onGone={forget} onBuzz={buzz} back={back} />
       </main>
     );
   }
@@ -287,7 +290,10 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
           </span>
           <input
             value={nick}
-            onChange={(e) => setNick([...e.target.value].slice(0, NAME_MAX).join(""))}
+            onChange={(e) => {
+              pending.current = null; // nome novo: o próximo envio abre outro, com este nome
+              setNick([...e.target.value].slice(0, NAME_MAX).join(""));
+            }}
             placeholder="@seuperfil"
             autoComplete="nickname"
             autoCapitalize="none"
@@ -326,7 +332,7 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
           </svg>
           Abrir a câmera
         </button>
-        <p className="apa-fine">Seu vídeo só passa na TV depois que a equipe aprovar, e é apagado depois de algumas horas.</p>
+        <p className="apa-fine">Seu vídeo só passa na TV depois que a equipe aprovar, e é apagado no prazo definido pela casa (de 6 horas a 7 dias).</p>
       </form>
     </main>
   );
@@ -335,8 +341,8 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
 // ---------- Fila ----------
 
 function Queue({
-  slug, mine, clip, onGone, onBuzz, back,
-}: { slug: string; mine: Mine; clip: Clip | null; onGone: () => void; onBuzz: () => void; back: string }) {
+  slug, mine, thumb, clip, onGone, onBuzz, back,
+}: { slug: string; mine: Mine; thumb: string | null; clip: Clip | null; onGone: () => void; onBuzz: () => void; back: string }) {
   const [st, setSt] = useState<Status | null>(null);
   const buzzed = useRef(mine.buzzed === true);
 
@@ -344,8 +350,13 @@ function Queue({
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let done = false;
+    let inFlight = false;
+    let lastAt = 0;
     const tick = async () => {
-      if (!alive || done || document.hidden) return;
+      if (!alive || done || inFlight || document.hidden) return;
+      clearTimeout(timer);
+      inFlight = true;
+      lastAt = Date.now();
       try {
         const r = await fetch(`/api/apareca/${slug}/meu`, {
           method: "POST",
@@ -376,12 +387,18 @@ function Queue({
         }
       } catch {
         // rede caiu: tenta na próxima volta
+      } finally {
+        inFlight = false;
       }
+      // Um timer só: quem chega aqui agenda a próxima; voltar à aba durante um fetch não dobra.
+      clearTimeout(timer);
       if (alive && !done) timer = setTimeout(tick, POLL_MS);
     };
     const onVis = () => {
-      clearTimeout(timer);
-      if (!document.hidden) void tick();
+      // Escondida: a volta seguinte para sozinha. Visível: consulta na hora, a não ser que uma
+      // esteja em andamento ou tenha acabado de sair (o timer único segue valendo).
+      if (document.hidden || inFlight || Date.now() - lastAt < VIS_GAP_MS) return;
+      void tick();
     };
     void tick();
     document.addEventListener("visibilitychange", onVis);
@@ -436,7 +453,7 @@ function Queue({
   return (
     <section className={`apa-queue is-${tone}`} aria-live="polite">
       <div className="apa-thumb">
-        {mine.thumb ? <img src={mine.thumb} alt="Miniatura do seu vídeo" /> : <span aria-hidden><TvIcon /></span>}
+        {thumb ? <img src={thumb} alt="Miniatura do seu vídeo" /> : <span aria-hidden><TvIcon /></span>}
         {tone === "tv" && <i className="apa-pulse" aria-hidden />}
       </div>
       <h1 className="fd">{title}</h1>

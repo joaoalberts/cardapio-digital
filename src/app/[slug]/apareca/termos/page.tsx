@@ -92,9 +92,17 @@ async function Termos({ params }: { params: PageProps<"/[slug]/apareca/termos">[
               (NocoDB). {casa} é a responsável pelos dados (controladora) e o Cardápio Digital apenas opera o sistema para ela.
             </p>
 
+            <h2>Análise automática</h2>
+            <p>
+              Se a casa ligar a análise automática, três quadros (imagens paradas) do seu vídeo são enviados a um serviço de
+              inteligência artificial (Anthropic) só para a moderação, isto é, para conferir se o vídeo pode passar na TV. Esses
+              quadros não são usados para mais nada.
+            </p>
+
             <h2>Baixar o seu vídeo</h2>
             <p>
-              Você pode baixar o seu vídeo, sem moldura e com som, enquanto ele estiver guardado. Só este celular consegue baixar.
+              Você pode baixar o seu vídeo, sem moldura e com som, enquanto ele estiver guardado. O link de download é pessoal: não o
+              compartilhe. O vídeo aprovado passa nas TVs da casa, para quem estiver no salão.
             </p>
 
             <h2>Como pedir a remoção</h2>

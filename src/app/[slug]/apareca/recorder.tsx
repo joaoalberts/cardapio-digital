@@ -57,7 +57,9 @@ export function Recorder({ flow, dispatch, clip, onClip, onSend, progress, sendM
   const [liveOn, setLiveOn] = useState(false);
   const [muted, setMuted] = useState(true);
   const step = flow.step;
-  const needCamera = step === "camera" || step === "countdown" || step === "recording" || step === "review";
+  // A revisão e o envio usam o vídeo gravado: a câmera (e o microfone) desligam ao entrar na
+  // revisão, para o iOS voltar o som ao alto-falante normal, e só reabrem com "Regravar".
+  const needCamera = step === "camera" || step === "countdown" || step === "recording";
 
   // Abre a câmera ao entrar no palco e a desliga ao sair (envio, cancelar, problema).
   useEffect(() => {

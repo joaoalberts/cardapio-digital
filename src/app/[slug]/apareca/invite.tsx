@@ -12,11 +12,50 @@ import { useOrder } from "../order/order-context";
 
 type Head = { enabled?: unknown; open?: unknown };
 
+// "Meu vídeo" guardado no aparelho: só o mínimo (id, device, prazo, formato e se já vibrou).
+// Nunca a miniatura: o rosto fica só na memória da tela da fila.
+export type MineSaved = { id: string; device: string; expires_at: string; ext: "mp4" | "webm"; buzzed?: boolean };
+export const mineKey = (slug: string) => `apa-meu:${slug}`;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+// Lê a chave e a limpa: vencida ou torta é apagada; guardada com campos a mais (como a
+// miniatura de versões antigas) é regravada só com o mínimo.
+export function pruneMine(slug: string, now: number): MineSaved | null {
+  const k = mineKey(slug);
+  try {
+    const raw = localStorage.getItem(k);
+    if (!raw) return null;
+    let m: Partial<MineSaved> & Record<string, unknown>;
+    try {
+      m = JSON.parse(raw);
+    } catch {
+      m = {};
+    }
+    const exp = typeof m.expires_at === "string" ? Date.parse(m.expires_at) : Number.NaN;
+    if (typeof m.id !== "string" || !UUID.test(m.id) || typeof m.device !== "string" || !UUID.test(m.device) || !(exp > now)) {
+      localStorage.removeItem(k);
+      return null;
+    }
+    const clean: MineSaved = { id: m.id, device: m.device, expires_at: m.expires_at as string, ext: m.ext === "webm" ? "webm" : "mp4" };
+    if (m.buzzed === true) clean.buzzed = true;
+    const out = JSON.stringify(clean);
+    if (out !== raw) localStorage.setItem(k, out);
+    return clean;
+  } catch {
+    return null;
+  }
+}
+
 export function AparecaInvite() {
   const { table, slug } = useOrder();
   const [open, setOpen] = useState(false);
   const asked = useRef(false);
   const hasTable = !!table;
+
+  // Toda visita ao cardápio limpa o "meu vídeo" vencido deste restaurante.
+  useEffect(() => {
+    pruneMine(slug, Date.now());
+  }, [slug]);
 
   useEffect(() => {
     if (!hasTable || asked.current) return;
