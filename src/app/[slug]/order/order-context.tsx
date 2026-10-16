@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { uuid } from "@/lib/uuid";
+import type { Origin } from "@/lib/comunidade/types";
 import type { MenuItem, PublicMenu } from "@/lib/menu/types";
 import { tf, t as tr } from "@/lib/menu/i18n";
 import { formatPrice, thumbSrc } from "@/lib/menu/media";
@@ -11,12 +12,14 @@ import {
   type CartLine, type NewLine,
 } from "@/lib/orders/cart";
 import type { CreateResult, PublicOrder } from "@/lib/orders/service";
+import { readTableMemory, tableMemoryKey } from "@/lib/orders/table-memory";
 import { useDeviceOrders } from "./use-device-orders";
 import { flyTo } from "./fly";
 
 export type Table = { code: string; label: string };
+// origin: o prato veio do "Pedir também" da Comunidade; a folha leva a origem até o add.
 export type SheetState =
-  | { kind: "item"; item: MenuItem; focusNote: boolean; edit: CartLine | null; draft?: { option: string | null; note: string }; qty?: number }
+  | { kind: "item"; item: MenuItem; focusNote: boolean; edit: CartLine | null; draft?: { option: string | null; note: string }; qty?: number; origin?: Origin }
   | { kind: "cart"; tab: "cart" | "orders" }
   | null;
 export type FlashState = { id: number; label: string; text: string; img: string | null; tone: "added" | "ok" } | null;
@@ -30,12 +33,15 @@ export type PickState = {
   swap: { key: string; side: "item" | "half" } | null;
   fromSheet?: boolean; // troca começada na folha do prato (Editar > Observação): desistir volta a ela
   qty?: number; // quantidade escolhida no story
+  origin?: Origin; // meio a meio começado no "Pedir também" da Comunidade
 } | null;
 
 type OrderApi = {
   enabled: boolean;
   lang: string;
+  slug: string;
   table: Table | null;
+  device: string | null; // id anônimo deste celular (null até ler o localStorage)
   menu: PublicMenu | null;
   lines: CartLine[];
   sheet: SheetState;
@@ -57,7 +63,7 @@ type OrderApi = {
   replace: (key: string, l: NewLine) => void;
   setQty: (key: string, qty: number) => void;
   remove: (key: string) => void;
-  openItem: (item: MenuItem, opts?: { focusNote?: boolean; edit?: CartLine; qty?: number }) => void;
+  openItem: (item: MenuItem, opts?: { focusNote?: boolean; edit?: CartLine; qty?: number; origin?: Origin }) => void;
   openCart: (tab?: "cart" | "orders") => void;
   closeSheet: () => void;
   send: () => Promise<SendOutcome>;
@@ -133,6 +139,19 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
     }
     queueMicrotask(() => setDevice(d)); // lê o localStorage só no cliente; fora do corpo do efeito
   }, []);
+
+  // Mesa lembrada (4 h): sem ?mesa= na URL, volta a mesa do último QR lido neste restaurante.
+  // Com ?mesa=, quem decide é o servidor (TableBridge), mesmo que a mesa não exista mais.
+  // Se o TableBridge já tiver posto a mesa, ela fica.
+  useEffect(() => {
+    let hasQr = false;
+    try {
+      hasQr = new URLSearchParams(location.search).has("mesa");
+    } catch {}
+    if (hasQr) return;
+    const remembered = readTableMemory(store.get(tableMemoryKey(slug)), Date.now());
+    if (remembered) queueMicrotask(() => setTable((cur) => cur ?? remembered));
+  }, [slug]);
 
   // Carrinho guardado por restaurante e mesa (6 h).
   useEffect(() => {
@@ -276,7 +295,12 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
           mesa: table.code,
           device,
           ref: refAttempt.current,
-          lines: lines.map(({ item, option, half, qty, note, claim }) => (claim ? { item, option, half, qty, note, claim } : { item, option, half, qty, note })),
+          lines: lines.map(({ item, option, half, qty, note, claim, origin, origin_ref, origin_at }) => ({
+            item, option, half, qty, note,
+            ...(claim ? { claim } : {}),
+            // A origem da Comunidade vai junto; o servidor confere a janela e o restaurante.
+            ...(origin && origin_ref && origin_at != null ? { origin, origin_ref, origin_at } : {}),
+          })),
         }),
       });
       res = (await r.json().catch(() => null)) as CreateResult | null;
@@ -338,7 +362,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       }
       setEditing(true);
     } else {
-      add({ item: p.keep.id, option: p.option, half: c.id, qty: p.qty ?? 1, note: p.note });
+      add({ item: p.keep.id, option: p.option, half: c.id, qty: p.qty ?? 1, note: p.note, ...(p.origin ?? {}) });
     }
     setSheet({ kind: "cart", tab: "cart" });
   };
@@ -346,7 +370,9 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
   const api: OrderApi = {
     enabled,
     lang,
+    slug,
     table,
+    device,
     menu,
     lines,
     sheet,
@@ -373,7 +399,8 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       setLines((c) => setLineQty(c, key, qty));
     },
     remove,
-    openItem: (item, opts) => setSheet({ kind: "item", item, focusNote: !!opts?.focusNote, edit: opts?.edit ?? null, qty: opts?.qty }),
+    openItem: (item, opts) =>
+      setSheet({ kind: "item", item, focusNote: !!opts?.focusNote, edit: opts?.edit ?? null, qty: opts?.qty, ...(opts?.origin ? { origin: opts.origin } : {}) }),
     openCart: (tab = "cart") => {
       setPick(null);
       setCartMin(false);
@@ -402,7 +429,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       else if (p?.swap) {
         setEditing(true);
         setSheet({ kind: "cart", tab: "cart" });
-      } else if (p) setSheet({ kind: "item", item: p.keep, focusNote: false, edit: null, draft: { option: p.option, note: p.note } });
+      } else if (p) setSheet({ kind: "item", item: p.keep, focusNote: false, edit: null, draft: { option: p.option, note: p.note }, ...(p.origin ? { origin: p.origin } : {}) });
     },
     canPair,
     pair,

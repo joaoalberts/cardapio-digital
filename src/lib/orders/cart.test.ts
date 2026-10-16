@@ -130,3 +130,69 @@ describe("oferta relâmpago no carrinho", () => {
     expect(back[0].claim ?? null).toBeNull();
   });
 });
+
+describe("origem da Comunidade no carrinho", () => {
+  const POLL = "00000000-0000-4000-8000-000000000901";
+  const POST = "00000000-0000-4000-8000-000000000902";
+  const palco: NewLine = { ...smash, origin: "comunidade_palco", origin_ref: POLL, origin_at: 5000 };
+  const mural: NewLine = { ...smash, origin: "comunidade_mural", origin_ref: POST, origin_at: 7000 };
+  const originOf = (l: NewLine) => [l.origin ?? null, l.origin_ref ?? null, l.origin_at ?? null];
+
+  it("a origem não entra na chave da linha", () => {
+    expect(lineKey(palco)).toBe(lineKey(smash));
+    expect(lineKey(mural)).toBe(lineKey(palco));
+  });
+  it("com origem sobre uma linha igual sem origem: soma e fica sem origem (vale o primeiro toque)", () => {
+    const c = addLine(addLine([], smash), palco);
+    expect(c).toHaveLength(1);
+    expect(c[0].qty).toBe(2);
+    expect(originOf(c[0])).toEqual([null, null, null]);
+  });
+  it("sem origem sobre uma linha igual com origem: soma e mantém a origem", () => {
+    const c = addLine(addLine([], palco), smash);
+    expect(c).toHaveLength(1);
+    expect(c[0].qty).toBe(2);
+    expect(originOf(c[0])).toEqual(["comunidade_palco", POLL, 5000]);
+  });
+  it("outra origem sobre uma linha com origem: mantém a primeira", () => {
+    const c = addLine(addLine([], palco), mural);
+    expect(originOf(c[0])).toEqual(["comunidade_palco", POLL, 5000]);
+  });
+  it("Foco 5: recarregar a página mantém origin, origin_ref e origin_at", () => {
+    const c = addLine(addLine([], palco), { ...mural, item: "bacon" });
+    const back = parseStoredCart(serializeCart(c, 1000), 2000);
+    expect(back).toEqual(c);
+    expect(originOf(back[0])).toEqual(["comunidade_palco", POLL, 5000]);
+    expect(originOf(back[1])).toEqual(["comunidade_mural", POST, 7000]);
+  });
+  it("origem malformada no armazenamento cai inteira; a linha fica", () => {
+    const raw = (o: Record<string, unknown>) => JSON.stringify({ v: 1, savedAt: 0, lines: [{ ...smash, key: "x", ...o }] });
+    for (const bad of [
+      { origin: "comunidade_vip", origin_ref: POLL, origin_at: 5 },
+      { origin: "comunidade_palco", origin_ref: 7, origin_at: 5 },
+      { origin: "comunidade_palco", origin_ref: POLL, origin_at: "5" },
+      { origin: "comunidade_palco", origin_ref: POLL },
+    ]) {
+      const back = parseStoredCart(raw(bad), 0);
+      expect(back).toHaveLength(1);
+      expect(originOf(back[0])).toEqual([null, null, null]);
+    }
+  });
+  it("editar a linha (observação, tamanho ou sabor) não perde a origem", () => {
+    const c = addLine([], palco);
+    const r = replaceLine(c, c[0].key, { ...smash, note: "bem passado" });
+    expect(r[0].note).toBe("bem passado");
+    expect(originOf(r[0])).toEqual(["comunidade_palco", POLL, 5000]);
+  });
+  it("editar até juntar com outra linha: fica a origem da linha que já estava lá", () => {
+    const c = addLine(addLine([], smash), { ...palco, note: "x" });
+    const r = replaceLine(c, c[1].key, { ...smash });
+    expect(r).toHaveLength(1);
+    expect(originOf(r[0])).toEqual([null, null, null]);
+  });
+  it("remover e desfazer volta com a origem", () => {
+    const c = addLine([], palco);
+    const { cart, removed } = removeLine(c, c[0].key);
+    expect(originOf(restoreLine(cart, removed!)[0])).toEqual(["comunidade_palco", POLL, 5000]);
+  });
+});

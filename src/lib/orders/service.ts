@@ -1,5 +1,6 @@
 // Pedidos: criar (pelo celular do cliente), listar (cliente e cozinha) e mudar o status.
 // O banco vem de fora (deps.db): no app é o NocoDB; nos testes, um banco em memória.
+import type { Origin } from "@/lib/comunidade/types";
 import { openStatus } from "@/lib/menu/hours";
 import type { PublicMenu } from "@/lib/menu/types";
 import { MAX_LINES, priceCart, type CartLineInput, type ClaimRef, type LineError, type PricedLine } from "./pricing";
@@ -26,14 +27,16 @@ export type OrderRow = {
   client_ref: string;
   created_at: string;
   status_at: string | null;
+  discarded?: boolean; // fechado num descarte (envio repetido ou oferta perdida): fora do placar
 };
 export type PublicOrder = Pick<OrderRow, "id" | "status" | "total_cents" | "lines" | "created_at" | "table_label">;
 
 type Where = Record<string, string | number | boolean | null>;
 type OrderTable = "orders" | "dining_tables" | "special_claims";
+type OriginTable = "community_polls" | "community_posts";
 export type OrdersDb = {
   list<T>(table: OrderTable, where: Where, opts?: { sort?: string; limit?: number }): Promise<T[]>;
-  first<T>(table: OrderTable, where: Where): Promise<T | null>;
+  first<T>(table: OrderTable | OriginTable, where: Where): Promise<T | null>;
   insertOne<T extends Record<string, unknown>>(table: "orders", row: T): Promise<T & { id: string }>;
   update(table: "orders" | "special_claims", where: Where, patch: Record<string, unknown>): Promise<number>;
 };
@@ -50,8 +53,22 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MESA = /^[A-Z2-9]{6}$/;
 const RECENT_MS = 6 * 60 * 60 * 1000;
 const CHANGED = "Esse pedido já mudou. Atualize a tela.";
+// Origem da Comunidade: vale até 2 h depois do toque. O relógio do celular pode estar até
+// 1 min adiantado; mais que isso no futuro, a origem cai.
+export const ORIGIN_WINDOW_MS = 2 * 60 * 60 * 1000;
+const ORIGIN_SKEW_MS = 60_000;
+// Cada origem diferente custa uma consulta ao banco; um pedido forjado não pode gastar 30.
+const ORIGIN_MAX_REFS = 10;
+const ORIGIN_TABLE: Record<Origin["origin"], OriginTable> = { comunidade_palco: "community_polls", comunidade_mural: "community_posts" };
 
 const isUuid = (v: unknown): v is string => typeof v === "string" && UUID.test(v);
+const isOrigin = (v: unknown): v is Origin["origin"] => typeof v === "string" && Object.hasOwn(ORIGIN_TABLE, v);
+
+// Origem inválida cai em silêncio e a linha segue: a origem só mede, não pode recusar o pedido.
+function parseOrigin(l: Record<string, unknown>): Origin | null {
+  if (!isOrigin(l.origin) || !isUuid(l.origin_ref) || typeof l.origin_at !== "number" || !Number.isFinite(l.origin_at)) return null;
+  return { origin: l.origin, origin_ref: l.origin_ref, origin_at: l.origin_at };
+}
 
 // Só o formato; preço, disponibilidade e limites ficam com priceCart.
 export function parseCreateInput(body: unknown): CreateInput | null {
@@ -72,9 +89,31 @@ export function parseCreateInput(body: unknown): CreateInput | null {
     if (option !== null && (typeof option !== "string" || option.length > 40)) return null;
     if (half !== null && !isUuid(half)) return null;
     if (note !== null && (typeof note !== "string" || note.length > 1000)) return null;
-    lines.push(claim ? { item: l.item, option, half, qty: l.qty, note, claim } : { item: l.item, option, half, qty: l.qty, note });
+    const line: CartLineInput = claim ? { item: l.item, option, half, qty: l.qty, note, claim } : { item: l.item, option, half, qty: l.qty, note };
+    lines.push({ ...line, ...parseOrigin(l) });
   }
   return { mesa: b.mesa, device: b.device, ref: b.ref, lines };
+}
+
+// A origem fica só se o toque foi há no máximo 2 h e se a enquete ou o post é deste
+// restaurante (uma consulta por origem distinta). Fora disso, a linha vai sem origem.
+async function checkOrigins(db: OrdersDb, restaurantId: string, input: CartLineInput[], priced: PricedLine[], now: Date) {
+  const t = now.getTime();
+  const tag = (l: CartLineInput) => `${l.origin}:${l.origin_ref}`;
+  const inWindow = (l: CartLineInput) =>
+    !!l.origin && !!l.origin_ref && typeof l.origin_at === "number" && l.origin_at <= t + ORIGIN_SKEW_MS && t - l.origin_at <= ORIGIN_WINDOW_MS;
+  const candidates = [...new Map(input.filter(inWindow).map((l) => [tag(l), l])).values()].slice(0, ORIGIN_MAX_REFS);
+  const valid = new Set<string>();
+  for (const l of candidates) {
+    const row = await db.first(ORIGIN_TABLE[l.origin!], { uid: l.origin_ref!, restaurant_id: restaurantId });
+    if (row) valid.add(tag(l));
+  }
+  // priceCart só devolve ok com uma linha por entrada, na mesma ordem.
+  return priced.map((p, i) => {
+    const { origin, origin_ref, ...rest } = p;
+    const l = input[i];
+    return origin && origin_ref && inWindow(l) && valid.has(tag(l)) ? { ...rest, origin, origin_ref } : rest;
+  });
 }
 
 const toPublic = (o: OrderRow): PublicOrder => ({
@@ -123,6 +162,7 @@ export async function createOrder(deps: Deps, slug: string, body: unknown): Prom
 
   const priced = priceCart(menu, input.lines, now, claims);
   if (!priced.ok) return { ok: false, code: "lines", errors: priced.errors };
+  const lines = input.lines.some((l) => l.origin) ? await checkOrigins(deps.db, r.id, input.lines, priced.lines, now) : priced.lines;
 
   const row = await deps.db.insertOne("orders", {
     restaurant_id: r.id,
@@ -130,7 +170,7 @@ export async function createOrder(deps: Deps, slug: string, body: unknown): Prom
     table_label: table.label,
     status: "new",
     open: true,
-    lines: priced.lines,
+    lines,
     total_cents: priced.total_cents,
     device_id: input.device,
     client_ref: input.ref,
@@ -147,6 +187,7 @@ export async function createOrder(deps: Deps, slug: string, body: unknown): Prom
       open: false,
       status: "delivered",
       status_at: now.toISOString(),
+      discarded: true,
     });
     return winner.device_id === input.device ? { ok: true, order: toPublic(winner) } : { ok: false, code: "invalid" };
   }
@@ -161,7 +202,7 @@ export async function createOrder(deps: Deps, slug: string, body: unknown): Prom
       return first && first.id !== mine.id;
     });
     if (lost.length) {
-      await deps.db.update("orders", { uid: mine.id, restaurant_id: r.id }, { open: false, status: "delivered", status_at: now.toISOString() });
+      await deps.db.update("orders", { uid: mine.id, restaurant_id: r.id }, { open: false, status: "delivered", status_at: now.toISOString(), discarded: true });
       const errors = input.lines.flatMap((l, index) => (l.claim && lost.includes(l.claim) ? [{ index, item: l.item, reason: "special" as const }] : []));
       return { ok: false, code: "lines", errors };
     }

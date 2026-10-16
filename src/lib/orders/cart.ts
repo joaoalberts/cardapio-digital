@@ -1,8 +1,11 @@
 // Carrinho do cliente: funções puras sobre a lista de linhas. Linhas iguais (mesmo prato,
 // tamanho, 2º sabor e observação) viram uma só, somando a quantidade.
+import type { Origin } from "@/lib/comunidade/types";
 import { MAX_LINES, MAX_QTY } from "./pricing";
 
 // claim*: oferta relâmpago pega (registro no servidor, preço e nome garantidos no toque).
+// origin*: a linha nasceu na Comunidade (enquete ou post, e o momento do toque em ms). A origem
+// não entra na chave: somar numa linha igual mantém a origem que já estava (vale o primeiro toque).
 export type CartLine = {
   key: string;
   item: string;
@@ -13,6 +16,9 @@ export type CartLine = {
   claim?: string | null;
   claim_cents?: number | null;
   claim_name?: string | null;
+  origin?: Origin["origin"] | null;
+  origin_ref?: string | null;
+  origin_at?: number | null;
 };
 export type NewLine = Omit<CartLine, "key">;
 export type Removed = { line: CartLine; index: number };
@@ -40,13 +46,16 @@ export function addLine(cart: CartLine[], l: NewLine): CartLine[] {
   return [...cart, make(l)];
 }
 
+// Editar (observação, tamanho, outra metade) não muda de onde a linha veio: sem origem nova,
+// a linha editada leva a origem da que ela substitui.
 export function replaceLine(cart: CartLine[], key: string, next: NewLine): CartLine[] {
   const i = cart.findIndex((c) => c.key === key);
   if (i < 0) return cart;
   const nk = lineKey(next);
   const j = cart.findIndex((c, k) => k !== i && c.key === nk);
   if (j >= 0) return cart.map((c, k) => (k === j ? { ...c, qty: cap(c.qty + next.qty) } : c)).filter((_, k) => k !== i);
-  return cart.map((c, k) => (k === i ? make(next) : c));
+  const kept = next.origin ? {} : originOf(cart[i]);
+  return cart.map((c, k) => (k === i ? make({ ...next, ...kept }) : c));
 }
 
 export function setQty(cart: CartLine[], key: string, qty: number): CartLine[] {
@@ -81,6 +90,13 @@ export function serializeCart(cart: CartLine[], now: number, ref?: string | null
 
 const str = (v: unknown): v is string => typeof v === "string";
 const optStr = (v: unknown): v is string | null => v === null || typeof v === "string";
+const ORIGINS: ReadonlySet<unknown> = new Set<Origin["origin"]>(["comunidade_palco", "comunidade_mural"]);
+
+// Os três campos da origem juntos, ou nada: origem pela metade não serve para atribuir.
+function originOf(l: Record<string, unknown>): Partial<Origin> {
+  if (!ORIGINS.has(l.origin) || !str(l.origin_ref) || !l.origin_ref || typeof l.origin_at !== "number" || !Number.isFinite(l.origin_at)) return {};
+  return { origin: l.origin as Origin["origin"], origin_ref: l.origin_ref, origin_at: l.origin_at };
+}
 
 export function parseStoredRef(raw: string | null, now: number): string | null {
   if (!raw) return null;
@@ -105,7 +121,7 @@ export function parseStoredCart(raw: string | null, now: number): CartLine[] {
       const claim = str(l.claim) && typeof l.claim_cents === "number" && str(l.claim_name)
         ? { claim: l.claim, claim_cents: l.claim_cents, claim_name: l.claim_name }
         : {};
-      cart = addLine(cart, { item: l.item, option: l.option, half: l.half, note: l.note, qty: l.qty, ...claim });
+      cart = addLine(cart, { item: l.item, option: l.option, half: l.half, note: l.note, qty: l.qty, ...claim, ...originOf(l) });
     }
     return cart;
   } catch {

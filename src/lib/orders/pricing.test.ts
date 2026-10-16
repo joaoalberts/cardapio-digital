@@ -172,6 +172,27 @@ describe("oferta relâmpago (preço do registro)", () => {
   });
 });
 
+describe("origem da Comunidade no preço", () => {
+  const POLL = "00000000-0000-4000-8000-000000000901";
+  it("copia origin e origin_ref para a linha; a linha sem origem não ganha as chaves", () => {
+    const r = priceCart(menu(), [
+      { item: "smash", qty: 1, origin: "comunidade_palco", origin_ref: POLL, origin_at: 123 },
+      { item: "bacon", qty: 1 },
+      { item: "margherita", option: "Grande", half: "calabresa", qty: 1, origin: "comunidade_mural", origin_ref: POLL, origin_at: 456 },
+    ], NOON);
+    if (!r.ok) throw new Error("preço recusado");
+    expect(r.lines[0]).toMatchObject({ item_id: "smash", origin: "comunidade_palco", origin_ref: POLL });
+    expect("origin_at" in r.lines[0]).toBe(false); // o momento do toque não vai para orders.lines
+    expect("origin" in r.lines[1]).toBe(false);
+    expect("origin_ref" in r.lines[1]).toBe(false);
+    expect(r.lines[2]).toMatchObject({ half_item_id: "calabresa", origin: "comunidade_mural", origin_ref: POLL });
+  });
+  it("origem pela metade (sem origin_ref) não é copiada", () => {
+    const r = priceCart(menu(), [{ item: "smash", qty: 1, origin: "comunidade_palco", origin_ref: null, origin_at: 1 }], NOON);
+    expect(r.ok && "origin" in r.lines[0]).toBe(false);
+  });
+});
+
 describe("oferta relâmpago: um registro, várias linhas", () => {
   it("o mesmo registro em duas linhas do pedido soma contra o limite", () => {
     const m: PublicMenu = { ...menu(), specials: { id: "c-esp", name: "E", items: [item("rainha", "c-esp", false, { price_cents: 12000, promo_price_cents: 6900 })] } };
