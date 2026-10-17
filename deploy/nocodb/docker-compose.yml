@@ -1,0 +1,113 @@
+# Banco do Cardápio Digital na VPS: NocoDB + Postgres, atrás de um Caddy que só deixa passar a API que o app usa.
+# Mesmo desenho do LembreiAi (Aplicativos/lembreiAI/deploy): nenhum contêiner publica porta para a internet; o HTTPS
+# termina no Traefik do Easypanel (certificado *.6dtywz.easypanel.host) e chega ao `gateway` por rótulos.
+# A tela do NocoDB fica só em 127.0.0.1:18080 da VPS: o João abre pelo túnel SSH (README.md).
+# Segredos ficam no .env (scripts/gen-env.sh, gerado NA VPS, fora do git).
+#
+#   docker compose --env-file .env up -d
+name: cardapio-db
+
+# Divide a VPS com o LembreiAi (produção) e o Versdios: teto de memória e de CPU por serviço, e peso de CPU menor
+# (cpu_shares 512 contra 1024 dos outros): numa disputa pelos 2 núcleos, o LembreiAi passa na frente.
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  db:
+    image: postgres:17.11-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nocodb
+      POSTGRES_USER: nocodb
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?rode scripts/gen-env.sh}
+    # banco pequeno (metadados do NocoDB + algumas tabelas): memória enxuta
+    command: >
+      postgres -c shared_buffers=64MB -c effective_cache_size=192MB -c work_mem=4MB
+      -c maintenance_work_mem=32MB -c max_connections=30
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "nocodb", "-d", "nocodb"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks: [backend]
+    mem_limit: 256m
+    cpus: 0.5
+    cpu_shares: 512
+    logging: *logging
+
+  nocodb:
+    image: nocodb/nocodb:2026.09.1
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      NC_DB: pg://db:5432?u=nocodb&p=${POSTGRES_PASSWORD}&d=nocodb
+      NC_AUTH_JWT_SECRET: ${NC_AUTH_JWT_SECRET:?rode scripts/gen-env.sh}
+      NC_PUBLIC_URL: https://${PUBLIC_HOST:?}
+      NC_DISABLE_TELE: "true"
+      # O primeiro cadastro (o João, pelo túnel) vira o administrador. Depois ele roda scripts/fechar-cadastro.sh
+      # ("cadastro só por convite"): nesta versão a tela não mostra a opção e a variável NC_INVITE_ONLY_SIGNUP não vale
+      # (teste de 16/10). Pela internet o cadastro nem chega: o porteiro barra /api/v1/auth.
+      # A documentação diz que o NocoDB próprio limita a API por token (padrão: 5 por segundo e 30 s de bloqueio).
+      # Na 2026.09.1 grátis não houve limite nenhum no teste (16/10: 100 pedidos de uma vez, todos aceitos, mesmo com
+      # o limite em 5). Estas linhas ficam de proteção: se uma versão nova passar a aplicar o padrão, o app não trava.
+      NC_RATE_LIMIT_DATA_API_DURATION: "1000"
+      NC_RATE_LIMIT_DATA_API_MAX_REQUESTS: ${NC_DATA_RPS:-50}
+      NC_RATE_LIMIT_DATA_API_BLOCK_DURATION: "5000"
+      NC_RATE_LIMIT_META_API_DURATION: "60000"
+      NC_RATE_LIMIT_META_API_MAX_REQUESTS: "600"
+      NC_RATE_LIMIT_META_API_BLOCK_DURATION: "5000"
+      NC_DB_POOL_MAX: "10"
+      # Medido no Docker do Mac (16/10): ~700 MB parado e no pico de 80 pedidos/s com heap de 640 MB. Com 384 MB
+      # ele nem liga (falta memória na partida). O heap fica abaixo do mem_limit para o Node limpar antes do Docker matar.
+      NODE_OPTIONS: --max-old-space-size=${NC_HEAP_MB:-640}
+    volumes:
+      - nc-data:/usr/app/data
+    ports:
+      - 127.0.0.1:${NC_UI_PORT:-18080}:8080
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "-T", "5", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    networks: [backend]
+    mem_limit: ${NC_MEM_LIMIT:-1g}
+    cpus: 1.0
+    cpu_shares: 512
+    logging: *logging
+
+  # único serviço exposto à internet: só a API de dados do app, com token, passa (Caddyfile)
+  gateway:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on: [nocodb]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-easypanel}
+      - traefik.http.routers.cardapio-db.rule=Host(`${PUBLIC_HOST:?}`)
+      - traefik.http.routers.cardapio-db.entrypoints=${TRAEFIK_ENTRYPOINT:-https}
+      - traefik.http.routers.cardapio-db.tls=true
+      - traefik.http.routers.cardapio-db.priority=100
+      - traefik.http.services.cardapio-db.loadbalancer.server.port=80
+    networks: [backend, traefik]
+    # 57 MB no pico de 80 pedidos/s com compressão (16/10): 128 MB, igual ao gateway do LembreiAi
+    mem_limit: 128m
+    cpus: 0.5
+    cpu_shares: 512
+    logging: *logging
+
+networks:
+  backend: {}
+  traefik:
+    name: ${TRAEFIK_NETWORK:-easypanel}
+    external: true
+
+volumes:
+  db-data: {}
+  nc-data: {}

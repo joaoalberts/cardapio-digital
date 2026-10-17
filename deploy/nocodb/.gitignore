@@ -1,0 +1,3 @@
+# backups com os hashes das senhas do painel: nunca no git
+backups/
+.env
