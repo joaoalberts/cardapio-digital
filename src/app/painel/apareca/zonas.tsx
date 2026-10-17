@@ -7,22 +7,22 @@ import type { Zone } from "@/lib/apareca/types";
 import { uuid } from "@/lib/uuid";
 import { saveZones } from "./actions";
 
-// Zonas do salão: criar, renomear e apagar; a zona de cada mesa (o vídeo dela vai só para as TVs
-// da zona) e de cada TV pareada (toca só os vídeos da zona). Mesa sem zona manda para todas as TVs;
-// TV sem zona toca todas. Apagar uma zona deixa as mesas e TVs dela sem zona: nada some da TV.
+// Zonas do salão (tela TVs, dentro de "Mais de uma TV?"): criar, renomear e apagar, e a zona de cada
+// mesa (o vídeo dela vai só para as TVs da zona). A zona de cada TV fica no cartão dela (setTvZone);
+// aqui ela é mantida pelo servidor. Mesa sem zona manda para todas as TVs. Apagar uma zona deixa
+// as mesas e TVs dela sem zona: nada some da TV.
 
 type Opt = { id: string; label: string };
 const SAVE_FAIL = "Não foi possível salvar. Confira a internet.";
 
 export function Zonas({
-  rid, zones: initialZones, tableZones, tvZones, tables, tvs,
+  rid, zones: initialZones, tableZones, tables,
 }: {
-  rid: string; zones: Zone[]; tableZones: Record<string, string>; tvZones: Record<string, string>; tables: Opt[]; tvs: Opt[];
+  rid: string; zones: Zone[]; tableZones: Record<string, string>; tables: Opt[];
 }) {
   const router = useRouter();
   const [zones, setZones] = useState(initialZones);
   const [tz, setTz] = useState(tableZones);
-  const [vz, setVz] = useState(tvZones);
   const [saving, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -30,8 +30,8 @@ export function Zonas({
   const add = () => setZones((zs) => (zs.length >= ZONES_MAX ? zs : [...zs, { id: uuid(), name: "" }]));
   const rename = (id: string, name: string) => setZones((zs) => zs.map((z) => (z.id === id ? { ...z, name } : z)));
   const drop = (id: string) => setZones((zs) => zs.filter((z) => z.id !== id));
-  const setOf = (set: typeof setTz) => (key: string, zone: string) =>
-    set((m) => {
+  const setTable = (key: string, zone: string) =>
+    setTz((m) => {
       const n = { ...m };
       if (zone) n[key] = zone;
       else delete n[key];
@@ -41,7 +41,7 @@ export function Zonas({
   const save = () =>
     start(async () => {
       setMsg(null);
-      const r = await saveZones(rid, zones.map((z) => ({ id: z.id, name: z.name.trim() })), tz, vz).catch(() => ({ error: SAVE_FAIL }));
+      const r = await saveZones(rid, zones.map((z) => ({ id: z.id, name: z.name.trim() })), tz, null).catch(() => ({ error: SAVE_FAIL }));
       setMsg(r.error ? { ok: false, text: r.error } : { ok: true, text: "Zonas salvas." });
       if (!r.error) router.refresh();
     });
@@ -63,8 +63,8 @@ export function Zonas({
         <h2 id="app-h-zones">Zonas</h2>
       </div>
       <p className="app-small">
-        Use zonas quando houver mais de uma TV (ex.: salão e varanda). O vídeo de uma mesa passa só nas TVs da mesma zona. Sem zonas,
-        todo vídeo passa em todas as TVs.
+        O vídeo de uma mesa só passa nas TVs da mesma zona. Sem zonas, todo vídeo passa em todas as TVs. Depois de salvar, escolha a zona
+        de cada TV no cartão dela, lá em cima.
       </p>
 
       {zones.length > 0 && (
@@ -100,21 +100,7 @@ export function Zonas({
               {tables.map((t) => (
                 <li key={t.id}>
                   <span>Mesa {t.label.replace(/^mesa\s+/i, "")}</span>
-                  {select(tz[t.id], (v) => setOf(setTz)(t.id, v), "Sem zona", `Zona da mesa ${t.label}`)}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <h3 className="app-sub">TVs</h3>
-          {tvs.length === 0 ? (
-            <p className="app-empty">Nenhuma TV conectada. Conecte as TVs na Comunidade.</p>
-          ) : (
-            <ul className="app-map">
-              {tvs.map((t) => (
-                <li key={t.id}>
-                  <span>{t.label}</span>
-                  {select(vz[t.id], (v) => setOf(setVz)(t.id, v), "Todas as zonas", `Zona da TV ${t.label}`)}
+                  {select(tz[t.id], (v) => setTable(t.id, v), "Sem zona", `Zona da mesa ${t.label}`)}
                 </li>
               ))}
             </ul>

@@ -484,45 +484,19 @@
     color: #4d7f22;
     animation: cp-rise 0.3s cubic-bezier(0.2, 0.9, 0.25, 1) both;
   }
-  & .cp-tvs {
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid #f0f0f0;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-    font-size: 13px;
-    color: var(--pmuted);
+  /* Linha no lugar do antigo cartão Telão. #666 e dourado escuro #7a5218 no fundo do painel (5,1:1 e 6,1:1). */
+  & .cp-moved {
+    margin: 18px 0 0;
+    color: #666666;
+    font-size: 14px;
   }
-  & .cp-tvs > b {
+  & .cp-moved a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: #7a5218;
     font-weight: 600;
-    color: #3d3d3d;
-  }
-  & .cp-tvs ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 10px;
-    justify-items: end;
-    text-align: right;
-  }
-  & .cp-tvs li {
-    display: grid;
-    justify-items: end;
-    gap: 2px;
-  }
-  & .cp-tvs li > span {
-    display: grid;
-    line-height: 1.3;
-  }
-  & .cp-tvs li b {
-    font-weight: 600;
-    color: #3d3d3d;
-  }
-  & .cp-tvs li small {
-    font-size: 12px;
+    text-decoration: underline;
   }
 
   /* Placar */
@@ -804,14 +778,6 @@
 
 @media (max-width: 760px) {
   /* No celular o painel esconde .ap-lead; a explicação da Comunidade fica (classe própria). */
-  .ap .cp .cp-tvs.has {
-    flex-direction: column;
-  }
-  .ap .cp .cp-tvs ul,
-  .ap .cp .cp-tvs li {
-    justify-items: start;
-    text-align: left;
-  }
   .ap .cp .cp-posts {
     grid-template-columns: 1fr 1fr;
   }

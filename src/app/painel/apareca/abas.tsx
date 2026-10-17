@@ -5,7 +5,8 @@ import { Children, useEffect, useRef, useState, useSyncExternalStore, type Keybo
 // Abas do painel do Apareça: a Fila (o que a equipe usa de noite) vem primeiro e o resto fica
 // guardado nas outras. Todas continuam montadas (só escondidas) para a Fila seguir consultando e
 // avisando com som mesmo com outra aba aberta. A aba escolhida fica no endereço (#casa, #zonas…)
-// para sobreviver a um recarregar. O número da Fila chega pelo evento PENDING_EVENT.
+// para sobreviver a um recarregar; um # desconhecido (o antigo #zonas) cai na primeira. O número da
+// Fila chega pelo evento PENDING_EVENT. A nota (opcional) fica logo abaixo das abas, visível em todas.
 
 export const PENDING_EVENT = "apareca:pendentes";
 
@@ -17,7 +18,7 @@ const onHash = (cb: () => void) => {
 };
 const readHash = () => window.location.hash.slice(1);
 
-export function Abas({ abas, pending, children }: { abas: Aba[]; pending: number; children: ReactNode }) {
+export function Abas({ abas, pending, note, children }: { abas: Aba[]; pending: number; note?: ReactNode; children: ReactNode }) {
   const hash = useSyncExternalStore(onHash, readHash, () => "");
   const active = abas.some((a) => a.id === hash) ? hash : abas[0].id;
   const [count, setCount] = useState(pending);
@@ -71,6 +72,7 @@ export function Abas({ abas, pending, children }: { abas: Aba[]; pending: number
           </button>
         ))}
       </div>
+      {note}
       {abas.map((a, i) => (
         <div key={a.id} role="tabpanel" id={`app-panel-${a.id}`} aria-labelledby={`app-tab-${a.id}`} hidden={active !== a.id}>
           {panels[i]}

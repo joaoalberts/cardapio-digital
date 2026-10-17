@@ -695,6 +695,24 @@
   font-weight: 700;
 }
 
+/* Linha logo abaixo das abas: o que mudou de lugar. Texto #666 e link dourado escuro #7a5218 no fundo
+   do painel (5,1:1 e 6,1:1); o link tem 44 px de altura para o dedo. */
+.ap .app-moved {
+  max-width: 1100px;
+  margin: -10px 0 14px;
+  color: #666666;
+  font-size: 14px;
+
+  & a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: #7a5218;
+    font-weight: 600;
+    text-decoration: underline;
+  }
+}
+
 /* Fila: "Para aprovar" e "Na TV agora" lado a lado no computador, um embaixo do outro no celular. */
 .ap .app-fila .app-cols {
   display: grid;

@@ -1,0 +1,156 @@
+/* Painel: tela TVs. Reaproveita as peças da Comunidade (.cp: campos, interruptor, Confirm) e o editor de
+   zonas do Apareça (.app-setup); aqui só o que é da tela. Contraste AA: cinza #666666 no branco (5,7:1)
+   e no fundo do painel (5,1:1), texto #1a1a1a no dourado (5,8:1), verde #2f6b1f no branco (6,4:1).
+   Toque mínimo de 44 px. Nada anima aqui. Cabe em 375 px sem rolagem lateral. */
+.ap .cp.tvs {
+  --pmuted: #666666;
+  max-width: 820px;
+
+  & .ap-card + .ap-card,
+  & .tvs-more {
+    margin-top: 18px;
+  }
+  & .tvs-lead {
+    margin: 0 0 18px;
+    color: #666666;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+
+  /* Ligar uma TV nova */
+  & .tvs-url {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  & .tvs-url .cp-url {
+    margin-top: 0;
+    min-width: 0;
+  }
+  & .tvs-url .btn,
+  & .tvs-go {
+    min-height: 44px;
+  }
+  & .tvs-go {
+    margin-top: 16px;
+    padding: 0 24px;
+    color: #1a1a1a;
+    font-weight: 700;
+  }
+  & .cp-in {
+    min-height: 44px;
+  }
+
+  /* Cartões das TVs */
+  & .tvs-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+  }
+  & .tvs-item {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    min-width: 0;
+  }
+  & .tvs-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px 12px;
+  }
+  & .tvs-head b {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 15.5px;
+    font-weight: 700;
+    color: var(--fg);
+  }
+  & .tvs-st {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13.5px;
+    color: #666666;
+  }
+  & .tvs-st i {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #b5b5b5;
+  }
+  & .tvs-st.on {
+    color: #2f6b1f;
+    font-weight: 600;
+  }
+  & .tvs-st.on i {
+    background: #3f8f2a;
+  }
+  & .tvs-zone {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    max-width: 420px;
+  }
+  & .tvs-zone > span:first-child {
+    font-size: 13px;
+    font-weight: 600;
+    color: #666666;
+  }
+  & .tvs-item .cp-acts {
+    justify-content: flex-start;
+  }
+  & .cp-link {
+    min-height: 44px;
+  }
+
+  /* Modo simples: o interruptor ganha borda transparente para a área de toque passar de 44 px. */
+  & .tvs-simple {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  & .tvs-simple .cp-sw {
+    box-sizing: content-box;
+    width: 52px;
+    height: 32px;
+    border: 6px solid transparent;
+    border-radius: 22px;
+    background-clip: padding-box;
+  }
+  & .tvs-simple .cp-sw i {
+    width: 26px;
+    height: 26px;
+  }
+  & .tvs-simple .cp-sw[aria-checked="true"] i {
+    transform: translateX(20px);
+  }
+
+  /* Zonas, dobradas */
+  & .tvs-more > summary {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0 16px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    color: #7a5218;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  & .tvs-more > summary:focus-visible {
+    outline: 2px solid var(--gold-dark);
+    outline-offset: 2px;
+  }
+  & .tvs-more .app-setup {
+    margin-top: 12px;
+  }
+}

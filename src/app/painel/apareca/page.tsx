@@ -19,7 +19,6 @@ import { ConfigEditor } from "./config-editor";
 import { Fila } from "./fila";
 import { Institucionais, type HouseItem } from "./institucionais";
 import { Relatorios } from "./relatorios";
-import { Zonas } from "./zonas";
 import "../panel.css";
 import "./apareca.css";
 
@@ -35,19 +34,17 @@ export default function AparecaPage() {
   );
 }
 
-// A ordem segue o uso: a Fila de noite, os vídeos da casa e as zonas de vez em quando, os ajustes
-// quase nunca e os números quando o dono quer olhar.
+// A ordem segue o uso: a Fila de noite, os vídeos da casa de vez em quando, os ajustes quase nunca
+// e os números quando o dono quer olhar. As zonas e as TVs foram para a tela TVs.
 const ABAS = [
   { id: "fila", label: "Fila" },
   { id: "casa", label: "Vídeos da casa" },
-  { id: "zonas", label: "Zonas e TVs" },
   { id: "ajustes", label: "Ajustes" },
   { id: "numeros", label: "Números" },
 ];
 
 const EMPTY: QueueResult = { items: [], newest: null, warn: "ok" };
 type Raw = Record<string, unknown>;
-const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 
 function toHouseItem(h: HouseVideoRow): HouseItem {
   const ms = typeof h.duration_ms === "number" && h.duration_ms > 0 ? h.duration_ms : null;
@@ -66,12 +63,10 @@ async function Apareca() {
   const { restaurant, isOwner } = await currentRestaurant();
   const r = restaurant as typeof restaurant & { logo_path: string | null; community_enabled?: unknown } & Raw;
   const mine = { restaurant_id: r.id };
-  const [initial, report, houseRows, tableRows, tvRows, user] = await Promise.all([
+  const [initial, report, houseRows, user] = await Promise.all([
     listQueue(r.id).catch(() => null),
     loadReport(r.id, 7).catch(() => null),
     db.list<HouseVideoRow>("apareca_house_videos", mine).catch(() => [] as HouseVideoRow[]),
-    db.list<Raw>("dining_tables", mine).catch(() => [] as Raw[]),
-    db.list<Raw>("community_tvs", mine).catch(() => [] as Raw[]),
     currentUser().catch(() => null),
   ]);
   // Link discreto para a liberação por restaurante: só o super admin (conferido no servidor) vê.
@@ -83,25 +78,21 @@ async function Apareca() {
     .filter((h) => h.restaurant_id === r.id)
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.Id - b.Id)
     .map(toHouseItem);
-  const tables = tableRows
-    .flatMap((t) => (typeof t.id === "string" && t.restaurant_id === r.id ? [{ id: t.id, label: str(t.label) ?? "Sem nome" }] : []))
-    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR", { numeric: true }));
-  // Só as TVs pareadas e não desconectadas, com o nome dado na Comunidade.
-  const tvs = tvRows.flatMap((t) =>
-    typeof t.id === "string" && t.restaurant_id === r.id && str(t.paired_at) && t.revoked !== true
-      ? [{ id: t.id, label: str(t.label) ?? "TV sem nome" }]
-      : [],
-  );
 
   return (
     <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/apareca" title="Apareça na TV">
-      <Abas abas={ABAS} pending={(initial ?? EMPTY).items.filter((i) => i.status === "pending").length}>
+      <Abas
+        abas={ABAS}
+        pending={(initial ?? EMPTY).items.filter((i) => i.status === "pending").length}
+        note={
+          <p className="app-moved">
+            As TVs ficam em <Link href="/painel/tvs">Mais › TVs</Link>
+          </p>
+        }
+      >
         <Fila rid={r.id} initial={initial ?? EMPTY} initialOk={initial !== null} communityOn={r.community_enabled === true} />
         <div className="app-setup">
           <Institucionais rid={r.id} items={house} muxOn={muxEnabled()} />
-        </div>
-        <div className="app-setup">
-          <Zonas rid={r.id} zones={cfg.zones} tableZones={cfg.table_zones} tvZones={cfg.tv_zones} tables={tables} tvs={tvs} />
         </div>
         <div className="app-setup">
           <ConfigEditor

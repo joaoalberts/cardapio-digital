@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import { Suspense } from "react";
 import * as db from "@/lib/db/nocodb";
 import { localTime, questionText, relativeTime } from "@/lib/comunidade/client-logic";
@@ -58,14 +57,12 @@ async function Comunidade() {
   const bounds = dayBounds(day, tz, head.day_start);
 
   const mine = { restaurant_id: r.id };
-  const [pollRows, postRows, tvRows, orders, tallies, { categories, items }, h] = await Promise.all([
+  const [pollRows, postRows, orders, tallies, { categories, items }] = await Promise.all([
     db.list<Raw>("community_polls", mine, { sort: "-Id", limit: 200 }),
     db.list<Raw>("community_posts", mine, { sort: "-Id", limit: POSTS_READ }),
-    db.list<Raw>("community_tvs", mine),
     db.list<OrderRow>("orders", mine, { sort: "-Id", limit: ORDERS_READ }),
     db.list<TallyRow>("community_tally", mine, { sort: "-Id", limit: TALLY_READ }),
     loadDishes(r.slug),
-    headers(),
   ]);
 
   // Miniatura mais nova de foto da casa (aprovada) por prato, para a linha da enquete.
@@ -142,26 +139,12 @@ async function Comunidade() {
     ];
   });
 
-  // Telões pareados e não desconectados. O hash do segredo nunca sai daqui.
-  const tvs: EditorData["tvs"] = tvRows
-    .flatMap((t) => {
-      const id = str(t.id);
-      const paired = isoOf(t.paired_at);
-      if (!id || !paired || t.revoked === true) return [];
-      const seen = isoOf(t.last_seen_at);
-      return [{ id, label: str(t.label) ?? "TV", paired, seen: seen ? `vista ${relativeTime(seen, now, "pt-BR")}` : "ainda não conferiu" }];
-    })
-    .sort((a, b) => Date.parse(b.paired) - Date.parse(a.paired))
-    .map(({ id, label, seen }) => ({ id, label, seen }));
-
   const score = scoreboard(orders, tallies.filter((t) => t.day === day), bounds);
   // Metas (Decisão do João, 16/10): a noite contra os 4 mesmos dias da semana anteriores e
   // as 4 semanas contra as 4 de antes.
   const nights = goalNights(day, tz, head.day_start);
   const goals = salesGoals(orders, tallies, nights);
   const cut = goalsCut({ orders, ordersCap: ORDERS_READ, tallies, tallyCap: TALLY_READ }, nights);
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
 
   const data: EditorData = {
     restaurantId: r.id,
@@ -171,8 +154,6 @@ async function Comunidade() {
     instagram: head.instagram,
     dayStart: head.day_start,
     dayStartText: `${localTime(bounds.from.toISOString(), tz, "pt-BR")} de ${day.slice(8, 10)}/${day.slice(5, 7)}`,
-    tvUrl: host ? `${proto}://${host}/${r.slug}/telao` : `/${r.slug}/telao`,
-    tvSimple: head.tv_simple,
     categories,
     polls: {
       open: open.map((p) => toEditor(p, "open")),
@@ -180,7 +161,6 @@ async function Comunidade() {
       closed: closed.map((p) => toEditor(p, "closed")),
     },
     posts,
-    tvs,
     score: { ...score, polls: pollsToday },
     goals,
     goalsFrom: cut ? `${cut.slice(8, 10)}/${cut.slice(5, 7)}` : null,

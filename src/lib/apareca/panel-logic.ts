@@ -294,6 +294,16 @@ export function cleanZones(
   return { zones: out, table_zones: pick(tables, own.tables), tv_zones: pick(tvs, own.tvs) };
 }
 
+// Zona de uma TV só (tela TVs): troca só tv_zones[tvId]; null tira a zona (a TV toca todas).
+// Zona fora da lista é recusada. Quem chama já conferiu que a TV é do restaurante.
+export function withTvZone(cfg: AparecaConfig, tvId: string, zone: string | null): AparecaConfig | { error: string } {
+  if (zone !== null && !cfg.zones.some((z) => z.id === zone)) return { error: "Essa zona não existe mais. Recarregue a página." };
+  const tv_zones = { ...cfg.tv_zones };
+  if (zone === null) delete tv_zones[tvId];
+  else tv_zones[tvId] = zone;
+  return { ...cfg, tv_zones };
+}
+
 // Nova ordem depois de subir (-1) ou descer (+1) um institucional: troca com o vizinho e renumera
 // 0..n-1. Devolve só as linhas cuja posição mudou; [] na ponta; null se o id não está na lista.
 export function reorderHouse(

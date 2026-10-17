@@ -11,7 +11,7 @@ import { assetInfo, createAparecaUpload, deleteMuxAsset, frameUrl, hlsUrl, relea
 import { aparecaOff } from "@/lib/apareca/off";
 import {
   allowedModes, applyConfigPatch, cleanZones, HOUSE_LIST_MAX, HOUSE_TITLE_MAX, houseSyncPlan, newestOf, NOT_ALLOWED, queueItems,
-  reorderHouse, teamDecide, type ConfigPatch, type QueueItem, type TeamAction,
+  reorderHouse, teamDecide, withTvZone, type ConfigPatch, type QueueItem, type TeamAction,
 } from "@/lib/apareca/panel-logic";
 import { aparecaReport, type AparecaReport } from "@/lib/apareca/reports";
 import { aparecaTags, forgetSnapshot, monthUsage, readAparecaHeadFresh, readSnapshot, type StoreDeps } from "@/lib/apareca/store";
@@ -165,11 +165,14 @@ export async function saveConfig(rid: string, patch: Partial<AparecaConfig>): Pr
   return writeConfig(r, out.cfg);
 }
 
+// tvs null: a zona de cada TV fica como está (ela agora se escolhe no cartão da TV, com setTvZone);
+// só sai a das zonas apagadas e a das TVs que não são mais do restaurante.
 export async function saveZones(
-  rid: string, zones: Zone[], tables: Record<string, string>, tvs: Record<string, string>,
+  rid: string, zones: Zone[], tables: Record<string, string>, tvs: Record<string, string> | null = null,
 ): Promise<Result> {
   const r = await mine(rid);
   if (!r) return { error: DENIED };
+  const cfg = parseConfig(r.apareca_config);
   let own: { tables: Set<string>; tvs: Set<string> };
   try {
     const [tRows, tvRows] = await Promise.all([
@@ -182,9 +185,26 @@ export async function saveZones(
   } catch {
     return { error: FAIL };
   }
-  const z = cleanZones(zones, tables, tvs, own);
+  const z = cleanZones(zones, tables, tvs ?? cfg.tv_zones, own);
   if ("error" in z) return { error: z.error };
-  return writeConfig(r, { ...parseConfig(r.apareca_config), ...z });
+  return writeConfig(r, { ...cfg, ...z });
+}
+
+// Zona de uma TV (cartão da tela TVs). A TV tem de ser deste restaurante e estar conectada; a
+// configuração é relida aqui (mine) para não desfazer o que outra pessoa salvou nas zonas.
+export async function setTvZone(rid: string, tvId: string, zone: string | null): Promise<Result> {
+  if (!okId(tvId) || (zone !== null && typeof zone !== "string")) return { error: FAIL };
+  const r = await mine(rid);
+  if (!r) return { error: DENIED };
+  try {
+    const tv = await db.first<{ id?: unknown; restaurant_id?: unknown; revoked?: unknown }>("community_tvs", { uid: tvId, restaurant_id: r.id });
+    if (!tv || tv.id !== tvId || tv.restaurant_id !== r.id || tv.revoked === true) return { error: "Esta TV não está mais conectada." };
+  } catch {
+    return { error: FAIL };
+  }
+  const out = withTvZone(parseConfig(r.apareca_config), tvId, zone);
+  if ("error" in out) return { error: out.error };
+  return writeConfig(r, out);
 }
 
 // ---------- Institucionais ----------

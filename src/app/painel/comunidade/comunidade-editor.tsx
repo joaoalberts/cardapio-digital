@@ -12,12 +12,9 @@ import {
   deletePoll,
   deletePost,
   hidePost,
-  pairTv,
-  revokeTv,
   setCommunityEnabled,
   setDayStart,
   setPostTv,
-  setTvSimple,
 } from "./actions";
 import { Confirm } from "./confirm";
 import { HousePhotoSend } from "./house-photo";
@@ -25,7 +22,7 @@ import { NewPoll } from "./poll-maker";
 import { ICONS, Icon, TPL } from "./shared";
 
 // Seção "Comunidade" do painel: interruptor, Instagram e hora do dia, enquetes por modelo,
-// fotos da casa no Mural, pareamento do telão e o placar do dia com as metas. Visual dos
+// fotos da casa no Mural e o placar do dia com as metas (as TVs ficam na tela TVs). Visual dos
 // prints 38 e 39 da ficha v2 (docs/prototipos/comunidade-v2/recomendada), no molde do painel (cartões brancos, botões dourados). As regras e as
 // mensagens estão em validate.ts; o servidor confere tudo de novo ao gravar.
 
@@ -47,12 +44,9 @@ export type EditorData = {
   instagram: string | null;
   dayStart: string;
   dayStartText: string;
-  tvUrl: string;
-  tvSimple: boolean;
   categories: { name: string; items: Dish[] }[];
   polls: { open: EditorPoll[]; scheduled: EditorPoll[]; closed: EditorPoll[] };
   posts: { id: string; thumb: string; dish: string; when: string; onTv: boolean; hidden: boolean }[];
-  tvs: { id: string; label: string; seen: string }[];
   score: { orders: number; lines: number; cents: number; funnel: Record<FunnelKey, number>; tables: { qr: number; open: number; pct: number }; polls: number };
   goals: { night: Goals; month: Goals };
   // Primeira noite contada inteira quando o teto de leitura cortou o período ("DD/MM"); senão null.
@@ -107,7 +101,9 @@ export function ComunidadeEditor({ data }: { data: EditorData }) {
       <MainCard data={data} run={run} />
       <PollsCard data={data} run={run} flash={flash} />
       <PostsCard data={data} run={run} flash={flash} />
-      <TvCard data={data} run={run} />
+      <p className="cp-moved">
+        As TVs ficam em <Link href="/painel/tvs">Mais › TVs</Link>
+      </p>
       <ScoreCard data={data} />
       {toast && (
         <div className="ap-toast" role="status">
@@ -309,104 +305,6 @@ function PostsCard({ data, run, flash }: { data: EditorData; run: Run; flash: (m
       ) : (
         <p className="cp-empty">Nenhuma foto ainda. Sem fotos, o Mural mostra o destaque da casa.</p>
       )}
-    </section>
-  );
-}
-
-// ---------- Telão ----------
-
-function TvCard({ data, run }: { data: EditorData; run: Run }) {
-  const [code, setCode] = useState("");
-  const [busy, startPair] = useTransition();
-  // Mesmo molde do interruptor da Comunidade: valor novo até o refresh; falhou, volta sozinho.
-  const [simple, setSimple] = useOptimistic(data.tvSimple);
-  const [simpleBusy, startSimple] = useTransition();
-  const toggleSimple = () =>
-    startSimple(async () => {
-      const next = !simple;
-      setSimple(next);
-      await run(() => setTvSimple(data.restaurantId, next), next ? "Modo simples ligado." : "Modo simples desligado.");
-    });
-  const [ok, setOk] = useState<string | null>(null);
-  const labels = new Set(data.tvs.map((t) => t.label));
-  let label = "TV do salão";
-  for (let n = 2; labels.has(label); n++) label = `TV do salão ${n}`;
-  const clean = code.replace(/\s+/g, "");
-
-  // "Pareando…" até a TV aparecer na lista; o "pareada agora" sai junto com ela.
-  const pair = () => {
-    setOk(null);
-    const name = label;
-    startPair(async () => {
-      if (await run(() => pairTv(data.restaurantId, clean, name), `${name} pareada.`))
-        startTransition(() => {
-          setOk(name);
-          setCode("");
-        });
-    });
-  };
-
-  return (
-    <section className="ap-card">
-      <div className="ap-card-head">
-        <h2>Telão</h2>
-        <Icon d={ICONS.tv} />
-      </div>
-      <p className="cp-lead">
-        Na TV do salão, abra o endereço do cardápio com /telao no final. A TV mostra um código de 6 caracteres: digite aqui e aperte Parear.
-        <a className="cp-url" href={data.tvUrl} target="_blank" rel="noreferrer">
-          {data.tvUrl.replace(/^https?:\/\//, "")}
-        </a>
-      </p>
-      <div className="cp-fld">
-        <span>Código da TV</span>
-        <div className="cp-row">
-          <span className="cp-in cp-code">
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ""))}
-              onKeyDown={(e) => e.key === "Enter" && clean.length === 6 && !busy && pair()}
-              maxLength={7}
-              placeholder="ex.: K7M2Q9"
-              autoComplete="off"
-              autoCapitalize="characters"
-              spellCheck={false}
-              aria-label="Código da TV"
-            />
-          </span>
-          <button className="btn primary" disabled={clean.length !== 6 || busy} onClick={pair}>
-            {busy ? "Pareando…" : "Parear"}
-          </button>
-        </div>
-      </div>
-      {ok && <p className="cp-pairok">✓ {ok} pareada agora</p>}
-      <div className={`cp-tvs${data.tvs.length ? " has" : ""}`}>
-        <span>TVs pareadas</span>
-        {data.tvs.length ? (
-          <ul>
-            {data.tvs.map((t) => (
-              <li key={t.id}>
-                <span>
-                  <b>{t.label}</b>
-                  <small>{t.seen}</small>
-                </span>
-                <Confirm label="Desconectar" ask="Desconectar esta TV?" yes="Sim" onYes={() => run(() => revokeTv(data.restaurantId, t.id), "TV desconectada.")} />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <b>nenhuma ainda</b>
-        )}
-      </div>
-      <div className="cp-sw-row cp-sw-last">
-        <div>
-          <b id="cp-simple-l">Modo simples</b>
-          <small>Para TV mais antiga: sem animação. Liga sozinho se a TV engasgar.</small>
-        </div>
-        <button className="cp-sw" role="switch" aria-checked={simple} aria-labelledby="cp-simple-l" disabled={simpleBusy} onClick={toggleSimple}>
-          <i />
-        </button>
-      </div>
     </section>
   );
 }
