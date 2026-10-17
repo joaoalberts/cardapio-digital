@@ -135,4 +135,47 @@ describe("nextSlot", () => {
     const p = { ...prog(2, 2), rule: { kind: "intercalar", house_every: 2, clients_max: 3 } as const };
     expect(run(p, 6)).toEqual(["h1", "h2", "v1", "v2", "h1", "h2"]);
   });
+
+  it("cliente novo não monopoliza: A/B/C com 5 e D novo, D toca uma vez e depois os outros", () => {
+    const p = prog(0, 4); // v1..v3 antigos, v4 novo
+    let cur: Cursor = { houseIdx: 0, clientsSinceHouse: 0, playedHere: { v1: 5, v2: 5, v3: 5 } };
+    const out: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const s = nextSlot(p, cur)!;
+      out.push(s.clip.id);
+      cur = s.cursor;
+    }
+    expect(out.filter((id) => id === "v4")).toHaveLength(1 + 1); // uma vez por rodada de 4
+    expect(out.slice(0, 4).sort()).toEqual(["v1", "v2", "v3", "v4"]);
+  });
+  it("bloco nunca repete o mesmo cliente seguido", () => {
+    const p = prog(0, 2);
+    let cur: Cursor = { houseIdx: 0, clientsSinceHouse: 0, playedHere: { v1: 3, v2: 4 } };
+    let last = "";
+    for (let i = 0; i < 8; i++) {
+      const s = nextSlot(p, cur)!;
+      expect(s.clip.id).not.toBe(last);
+      last = s.clip.id;
+      cur = s.cursor;
+    }
+  });
+  it("poda: id ausente do programa some do cursor", () => {
+    const s = nextSlot(prog(0, 2), { houseIdx: 0, clientsSinceHouse: 0, playedHere: { v1: 1, velho: 9 } })!;
+    expect(Object.keys(s.cursor.playedHere).sort()).toEqual(["v1", "v2"]);
+    const h = nextSlot(prog(1, 1), { houseIdx: 0, clientsSinceHouse: 0, playedHere: { velho: 9 } })!;
+    expect(h.kind).toBe("house");
+    expect(h.cursor.playedHere).toEqual({});
+  });
+});
+
+describe("ordenação por data", () => {
+  it("formatos T...Z e 'AAAA-MM-DD HH:MM:SS+00:00' misturados", () => {
+    const videos = [
+      vid(1, { decided_at: "2026-10-16 10:05:00+00:00" }),
+      vid(2, { decided_at: "2026-10-16T10:01:00Z" }),
+      vid(3, { decided_at: "2026-10-16 10:03:00+00:00" }),
+    ];
+    const p = programFor({ cfg: cfg(), tvZone: null, videos, house: [] });
+    expect(p.clients.map((x) => x.id)).toEqual(["v2", "v3", "v1"]);
+  });
 });

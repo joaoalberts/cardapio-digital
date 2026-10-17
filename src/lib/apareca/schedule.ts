@@ -1,9 +1,19 @@
 import type { AparecaConfig, HouseVideoRow, ScheduleRule, VideoRow } from "./types";
 
 export type ClientClip = { id: string; playback: string; name: string | null; plays_left: number; decided_at: string };
+/** `duration_s: 0` significa "desconhecida": quem toca deve usar o fim do vídeo (evento `ended`), não esse número. */
 export type HouseClip = { id: string; playback: string; aspect: string; duration_s: number };
 export type Program = { house: HouseClip[]; clients: ClientClip[]; rule: ScheduleRule; plays: number };
-export type Cursor = { houseIdx: number; clientsSinceHouse: number; playedHere: Record<string, number> };
+/** `lastClient` (opcional) é o último cliente tocado no bloco atual; evita repetir o mesmo em seguida. */
+export type Cursor = {
+  houseIdx: number; clientsSinceHouse: number; playedHere: Record<string, number>; lastClient?: string;
+};
+
+/** Aceita "AAAA-MM-DDTHH:MM:SSZ" e "AAAA-MM-DD HH:MM:SS+00:00" (os dois convivem no NocoDB). */
+const ts = (s: string) => {
+  const t = Date.parse(s.replace(" ", "T"));
+  return Number.isNaN(t) ? 0 : t;
+};
 
 const zoneExists = (cfg: AparecaConfig, z: string | null | undefined): z is string =>
   !!z && cfg.zones.some((x) => x.id === z);
@@ -31,7 +41,7 @@ export function programFor(i: {
       decided_at: v.decided_at ?? v.created_at,
     });
   }
-  clients.sort((a, b) => a.decided_at.localeCompare(b.decided_at));
+  clients.sort((a, b) => ts(a.decided_at) - ts(b.decided_at));
   const house: HouseClip[] = i.house
     .filter((h) => h.active && h.status === "ready" && !!h.mux_playback_id)
     .sort((a, b) => a.position - b.position)
@@ -48,16 +58,21 @@ export function nextSlot(
   const { house, clients } = p;
   if (!house.length && !clients.length) return null;
 
+  // Poda: só ids do programa atual. Cliente novo (sem entrada) vale o mínimo dos que já têm contagem.
+  const known = clients.filter((x) => x.id in c.playedHere).map((x) => c.playedHere[x.id]);
+  const base = known.length ? Math.min(...known) : 0;
+  const count = (id: string) => c.playedHere[id] ?? base;
+  const pruned: Record<string, number> = {};
+  for (const x of clients) if (x.id in c.playedHere) pruned[x.id] = c.playedHere[x.id];
+
   const playHouse = () => ({
     kind: "house" as const, clip: house[c.houseIdx % house.length],
-    cursor: { houseIdx: c.houseIdx + 1, clientsSinceHouse: 0, playedHere: c.playedHere },
+    cursor: { houseIdx: c.houseIdx + 1, clientsSinceHouse: 0, playedHere: pruned },
   });
   if (!clients.length) return playHouse();
 
-  const count = (id: string) => c.playedHere[id] ?? 0;
   const counts = clients.map((x) => count(x.id));
-  const min = Math.min(...counts);
-  const roundDone = counts.every((n) => n === min);
+  const roundDone = counts.every((n) => n === counts[0]);
 
   if (house.length) {
     const every = Math.max(1, p.rule.house_every);
@@ -68,12 +83,15 @@ export function nextSlot(
     if (startOfCycle || midHouse || blockEnded) return playHouse();
   }
 
-  const clip = clients[counts.indexOf(min)];
+  // Menor contagem; nunca o mesmo cliente em seguida quando há outros.
+  const pool = clients.length > 1 && c.lastClient ? clients.filter((x) => x.id !== c.lastClient) : clients;
+  const min = Math.min(...pool.map((x) => count(x.id)));
+  const clip = pool.find((x) => count(x.id) === min) as ClientClip;
   return {
     kind: "client", clip,
     cursor: {
       houseIdx: c.houseIdx, clientsSinceHouse: c.clientsSinceHouse + 1,
-      playedHere: { ...c.playedHere, [clip.id]: count(clip.id) + 1 },
+      playedHere: { ...pruned, [clip.id]: count(clip.id) + 1 }, lastClient: clip.id,
     },
   };
 }
