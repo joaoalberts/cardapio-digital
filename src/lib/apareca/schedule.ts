@@ -61,9 +61,10 @@ export function nextSlot(
   // Poda: só ids do programa atual. Cliente novo (sem entrada) vale o mínimo dos que já têm contagem.
   const known = clients.filter((x) => x.id in c.playedHere).map((x) => c.playedHere[x.id]);
   const base = known.length ? Math.min(...known) : 0;
-  const count = (id: string) => c.playedHere[id] ?? base;
+  // Grava a contagem inicial do novato já neste passo, para ela não subir junto com a de quem toca.
   const pruned: Record<string, number> = {};
-  for (const x of clients) if (x.id in c.playedHere) pruned[x.id] = c.playedHere[x.id];
+  for (const x of clients) pruned[x.id] = c.playedHere[x.id] ?? base;
+  const count = (id: string) => pruned[id];
 
   const playHouse = () => ({
     kind: "house" as const, clip: house[c.houseIdx % house.length],
