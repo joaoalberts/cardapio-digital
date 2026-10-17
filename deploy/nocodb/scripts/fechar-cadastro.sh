@@ -6,12 +6,20 @@
 #   deploy/nocodb/scripts/fechar-cadastro.sh [http://127.0.0.1:18080]
 set -euo pipefail
 TELA="${1:-http://127.0.0.1:18080}"
+# sem o túnel aberto (em outra janela do Terminal) não há com quem falar: avisa antes de pedir a senha
+if [ "$(curl -s -m 5 -o /dev/null -w '%{http_code}' "$TELA/api/v1/health")" != 200 ]; then
+  echo "Não achei o NocoDB em $TELA. Abra o túnel numa outra janela do Terminal e deixe aberta:"
+  echo "  ssh -N -L 18080:127.0.0.1:18080 -i ~/.ssh/lembreiai_vps root@srv1974100.hstgr.cloud"
+  exit 1
+fi
 read -rp "E-mail do administrador do NocoDB: " EMAIL
 read -rsp "Senha (não aparece): " SENHA; echo
 export EMAIL SENHA
 JWT="$(python3 -c 'import json,os; print(json.dumps({"email": os.environ["EMAIL"], "password": os.environ["SENHA"]}))' \
   | curl -s -X POST "$TELA/api/v1/auth/user/signin" -H 'content-type: application/json' --data-binary @- \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token", ""))')"
+  | python3 -c 'import json,sys
+try: print(json.load(sys.stdin).get("token", ""))
+except Exception: print("")')"
 unset SENHA
 [ -n "$JWT" ] || { echo "login recusado: confira o e-mail, a senha e o túnel"; exit 1; }
 # a sessão vai para o curl por arquivo, não pela linha de comando (que aparece no ps)
