@@ -95,7 +95,7 @@ vi.mock("@/lib/apareca/store", () => ({
 
 import { updateTag } from "next/cache";
 import {
-  approveVideo, deleteHouse, listQueue, moveHouse, rejectVideo, removeFromTv, saveConfig, saveZones, setAparecaEnabled, setHouseActive,
+  approveVideo, deleteHouse, listQueue, moveHouse, rejectVideo, removeFromTv, saveConfig, saveZones, setAparecaEnabled, setHouseActive, setTvZone,
   startHouseUpload, syncHouseVideos,
 } from "@/app/painel/apareca/actions";
 import { monthUsage, readSnapshot } from "@/lib/apareca/store";
@@ -538,6 +538,64 @@ describe("saveZones", () => {
     fake.tables = base();
     auth.member = new Set();
     expect((await saveZones(RID, [{ id: Z1, name: "Varanda" }], {}, {})).error).toBeTruthy();
+    expect(restWrites()).toEqual([]);
+  });
+  it("tvs null (tela TVs): a zona gravada de cada TV fica", async () => {
+    fake.tables = base();
+    fake.tables.restaurants[0].apareca_config = { zones: [{ id: Z1, name: "Varanda" }], table_zones: {}, tv_zones: { [TV_MINE]: Z1 } };
+    expect(await saveZones(RID, [{ id: Z1, name: "Varanda" }], { [T_MINE]: Z1 }, null)).toEqual({});
+    expect(savedConfig()).toMatchObject({ table_zones: { [T_MINE]: Z1 }, tv_zones: { [TV_MINE]: Z1 } });
+  });
+  it("tvs null com a zona apagada: a TV fica sem zona", async () => {
+    fake.tables = base();
+    fake.tables.restaurants[0].apareca_config = {
+      zones: [{ id: Z1, name: "Varanda" }, { id: Z2, name: "Salão" }], table_zones: {}, tv_zones: { [TV_MINE]: Z1 },
+    };
+    expect(await saveZones(RID, [{ id: Z2, name: "Salão" }], {}, null)).toEqual({});
+    expect(savedConfig().tv_zones).toEqual({});
+  });
+});
+
+describe("setTvZone", () => {
+  const base = () => ({
+    restaurants: [
+      restaurant({
+        apareca_config: {
+          zones: [{ id: Z1, name: "Varanda" }, { id: Z2, name: "Salão" }], table_zones: { [T_MINE]: Z2 }, tv_zones: {},
+        },
+      }),
+    ],
+    community_tvs: [
+      { Id: 1, id: TV_MINE, restaurant_id: RID, label: "Salão", paired_at: "2026-10-16 20:00:00+00:00", revoked: false },
+      { Id: 2, id: TV_OTHER, restaurant_id: OTHER, label: "Outra", paired_at: "2026-10-16 20:00:00+00:00", revoked: false },
+    ],
+  });
+  it("grava só a zona da TV e mantém zonas e mesas", async () => {
+    fake.tables = base();
+    expect(await setTvZone(RID, TV_MINE, Z1)).toEqual({});
+    expect(savedConfig()).toMatchObject({
+      zones: [{ id: Z1, name: "Varanda" }, { id: Z2, name: "Salão" }], table_zones: { [T_MINE]: Z2 }, tv_zones: { [TV_MINE]: Z1 },
+    });
+    expect(await setTvZone(RID, TV_MINE, null)).toEqual({});
+    expect(savedConfig().tv_zones).toEqual({});
+  });
+  it("mutação: quem não é membro → DENIED e nada gravado", async () => {
+    fake.tables = base();
+    auth.member = new Set();
+    expect(await setTvZone(RID, TV_MINE, Z1)).toEqual({ error: "Entre de novo no painel." });
+    expect(restWrites()).toEqual([]);
+  });
+  it("mutação: TV de outra casa ou desconectada → erro e nada gravado", async () => {
+    fake.tables = base();
+    expect((await setTvZone(RID, TV_OTHER, Z1)).error).toBeTruthy();
+    fake.tables.community_tvs[0].revoked = true;
+    expect((await setTvZone(RID, TV_MINE, Z1)).error).toBeTruthy();
+    expect(restWrites()).toEqual([]);
+  });
+  it("id de TV inválido → FAIL; zona que não existe → erro; nada gravado", async () => {
+    fake.tables = base();
+    expect(await setTvZone(RID, "tv1", Z1)).toEqual({ error: "Não foi possível salvar. Tente de novo." });
+    expect((await setTvZone(RID, TV_MINE, "99999999-9999-4999-8999-999999999999")).error).toBeTruthy();
     expect(restWrites()).toEqual([]);
   });
 });

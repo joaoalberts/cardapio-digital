@@ -214,7 +214,7 @@ function TvItem({ tv, data, run, zonesOn }: { tv: Tv; data: TvsData; run: Run; z
         <label className="tvs-zone">
           <span>Zona</span>
           <span className="cp-in">
-            <select value={known} onChange={(e) => pick(e.target.value)} disabled={busy}>
+            <select value={known} onChange={(e) => pick(e.target.value)} disabled={busy} aria-label={`Zona da ${tv.label}`}>
               <option value="">Todas as zonas</option>
               {data.zones.map((z) => (
                 <option key={z.id} value={z.id}>

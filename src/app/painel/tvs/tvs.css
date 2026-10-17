@@ -25,6 +25,9 @@
     gap: 8px;
   }
   & .tvs-url .cp-url {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
     margin-top: 0;
     min-width: 0;
   }
