@@ -1,4 +1,4 @@
-import type { Zone, VideoRow, VideoStatus } from "./types";
+import type { AparecaConfig, AparecaHead, HouseVideoRow, ModMode, Zone, VideoRow, VideoStatus } from "./types";
 
 // Fila de moderação do painel (T10), sem nada do Next nem do servidor: o fila.tsx (cliente) usa
 // hasNew e alertPattern; actions.ts usa queueItems e teamDecide com o banco e o Mux de verdade.
@@ -179,4 +179,176 @@ export async function teamDecide(d: DecideDeps, rid: string, id: string, action:
     );
   }
   return {};
+}
+
+// ---------- Configurações, zonas e institucionais (T15) ----------
+
+// Frase da cadeia de interruptores: o João ainda não liberou o Apareça para a casa.
+export const NOT_ALLOWED = "Este recurso ainda não foi liberado para a sua casa.";
+
+// Institucionais: a TV carrega cada um inteiro na memória a cada exibição (T14), então o envio é
+// limitado (decisão do controlador na T15): até 3 min e 200 MB. O tamanho é conferido no navegador
+// antes do envio; a duração, quando o Mux devolve o asset (acima disso, o asset é apagado).
+export const HOUSE_MAX_S = 180;
+export const HOUSE_MAX_BYTES = 200 * 1024 * 1024;
+export const HOUSE_TITLE_MAX = 60; // minha escolha
+export const HOUSE_LIST_MAX = 20; // minha escolha: institucionais por casa
+export const ZONES_MAX = 12;
+export const ZONE_NAME_MAX = 40;
+export const RETENTION_OPTIONS = [6, 12, 24, 72, 168] as const; // 6 h, 12 h, 24 h, 3 dias, 7 dias
+export const CLIENTS_MAX = { min: 1, max: 5 };
+export const PLAYS_MAX = 3;
+export const DEVICE_PER_HOUR = { min: 1, max: 10 };
+
+const ALL_MODES: ModMode[] = ["manual", "hibrido", "automatico"];
+
+// Modos de moderação que o dono pode escolher: híbrido e automático só com a IA liberada pelo
+// João (apareca_ai_allowed) e a chave da Anthropic no servidor.
+export function allowedModes(head: Pick<AparecaHead, "ai_allowed">, hasKey: boolean): ModMode[] {
+  return head.ai_allowed === true && hasKey ? [...ALL_MODES] : ["manual"];
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+const intIn = (v: unknown, min: number, max: number): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
+
+export type ConfigPatch = Partial<Omit<AparecaConfig, "zones" | "table_zones" | "tv_zones">>;
+
+// Aplica o que o painel mandou sobre a config atual. Valor fora das faixas do painel é erro (nada
+// é gravado); zonas e mapas ficam de fora (só o saveZones mexe neles).
+export function applyConfigPatch(
+  cur: AparecaConfig, patch: unknown, modes: ModMode[],
+): { cfg: AparecaConfig } | { error: string } {
+  if (!isObj(patch)) return { error: "Confira os dados." };
+  const next: AparecaConfig = { ...cur, rule: { ...cur.rule } };
+  if ("mode" in patch) {
+    if (!modes.includes(patch.mode as ModMode)) return { error: "Este modo de moderação não está liberado para a sua casa." };
+    next.mode = patch.mode as ModMode;
+  }
+  if ("rule" in patch) {
+    const r = patch.rule;
+    if (!isObj(r) || r.kind !== "intercalar" || !intIn(r.clients_max, CLIENTS_MAX.min, CLIENTS_MAX.max)) {
+      return { error: `Escolha de ${CLIENTS_MAX.min} a ${CLIENTS_MAX.max} vídeos de clientes.` };
+    }
+    next.rule = { kind: "intercalar", house_every: cur.rule.house_every, clients_max: r.clients_max };
+  }
+  if ("plays" in patch) {
+    if (!intIn(patch.plays, 1, PLAYS_MAX)) return { error: `Cada vídeo toca de 1 a ${PLAYS_MAX} vezes.` };
+    next.plays = patch.plays as 1 | 2 | 3;
+  }
+  if ("device_per_hour" in patch) {
+    if (!intIn(patch.device_per_hour, DEVICE_PER_HOUR.min, DEVICE_PER_HOUR.max)) {
+      return { error: `O limite por celular vai de ${DEVICE_PER_HOUR.min} a ${DEVICE_PER_HOUR.max} vídeos por hora.` };
+    }
+    next.device_per_hour = patch.device_per_hour;
+  }
+  if ("hours" in patch) {
+    const h = patch.hours;
+    if (h === null) next.hours = null;
+    else if (isObj(h) && typeof h.from === "string" && typeof h.to === "string" && HHMM_RE.test(h.from) && HHMM_RE.test(h.to)) {
+      if (h.from === h.to) return { error: "O horário precisa ter início e fim diferentes." };
+      next.hours = { from: h.from, to: h.to };
+    } else return { error: "Confira o horário (ex.: 19:00 a 02:00)." };
+  }
+  if ("retention_h" in patch) {
+    if (!RETENTION_OPTIONS.includes(patch.retention_h as (typeof RETENTION_OPTIONS)[number])) {
+      return { error: "Escolha um dos prazos para apagar os vídeos." };
+    }
+    next.retention_h = patch.retention_h as number;
+  }
+  return { cfg: next };
+}
+
+// Zonas do painel: até 12, nome de 1 a 40 caracteres, id uuid (o navegador sorteia o da zona nova).
+// Mesa e TV só entram se forem do restaurante (own*) e apontarem para uma zona da lista nova; o
+// resto é ignorado. Zona apagada: quem apontava para ela fica sem zona.
+export function cleanZones(
+  zones: unknown, tables: unknown, tvs: unknown, own: { tables: Set<string>; tvs: Set<string> },
+): { zones: Zone[]; table_zones: Record<string, string>; tv_zones: Record<string, string> } | { error: string } {
+  if (!Array.isArray(zones)) return { error: "Confira as zonas." };
+  if (zones.length > ZONES_MAX) return { error: `No máximo ${ZONES_MAX} zonas.` };
+  const out: Zone[] = [];
+  const seen = new Set<string>();
+  for (const z of zones) {
+    if (!isObj(z) || typeof z.id !== "string" || !UUID_RE.test(z.id) || seen.has(z.id)) return { error: "Confira as zonas." };
+    const name = typeof z.name === "string" ? z.name.trim().replace(/\s+/g, " ") : "";
+    if (!name) return { error: "Dê um nome a cada zona." };
+    if (name.length > ZONE_NAME_MAX) return { error: `O nome da zona pode ter até ${ZONE_NAME_MAX} caracteres.` };
+    seen.add(z.id);
+    out.push({ id: z.id, name });
+  }
+  const pick = (raw: unknown, mine: Set<string>) => {
+    const m: Record<string, string> = {};
+    if (!isObj(raw)) return m;
+    for (const [k, v] of Object.entries(raw)) if (mine.has(k) && typeof v === "string" && seen.has(v)) m[k] = v;
+    return m;
+  };
+  return { zones: out, table_zones: pick(tables, own.tables), tv_zones: pick(tvs, own.tvs) };
+}
+
+// Nova ordem depois de subir (-1) ou descer (+1) um institucional: troca com o vizinho e renumera
+// 0..n-1. Devolve só as linhas cuja posição mudou; [] na ponta; null se o id não está na lista.
+export function reorderHouse(
+  rows: Pick<HouseVideoRow, "Id" | "id" | "position">[], id: string, dir: -1 | 1,
+): { Id: number; position: number }[] | null {
+  const list = [...rows].sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.Id - b.Id);
+  const i = list.findIndex((r) => r.id === id);
+  if (i < 0) return null;
+  const j = i + dir;
+  if (j < 0 || j >= list.length) return [];
+  [list[i], list[j]] = [list[j], list[i]];
+  return list.flatMap((r, k) => (r.position === k ? [] : [{ Id: r.Id, position: k }]));
+}
+
+type AssetInfoLike =
+  | { status: "processing" }
+  | { status: "failed" }
+  | { status: "ready"; assetId: string; playbackId: string; durationS: number };
+
+export type HouseSyncDeps = {
+  rows: HouseVideoRow[]; // só do restaurante, já filtradas por quem chama
+  assetInfo: (uploadId: string) => Promise<AssetInfoLike>;
+  deleteAsset: (assetId: string) => Promise<void>;
+};
+
+// Confere no Mux os institucionais em preparo. Pronto com até 3 min → ready com asset, playback e
+// duração. Mais longo → o asset é apagado e a linha vira failed (inativa, sem asset, com a duração
+// para o painel explicar); se o Mux não apagar, a linha continua em preparo e a próxima conferência
+// tenta de novo. Erro do Mux em uma linha não derruba as outras.
+export async function houseSyncPlan(d: HouseSyncDeps): Promise<{ pending: number; updates: ({ Id: number } & Partial<HouseVideoRow>)[] }> {
+  const updates: ({ Id: number } & Partial<HouseVideoRow>)[] = [];
+  let pending = 0;
+  for (const h of d.rows) {
+    if (h.status !== "processing") continue;
+    if (!h.mux_upload_id) {
+      updates.push({ Id: h.Id, status: "failed", active: false });
+      continue;
+    }
+    let info: AssetInfoLike;
+    try {
+      info = await d.assetInfo(h.mux_upload_id);
+    } catch {
+      pending += 1;
+      continue;
+    }
+    if (info.status === "processing") pending += 1;
+    else if (info.status === "failed") updates.push({ Id: h.Id, status: "failed", active: false });
+    else {
+      const duration_ms = Math.round(info.durationS * 1000);
+      if (info.durationS > HOUSE_MAX_S) {
+        try {
+          await d.deleteAsset(info.assetId);
+        } catch {
+          pending += 1;
+          continue;
+        }
+        updates.push({ Id: h.Id, status: "failed", active: false, mux_asset_id: null, mux_playback_id: null, duration_ms });
+      } else {
+        updates.push({ Id: h.Id, status: "ready", mux_asset_id: info.assetId, mux_playback_id: info.playbackId, duration_ms });
+      }
+    }
+  }
+  return { pending, updates };
 }

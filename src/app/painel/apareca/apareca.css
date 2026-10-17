@@ -263,3 +263,400 @@
     transition: none;
   }
 }
+
+/* Configurações, institucionais e zonas (T15). Mesmo contraste da fila (#1a1a1a sobre o dourado,
+   #666 sobre branco, vermelho #b42828 sobre branco 6,2:1). Cabe em 390 px sem rolagem lateral:
+   tudo em uma coluna, campos com largura 100% e min-width: 0. */
+.ap .app-setup {
+  --app-ink: #1a1a1a;
+  --app-muted: #666666;
+  --app-red: #b42828;
+  max-width: 1100px;
+  margin-top: 18px;
+  display: grid;
+  gap: 18px;
+
+  & .ap-card + .ap-card {
+    margin-top: 0;
+  }
+  & .ap-card {
+    min-width: 0;
+  }
+  & .app-small {
+    display: block;
+    margin: 0 0 12px;
+    color: var(--app-muted);
+    font-size: 13.5px;
+    line-height: 1.45;
+  }
+  & .app-empty {
+    margin: 4px 0 12px;
+    color: var(--app-muted);
+    font-size: 14px;
+  }
+  & .app-band {
+    margin: 0 0 14px;
+    padding: 12px 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  & .app-band-off {
+    background: rgba(226, 134, 47, 0.12);
+    color: #8a4f12;
+  }
+
+  /* Interruptor */
+  & .app-sw-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 4px 0 14px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  & .app-sw-row > div {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    line-height: 1.3;
+  }
+  & .app-sw-row b {
+    font-size: 15.5px;
+    font-weight: 700;
+  }
+  & .app-sw-row small {
+    font-size: 13px;
+    color: var(--app-muted);
+  }
+  & .app-sw {
+    position: relative;
+    flex: none;
+    width: 50px;
+    height: 30px;
+    border-radius: 15px;
+    background: #8a8a8a;
+    overflow: hidden;
+  }
+  & .app-sw::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--gold-dark);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  & .app-sw i {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s ease-out;
+  }
+  & .app-sw[aria-checked="true"]::before {
+    opacity: 1;
+  }
+  & .app-sw[aria-checked="true"] i {
+    transform: translateX(20px);
+  }
+  & .app-sw:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  /* Campos */
+  & .app-fld {
+    display: grid;
+    gap: 6px;
+    margin: 0 0 16px;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+  & .app-fld > span:first-child,
+  & .app-fld > legend {
+    padding: 0;
+    margin-bottom: 6px;
+    font-weight: 700;
+    font-size: 14.5px;
+    color: var(--fg);
+  }
+  & select,
+  & input[type="text"],
+  & input[type="time"] {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid #b9b9b9;
+    border-radius: 6px;
+    background: #fff;
+    color: var(--app-ink);
+    font: inherit;
+    font-size: 16px; /* 16 px: o Safari do iPhone não dá zoom ao tocar */
+  }
+  & .app-inline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    color: var(--app-ink);
+  }
+  & .app-inline select {
+    width: auto;
+    min-width: 72px;
+  }
+  & .app-radio,
+  & .app-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-height: 44px;
+    padding: 8px 0;
+    cursor: pointer;
+  }
+  & .app-radio input,
+  & .app-check input {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin: 2px 0 0;
+    accent-color: var(--gold-dark);
+  }
+  & .app-radio span {
+    display: grid;
+    min-width: 0;
+    line-height: 1.35;
+  }
+  & .app-radio small {
+    color: var(--app-muted);
+    font-size: 13.5px;
+  }
+  & .app-hours {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  & .app-hours label {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    font-size: 13.5px;
+    color: var(--app-muted);
+  }
+
+  & .app-save {
+    width: 100%;
+    min-height: 50px;
+    padding: 0 16px;
+    border-radius: 8px;
+    background: var(--gold);
+    color: var(--app-ink);
+    font-size: 16px;
+    font-weight: 700;
+    transition: transform 0.12s ease-out, opacity 0.12s ease-out;
+  }
+  & .app-save:active {
+    transform: scale(0.98);
+  }
+  & .app-save:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  & .app-msg {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: rgba(214, 60, 60, 0.1);
+    color: #9e2323;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  & .app-msg.ok {
+    background: rgba(106, 164, 58, 0.14);
+    color: #2f5a12;
+  }
+
+  /* Institucionais */
+  & .app-up {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  & .app-up .app-fld {
+    margin: 0;
+  }
+  & .app-progress {
+    display: block;
+    height: 4px;
+    border-radius: 2px;
+    background: #e5e5e5;
+    overflow: hidden;
+  }
+  & .app-progress i {
+    display: block;
+    height: 100%;
+    background: var(--gold-dark);
+    transform-origin: left;
+    transition: transform 0.2s linear;
+  }
+  & .app-hlist {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+  }
+  & .app-hrow {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 8px 12px;
+    align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  & .app-hrow.bad .app-meta span {
+    color: #9e2323;
+  }
+  & .app-hthumb {
+    display: block;
+    width: 72px;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 4px;
+    background: #ddd;
+  }
+  & .app-meta {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    font-size: 13.5px;
+    color: var(--app-muted);
+  }
+  & .app-meta b {
+    color: var(--fg);
+    font-size: 15px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  & .app-hacts {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  & .app-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 6px;
+    border: 1px solid #b9b9b9;
+    color: var(--app-ink);
+  }
+  & .app-icon svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  & .app-icon:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  & .app-del {
+    min-height: 44px;
+    padding: 0 14px;
+    margin-left: auto;
+    border-radius: 6px;
+    border: 1.5px solid var(--app-red);
+    color: var(--app-red);
+    font-weight: 600;
+  }
+  & .app-del.sure {
+    background: var(--app-red);
+    color: #fff;
+  }
+  & .app-del:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* Zonas */
+  & .app-zlist,
+  & .app-map {
+    list-style: none;
+    margin: 0 0 12px;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+  }
+  & .app-zlist li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+  }
+  & .app-zlist .app-del {
+    margin-left: 0;
+  }
+  & .app-add {
+    min-height: 44px;
+    padding: 0 16px;
+    margin-bottom: 16px;
+    border-radius: 999px;
+    border: 1.5px solid var(--gold-dark);
+    color: #7a5218;
+    font-weight: 600;
+  }
+  & .app-add:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  & .app-sub {
+    margin: 4px 0 10px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--fg);
+  }
+  & .app-map li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+    gap: 10px;
+    align-items: center;
+  }
+  & .app-map span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--app-ink);
+  }
+}
+
+@media (min-width: 900px) {
+  .ap .app-setup {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+  .ap .app-setup .app-cfg {
+    grid-row: span 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ap .app-setup .app-sw::before,
+  .ap .app-setup .app-sw i,
+  .ap .app-setup .app-save,
+  .ap .app-setup .app-progress i {
+    transition: none;
+  }
+}
