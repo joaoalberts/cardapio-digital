@@ -18,15 +18,17 @@ export function mediaUrl(path: string | null | undefined): string | null {
   return `${base}/storage/v1/object/public/${BUCKET}/${path}`;
 }
 
-// Banner e cards da capa são pequenos e em loop: o MP4 de 720p toca liso, fica no cache
-// (o loop não baixa de novo) e não precisa de player extra. Sem ele, HLS limitado a 720p.
-// No story (tela cheia) vai HLS até Full HD, que troca de qualidade conforme a internet.
-// (16/10: testado HLS sem limite nos cards; ficou bem mais pesado e o banner demorava mais.)
+// Banner e cards da capa: MP4 de 720p, que começa a tocar com o primeiro pedaço. Medido
+// em 16/10 no 5G simulado: mais rápido que streaming, inclusive recortado (o banner levava
+// 3,9 s em vez de 1,3 s). Sem o MP4, streaming dos primeiros 10 s em 720p. Story: vídeo
+// inteiro, HLS até Full HD. O painel aceita vídeo de qualquer duração.
+export const LOOP_SECONDS = 10;
+const clip = `max_resolution=720p&asset_start_time=0&asset_end_time=${LOOP_SECONDS}`;
 export function videoSrc(m: MenuMedia, size: "story" | "card" = "story"): string | null {
   if (m.mux_playback_id) {
     if (size === "card" && m.mux_mp4) return `https://stream.mux.com/${m.mux_playback_id}/${m.mux_mp4}`;
-    const cap = size === "card" ? "?max_resolution=720p" : "";
-    return `https://stream.mux.com/${m.mux_playback_id}.m3u8${cap}`;
+    if (size === "card") return `https://stream.mux.com/${m.mux_playback_id}.m3u8?${clip}`;
+    return `https://stream.mux.com/${m.mux_playback_id}.m3u8`;
   }
   return mediaUrl(m.storage_path);
 }

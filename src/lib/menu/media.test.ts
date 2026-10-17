@@ -42,9 +42,10 @@ describe("fotos no tamanho da tela", () => {
 });
 
 describe("vídeo", () => {
-  it("card e banner usam o MP4 de 720p; story vai em streaming até Full HD", () => {
+  it("banner e cards em MP4 720p; sem MP4, streaming dos 10 primeiros segundos; story inteiro", () => {
     const v = { ...video, mux_mp4: "720p.mp4" } as unknown as MenuMedia;
     expect(videoSrc(v, "card")).toBe("https://stream.mux.com/pb/720p.mp4");
+    expect(videoSrc(video, "card")).toBe("https://stream.mux.com/pb.m3u8?max_resolution=720p&asset_start_time=0&asset_end_time=10");
     expect(videoSrc(v)).toBe("https://stream.mux.com/pb.m3u8");
   });
 });

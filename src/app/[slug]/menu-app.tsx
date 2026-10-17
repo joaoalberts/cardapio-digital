@@ -110,7 +110,8 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   useEffect(() => {
     // No iPhone o banner pode levar uns segundos para "tocar"; os cards não esperam mais
     // que 1 s (esperar mais deixava a capa com cards parados, parecendo travados).
-    const t = setTimeout(openStartGate, hasHeroVideo ? 1000 : 0);
+    // Os cards começam quase junto (esperar mais deixava a capa com cards parados).
+    const t = setTimeout(openStartGate, hasHeroVideo ? 250 : 0);
     const now = () => openStartGate();
     addEventListener("scroll", now, { passive: true, once: true });
     addEventListener("pointerdown", now, { passive: true, once: true });
@@ -1476,6 +1477,7 @@ function LoopVideo({
     [ref],
   );
   // Cards esperam o banner começar (start-gate.ts); o banner (eager) não espera ninguém.
+  // (Testada em 16/10 uma fila de um card por vez: deixou o primeiro card mais lento.)
   const gate = useStartGate();
   const live = active && (eager || gate) ? src : null;
   useEffect(() => {

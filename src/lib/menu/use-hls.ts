@@ -202,7 +202,9 @@ export function useHls(vidRef: React.RefObject<HTMLVideoElement | null>, src: st
         startLevel: -1,
         // Sem medida ainda, supõe uma internet de celular boa (5 Mbit/s).
         abrEwmaDefaultEstimate: lastBandwidth || 5_000_000,
-        maxBufferLength: loop ? 30 : 12,
+        // Só alguns segundos à frente: o resto baixa enquanto toca, sem ocupar a internet
+        // de uma vez (o loop guarda o que já tocou, para a volta ao começo não baixar de novo).
+        maxBufferLength: loop ? 10 : 12,
         backBufferLength: loop ? Infinity : 10,
         autoStartLoad: loadRef.current,
       });
