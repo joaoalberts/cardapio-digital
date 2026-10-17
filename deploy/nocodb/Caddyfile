@@ -1,0 +1,69 @@
+# Porteiro do banco do Cardápio Digital. O HTTPS termina no Traefik do Easypanel; aqui chega HTTP puro, dentro da VPS.
+# Só passa o que o app (src/lib/db/nocodb.ts, rodando na Vercel) usa, e só com o cabeçalho xc-token (quem confere o
+# token é o NocoDB). Tela, login, cadastro, convites e mudanças de estrutura não existem por aqui: o João usa a tela
+# pelo túnel SSH, e o scripts/nocodb/setup.mjs e a cópia da base rodam pelo mesmo túnel.
+# A Vercel não tem IP fixo no plano grátis, então não dá para filtrar por IP: o filtro é por caminho + token.
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	encode zstd gzip
+
+	# só o token da API autentica: sem isto, um JWT de sessão da tela (xc-auth, ~10 h) passaria no lugar do token
+	# (achado do Verificador, 16/10). Cookie também não entra.
+	request_header -xc-auth
+	request_header -Cookie
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	# lista das tabelas da base (o app lê uma vez por instância)
+	@tabelas {
+		method GET
+		header xc-token *
+		path_regexp ^/api/v2/meta/bases/[a-z0-9]+/tables$
+	}
+	# linhas: ler, criar, alterar e apagar
+	@linhas {
+		method GET POST PATCH DELETE
+		header xc-token *
+		path_regexp ^/api/v2/tables/[a-z0-9]+/records$
+	}
+	@contagem {
+		method GET
+		header xc-token *
+		path_regexp ^/api/v2/tables/[a-z0-9]+/records/count$
+	}
+
+	handle @tabelas {
+		reverse_proxy nocodb:8080
+	}
+	handle @linhas {
+		reverse_proxy nocodb:8080
+	}
+	handle @contagem {
+		reverse_proxy nocodb:8080
+	}
+
+	# para a sentinela e para conferir de fora: responde só "ok" se o NocoDB estiver de pé
+	handle /saude {
+		rewrite * /api/v1/health
+		reverse_proxy nocodb:8080 {
+			@ok status 2xx
+			handle_response @ok {
+				respond "ok" 200
+			}
+		}
+	}
+
+	handle {
+		respond 404
+	}
+}

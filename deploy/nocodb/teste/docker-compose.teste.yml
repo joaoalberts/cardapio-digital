@@ -1,0 +1,6 @@
+# Só para o teste no Docker do Mac (teste-local.sh): no lugar do Traefik do Easypanel, o gateway responde em
+# 127.0.0.1:18090. A rede "traefik" vira uma rede local criada pelo teste.
+services:
+  gateway:
+    ports:
+      - 127.0.0.1:18090:80
