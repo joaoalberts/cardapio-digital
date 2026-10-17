@@ -11,9 +11,15 @@
 :80 {
 	encode zstd gzip
 
-	# só o token da API autentica: sem isto, um JWT de sessão da tela (xc-auth, ~10 h) passaria no lugar do token
-	# (achado do Verificador, 16/10). Cookie também não entra.
+	# Só o token da API autentica. Sai todo outro jeito de se identificar no NocoDB: sessão da tela (xc-auth, ~10 h),
+	# base compartilhada, senha de link, Authorization e cookie (Verificador, 16/10; revisão de segurança, 17/10). E o
+	# xc-token tem de ter cara de token (o do NocoDB 2026.09.1 tem 40 letras e números): vazio ou lixo nem chega lá.
 	request_header -xc-auth
+	request_header -xc-shared-base-id
+	request_header -xc-shared-erd-id
+	request_header -xc-password
+	request_header -xc-gui
+	request_header -Authorization
 	request_header -Cookie
 
 	header {
@@ -27,18 +33,18 @@
 	# lista das tabelas da base (o app lê uma vez por instância)
 	@tabelas {
 		method GET
-		header xc-token *
+		header_regexp xc-token ^[A-Za-z0-9_-]{20,128}$
 		path_regexp ^/api/v2/meta/bases/[a-z0-9]+/tables$
 	}
 	# linhas: ler, criar, alterar e apagar
 	@linhas {
 		method GET POST PATCH DELETE
-		header xc-token *
+		header_regexp xc-token ^[A-Za-z0-9_-]{20,128}$
 		path_regexp ^/api/v2/tables/[a-z0-9]+/records$
 	}
 	@contagem {
 		method GET
-		header xc-token *
+		header_regexp xc-token ^[A-Za-z0-9_-]{20,128}$
 		path_regexp ^/api/v2/tables/[a-z0-9]+/records/count$
 	}
 

@@ -66,13 +66,16 @@ copia --substituir | tail -1
 
 passo "porteiro (Caddy): o app passa, o resto fica barrado"
 TOKEN=$TOKEN "$PACOTE/scripts/conferir-porteiro.sh" $PORTEIRO $DESTINO | tail -1
-# um JWT de sessão válido com token vazio ou falso não pode passar (o porteiro descarta o xc-auth)
-# ("xc-token;" é como o curl manda o cabeçalho vazio; "xc-token: " ele simplesmente não manda)
-for h in "xc-token;" "xc-token: lixo"; do
-  c=$(curl -s -o /dev/null -w '%{http_code}' -H "$h" -H "xc-auth: $JWT" "$PORTEIRO/api/v2/meta/bases/$DESTINO/tables")
-  [ "$c" = 401 ] || falha "JWT de sessão com '$h' deu $c pelo porteiro"
+# um JWT de sessão válido não pode passar no lugar do token, nem como xc-auth nem como Authorization, com token
+# vazio, lixo ou com cara de token ("xc-token;" é como o curl manda o cabeçalho vazio; "xc-token: " ele não manda)
+FALSO=$(rand 40)
+for h in "xc-token;" "xc-token: lixo" "xc-token: $FALSO"; do
+  for a in "xc-auth: $JWT" "Authorization: Bearer $JWT"; do
+    c=$(curl -s -o /dev/null -w '%{http_code}' -H "$h" -H "$a" "$PORTEIRO/api/v2/meta/bases/$DESTINO/tables")
+    case "$c" in 401|404) ;; *) falha "JWT de sessão (${a%%:*}) com '${h%%:*}…' deu $c pelo porteiro" ;; esac
+  done
 done
-echo "JWT de sessão sem token recusado: ok"
+echo "JWT de sessão sem token recusado (xc-auth e Authorization): ok"
 
 passo "o cliente do app (src/lib/db/nocodb.ts) pelo porteiro"
 ( cd "$APP" && NOCODB_URL=$PORTEIRO NOCODB_API_TOKEN=$TOKEN NOCODB_BASE_ID=$DESTINO \

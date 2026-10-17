@@ -2,7 +2,8 @@
 # Publica o banco do Cardápio Digital na VPS. Roda no Mac, na pasta do app, e só com OK do João.
 #   deploy/nocodb/scripts/publicar.sh root@srv1974100.hstgr.cloud cardapio-db.6dtywz.easypanel.host
 # Envia deploy/nocodb para /opt/cardapio-db (sem .env, backups e teste; não apaga nada lá), gera o .env NA VPS na
-# primeira vez (os segredos não saem de lá), baixa as imagens e sobe. Não mexe no /opt/lembreiai nem no Easypanel.
+# primeira vez (os segredos não saem de lá), baixa as imagens e sobe. O porteiro é reiniciado porque o Caddyfile entra
+# montado como arquivo: trocado no disco, o contêiner continuaria lendo o antigo. Não mexe no /opt/lembreiai nem no Easypanel.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DESTINO="${1:?uso: deploy/nocodb/scripts/publicar.sh usuario@host <host-público>}"
@@ -16,4 +17,5 @@ rsync -az --no-owner --no-group -e "ssh -o BatchMode=yes -i $CHAVE" \
   --exclude .env --exclude backups --exclude teste --exclude .gitignore ./ "$DESTINO:$PASTA/"
 ssh_ "cd $PASTA && chmod +x scripts/*.sh && scripts/gen-env.sh '$HOST' \
   && docker compose --env-file .env pull -q && docker compose --env-file .env up -d \
+  && docker compose --env-file .env restart gateway >/dev/null \
   && docker compose --env-file .env ps --format '{{.Service}}: {{.State}} {{.Health}}'"

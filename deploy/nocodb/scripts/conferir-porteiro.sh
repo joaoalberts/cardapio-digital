@@ -71,6 +71,11 @@ s="$(curl -s -o /dev/null -w '%{http_code}' -H "@$HJWT" -m 15 "$URL/api/v2/meta/
 if [ "$s" = 401 ] || [ "$s" = 404 ]; then echo "ok    GET    token vazio + xc-auth recusado ($s)"
 else echo "FALHA GET    token vazio + xc-auth deu $s"; falhas=$((falhas + 1)); fi
 
+# token que não tem cara de token não chega ao NocoDB (404 sem corpo do porteiro)
+s="$(curl -s -o /dev/null -w '%{http_code}' -H 'xc-token: lixo' -m 15 "$URL/api/v2/tables/$FALSA/records")"
+if [ "$s" = 404 ]; then echo "ok    GET    token lixo barrado no porteiro (404)"
+else echo "FALHA GET    token lixo deu $s"; falhas=$((falhas + 1)); fi
+
 if [ -n "$TOKEN" ]; then
   confere GET    "/api/v2/meta/bases/$BASE/tables"      com passa
   confere GET    "/api/v2/tables/$FALSA/records"        com passa
