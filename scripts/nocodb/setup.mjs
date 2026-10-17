@@ -37,8 +37,9 @@ export const TABLES = {
     text("phone"), text("address"), text("instagram"), text("facebook"), text("wifi_name"),
     text("wifi_password"), json("payment_methods"), bool("show_hours"),
     bool("show_payments"), bool("orders_enabled"),
-    // Comunidade: interruptor (vazio = desligada) e a hora em que vira o dia ("HH:MM", vazio = "05:00").
-    bool("community_enabled"), text("community_day_start"),
+    // Comunidade: interruptor (vazio = desligada), a hora em que vira o dia ("HH:MM", vazio =
+    // "05:00") e o modo simples do telão (vazio = desligado; a TV ainda liga sozinha se engasgar).
+    bool("community_enabled"), text("community_day_start"), bool("community_tv_simple"),
     // Apareça na TV: apareca_allowed e apareca_ai_allowed são do João (super admin); apareca_enabled é do dono
     // (exige Comunidade ligada); apareca_config guarda modo, regra, zonas, horário e retenção.
     bool("apareca_allowed"), bool("apareca_ai_allowed"), bool("apareca_enabled"), json("apareca_config"), created,
@@ -84,6 +85,8 @@ export const TABLES = {
   community_polls: [
     id, text("restaurant_id"), text("template"), long("question"), json("options"),
     date("starts_at"), date("ends_at"), date("closed_at"), created,
+    // Resultado final ({a,b,c: %, has_votes, winner}), gravado pelo cron antes de apagar os votos.
+    json("result"),
   ],
   community_votes: [
     id, text("restaurant_id"), text("poll_id"), text("option_id"), text("device_id"), text("table_id"), created,

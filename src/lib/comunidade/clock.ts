@@ -36,7 +36,7 @@ function zoned(ms: number, timezone: string) {
 
 const ymd = (y: number, mo: number, d: number) => new Date(Date.UTC(y, mo - 1, d)).toISOString().slice(0, 10);
 
-function addDays(day: string, n: number): string {
+export function addDays(day: string, n: number): string {
   const [y, mo, d] = day.split("-").map(Number);
   return ymd(y, mo, d + n);
 }
@@ -69,6 +69,32 @@ export function dayBounds(day: string, timezone: string, dayStart: string): { fr
   if (!DAY.test(day)) throw new RangeError(`dia inválido: ${day}`);
   const start = startMin(dayStart);
   return { from: zonedToUtc(day, start, timezone), to: zonedToUtc(addDays(day, 1), start, timezone) };
+}
+
+// O cron de retenção roda às 06h de São Paulo (vercel.json, 09:00 UTC), para todo restaurante.
+export const CRON_TZ = "America/Sao_Paulo";
+export const CRON_AT = "06:00";
+
+// A última rodada agendada do cron até "now" (hoje às 06h em São Paulo, ou ontem, se ainda não deu).
+export function lastCron(now: Date): Date {
+  const z = zoned(now.getTime(), CRON_TZ);
+  const today = ymd(z.y, z.mo, z.d);
+  const at = zonedToUtc(today, startMin(CRON_AT), CRON_TZ);
+  return at.getTime() <= now.getTime() ? at : zonedToUtc(addDays(today, -1), startMin(CRON_AT), CRON_TZ);
+}
+
+// Até onde a rodada do cron apaga os votos (o voto criado antes do corte sai, se a enquete
+// dele já encerrou), calculado no instante da última rodada agendada (lastCron), no fuso do
+// restaurante. Se ali o dia da Comunidade já tinha virado, o corte é a virada. Se ainda não
+// (day_start depois da hora do cron no fuso dele: 07h em São Paulo, 05h em Rio Branco, 07h em
+// Manaus), a noite já acabou e o corte é a própria rodada: o voto da noite passada sai nessa
+// manhã, e não quase 2 dias depois. Como o corte é o da rodada, e não o de agora, a enquete
+// que começa depois dela segue com os votos inteiros até a próxima (needsFreshResult).
+export function voteCutoff(now: Date, timezone: string, dayStart: string): Date {
+  const at = lastCron(now);
+  const day = communityDay(at, timezone, dayStart);
+  const z = zoned(at.getTime(), timezone);
+  return day === ymd(z.y, z.mo, z.d) ? dayBounds(day, timezone, dayStart).from : at;
 }
 
 const ms = (s: string | null | undefined) => (s ? Date.parse(s) : NaN);

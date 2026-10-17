@@ -1,7 +1,9 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import * as db from "@/lib/db/nocodb";
 import { communityOff } from "@/lib/comunidade/off";
 import { cronAuth, runRetention } from "@/lib/comunidade/retention";
+import { communityTags } from "@/lib/comunidade/tags";
 import { ownsFile, removeFilesStrict } from "@/lib/storage";
 import { deleteMuxAsset } from "@/lib/apareca/mux-video";
 import { runAparecaSweep } from "@/lib/apareca/sweep";
@@ -13,7 +15,8 @@ import { runAparecaSweep } from "@/lib/apareca/sweep";
 // Blob (ou o disco) falhar, a linha da foto fica e a próxima rodada tenta de novo.
 const NO_STORE = { "cache-control": "no-store" };
 
-// A varredura lê as 4 tabelas da Comunidade e a do Apareça inteiras (páginas de 1.000): até 60 s.
+// A varredura lê as 4 tabelas da Comunidade inteiras, mais enquetes e restaurantes quando
+// há voto, e a do Apareça inteira (páginas de 1.000): até 60 s.
 export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
@@ -35,7 +38,12 @@ export async function GET(request: NextRequest) {
   if (communityOff()) return NextResponse.json({ ok: apareca.failed === 0, off: true, apareca }, { status: apareca.failed ? 500 : 200, headers: NO_STORE });
 
   try {
-    const report = await runRetention({ db, removeFiles: removeFilesStrict, ownsFile });
+    // Enquete que ganhou result: a agenda em cache passa a trazê-lo (os votos já saíram).
+    // { expire: 0 } e não "max": com "max", o próximo pedido ainda recebe a agenda velha, sem
+    // o result e com os votos já apagados (o story sairia "Deu X 100%" e ficaria 1 dia na CDN).
+    // Isso só limpa esta instância; nas outras, story.ts e votes.ts leem a linha na hora.
+    const revalidate = (rid: string) => revalidateTag(communityTags.rid(rid), { expire: 0 });
+    const report = await runRetention({ db, removeFiles: removeFilesStrict, ownsFile, revalidate });
     const ok = report.failed === 0 && apareca.failed === 0;
     return NextResponse.json({ ok, ...report, apareca }, { status: ok ? 200 : 500, headers: NO_STORE });
   } catch (e) {

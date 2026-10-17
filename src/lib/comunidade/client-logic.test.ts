@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { MenuCategory, MenuItem, PublicMenu } from "@/lib/menu/types";
 import {
   BALLOON_MIN_BAND, balloonMode, balloonNeed, buyState, clockSkew, clockText, houseHighlight, leaderOf, localTime,
-  minuteClock, muralColumns, orderableNow, pairCodeDue, pairCodeRecord, pollDelay, pollTiming, questionText, refFrom,
+  minuteClock, muralLayout, orderableNow, pairCodeDue, pairCodeRecord, pollDelay, pollTiming, questionText, refFrom,
   relativeTime, savedPairCode, shownPcts, POLL_OFF_MS,
-  backoff, pollChime, TV_POLL_MS, TV_RELOAD_MS, tvMode, tvQuestionLong, tvReloadDue, storyChoices,
+  balloonPath, buyFlow, cmuReturnDue, halfPartners, lowerFirst, pollOutcome, priceInfo, ringText, sizeChoices, soleLeader, stageCover,
+  backoff, pollChime, radioStep, TV_POLL_MS, TV_RELOAD_MS, tvReloadDue, storyChoices,
+  TV_WIN_MS, tvAccent, tvBgSize, tvClosedAt, tvFeatSlides, tvLongQuestion, tvOrder, tvScreen, tvSlow,
 } from "./client-logic";
 import type { PublicOption, PublicPoll, PublicPost, PublicState } from "./types";
 
@@ -42,14 +44,15 @@ describe("balloonMode", () => {
     expect(balloonMode(95)).toBe("compact");
     expect(balloonMode(96)).toBe("full");
   });
-  it("com a altura do balão da ficha: precisa caber o balão + 8 px em cima e embaixo", () => {
-    expect(balloonNeed("poll")).toBe(134);
-    expect(balloonNeed("mural")).toBe(138);
-    expect(balloonMode(147, balloonNeed("poll"))).toBe("full"); // 390×844
-    expect(balloonMode(82, balloonNeed("poll"))).toBe("compact"); // iPhone SE
-    expect(balloonMode(133, balloonNeed("poll"))).toBe("compact");
-    expect(balloonMode(134, balloonNeed("poll"))).toBe("full");
-    expect(balloonMode(137, balloonNeed("mural"))).toBe("compact");
+  it("com a altura do balão da ficha v2 (119 e 123 com a ponta): precisa caber o balão + 16 px", () => {
+    expect(balloonNeed("poll")).toBe(135);
+    expect(balloonNeed("mural")).toBe(139);
+    expect(balloonMode(148, balloonNeed("poll"))).toBe("full"); // 390×844: faixa de 148
+    expect(balloonMode(148, balloonNeed("mural"))).toBe("full");
+    expect(balloonMode(83, balloonNeed("poll"))).toBe("compact"); // iPhone SE: faixa de 83
+    expect(balloonMode(134, balloonNeed("poll"))).toBe("compact");
+    expect(balloonMode(135, balloonNeed("poll"))).toBe("full");
+    expect(balloonMode(138, balloonNeed("mural"))).toBe("compact");
   });
   it("nunca abaixo do mínimo de 96 px, nem com medida estranha", () => {
     expect(balloonMode(100, 40)).toBe("full");
@@ -247,11 +250,23 @@ describe("relógio da enquete", () => {
   });
 });
 
-describe("muralColumns", () => {
-  it("2 colunas desencontradas: esquerda 4:5, 1:1…; direita 1:1, 4:5…", () => {
-    const { left, right } = muralColumns(["p0", "p1", "p2", "p3", "p4"]);
-    expect(left).toEqual([{ post: "p0", ar: "4 / 5", i: 0 }, { post: "p2", ar: "1 / 1", i: 2 }, { post: "p4", ar: "4 / 5", i: 4 }]);
-    expect(right).toEqual([{ post: "p1", ar: "1 / 1", i: 1 }, { post: "p3", ar: "4 / 5", i: 3 }]);
+describe("muralLayout (página de revista)", () => {
+  it("a 1ª foto grande; depois duas quadradas e uma larga, repetindo", () => {
+    expect(muralLayout(["p0", "p1", "p2", "p3", "p4", "p5", "p6"])).toEqual([
+      { kind: "big", posts: ["p0"], i: 0 },
+      { kind: "pair", posts: ["p1", "p2"], i: 1 },
+      { kind: "wide", posts: ["p3"], i: 3 },
+      { kind: "pair", posts: ["p4", "p5"], i: 4 },
+      { kind: "wide", posts: ["p6"], i: 6 },
+    ]);
+  });
+  it("quadrada sozinha no fim vira larga; vazio, nada", () => {
+    expect(muralLayout(["p0", "p1"])).toEqual([
+      { kind: "big", posts: ["p0"], i: 0 },
+      { kind: "wide", posts: ["p1"], i: 1 },
+    ]);
+    expect(muralLayout(["p0", "p1", "p2", "p3", "p4"]).map((b) => b.kind)).toEqual(["big", "pair", "wide", "wide"]);
+    expect(muralLayout([])).toEqual([]);
   });
 });
 
@@ -298,7 +313,7 @@ function tvState(over: Partial<PublicState> = {}): PublicState {
 function tvPoll(over: Partial<PublicPoll> = {}): PublicPoll {
   return {
     id: "p1", template: "dessert", question: "", starts_at: "2026-10-16T22:50:00Z", ends_at: "2026-10-16T23:10:00Z",
-    closed: false, has_votes: true, winner: null,
+    closed: false, closed_at: null, has_votes: true, winner: null,
     options: [{ id: "a", label: "A", item_id: null, pct: 60 }, { id: "b", label: "B", item_id: null, pct: 40 }],
     ...over,
   };
@@ -320,20 +335,110 @@ describe("backoff do telão", () => {
   });
 });
 
-describe("tvMode", () => {
+describe("tvScreen: o que o telão mostra", () => {
+  const now = NOW.getTime(); // 23:00Z; a enquete de tvPoll termina às 23:10Z
+  const closedWin = tvPoll({ closed: true, winner: "a", ends_at: "2026-10-16T22:59:30Z" }); // fechou há 30 s
   it("desligada, ou sem estado: nada da Comunidade na tela", () => {
-    expect(tvMode(null)).toBe("off");
-    expect(tvMode(tvState({ enabled: false }))).toBe("off");
+    expect(tvScreen(null, now)).toBe("off");
+    expect(tvScreen(tvState({ enabled: false, poll: tvPoll() }), now)).toBe("off");
   });
-  it("enquete aberta: barras; encerrada com votos: barras com a vencedora", () => {
-    expect(tvMode(tvState({ poll: tvPoll() }))).toBe("poll");
-    expect(tvMode(tvState({ poll: tvPoll({ has_votes: false }) }))).toBe("poll");
-    expect(tvMode(tvState({ poll: tvPoll({ closed: true, winner: "a" }) }))).toBe("poll");
+  it("enquete aberta: barras, com ou sem votos", () => {
+    expect(tvScreen(tvState({ poll: tvPoll() }), now)).toBe("poll");
+    expect(tvScreen(tvState({ poll: tvPoll({ has_votes: false }) }), now)).toBe("poll");
   });
-  it("encerrada sem votos, sem enquete ou fora do horário: fotos e destaque", () => {
-    expect(tvMode(tvState({ poll: tvPoll({ closed: true, has_votes: false }) }))).toBe("idle");
-    expect(tvMode(tvState())).toBe("idle");
-    expect(tvMode(tvState({ open: false }))).toBe("idle");
+  it("encerrada com vencedora: \"Deu\" por 45 s contados do fim", () => {
+    expect(TV_WIN_MS).toBe(45_000);
+    expect(tvScreen(tvState({ poll: closedWin }), now)).toBe("win");
+    expect(tvScreen(tvState({ poll: closedWin }), Date.parse("2026-10-16T22:59:30Z") + TV_WIN_MS - 1)).toBe("win");
+    expect(tvScreen(tvState({ poll: closedWin }), Date.parse("2026-10-16T22:59:30Z") + TV_WIN_MS)).toBe("feat");
+  });
+  it("fechada antes da hora pelo painel: conta do closed_at do servidor", () => {
+    const at = (ms: number) => new Date(ms).toISOString();
+    // ends_at 23:10Z ainda no futuro
+    expect(tvScreen(tvState({ poll: tvPoll({ closed: true, winner: "a", closed_at: at(now - 10_000) }) }), now)).toBe("win");
+    expect(tvScreen(tvState({ poll: tvPoll({ closed: true, winner: "a", closed_at: at(now - TV_WIN_MS) }) }), now)).toBe("feat");
+    // TV que recarrega 10 min depois do fechamento: não repete o "Deu X"
+    expect(tvScreen(tvState({ poll: tvPoll({ closed: true, winner: "a", closed_at: at(now - 10 * 60_000) }) }), now)).toBe("feat");
+    // sem closed_at nem fim no passado: não inventa 45 s
+    expect(tvScreen(tvState({ poll: tvPoll({ closed: true, winner: "a" }) }), now)).toBe("feat");
+  });
+  it("empate, sem votos, sem enquete ou fora do horário: destaque da casa", () => {
+    const tie = tvPoll({ closed: true, winner: "a", ends_at: "2026-10-16T22:59:50Z", options: [
+      { id: "a", label: "A", item_id: null, pct: 50 }, { id: "b", label: "B", item_id: null, pct: 50 }] });
+    expect(tvScreen(tvState({ poll: tie }), now)).toBe("feat");
+    expect(tvScreen(tvState({ poll: tvPoll({ closed: true, has_votes: false, ends_at: "2026-10-16T22:59:50Z" }) }), now)).toBe("feat");
+    expect(tvScreen(tvState(), now)).toBe("feat");
+    expect(tvScreen(tvState({ open: false }), now)).toBe("feat");
+  });
+  it("tvClosedAt: o fim marcado ou o closed_at, o que vier antes", () => {
+    const p = tvPoll({ closed: true });
+    expect(tvClosedAt(p)).toBe(Date.parse("2026-10-16T23:10:00Z"));
+    expect(tvClosedAt({ ...p, closed_at: "2026-10-16T23:00:00Z" })).toBe(now);
+    expect(tvClosedAt(tvPoll({ closed: true, ends_at: "2026-10-16T22:00:00Z", closed_at: "2026-10-16T22:30:00Z" }))).toBe(Date.parse("2026-10-16T22:00:00Z"));
+    expect(tvClosedAt(tvPoll({ ends_at: "lixo", closed_at: "2026-10-16T22:30:00Z" }))).toBe(Date.parse("2026-10-16T22:30:00Z"));
+    expect(Number.isNaN(tvClosedAt(tvPoll({ ends_at: "lixo" })))).toBe(true);
+  });
+});
+
+describe("tvAccent: a cor da casa e os tons claros, prontos para o CSS", () => {
+  it("hexadecimal vira os 5 tons; #abc é aceito", () => {
+    expect(tvAccent("#B8862F")).toEqual({
+      "--accent": "#b8862f",
+      "--accent-9": "rgba(184, 134, 47, 0.09)",
+      "--accent-16": "rgba(184, 134, 47, 0.16)",
+      "--accent-56": "rgba(184, 134, 47, 0.56)",
+      "--accent-70": "rgba(184, 134, 47, 0.7)",
+    });
+    expect(tvAccent("#abc")["--accent"]).toBe("#aabbcc");
+  });
+  it("qualquer outra coisa (vazio, nome, injeção) cai no dourado do cardápio", () => {
+    for (const c of [null, undefined, "", "red", "#12345", "red; background:url(x)"]) expect(tvAccent(c)["--accent"]).toBe("#e8b04b");
+  });
+});
+
+describe("tvOrder: a líder sempre em primeiro", () => {
+  const o = (id: "a" | "b" | "c", pct: number): PublicOption => ({ id, label: id, item_id: null, pct });
+  it("da maior para a menor porcentagem", () => {
+    expect(tvOrder([o("a", 19), o("b", 43), o("c", 38)])).toEqual(["b", "c", "a"]);
+  });
+  it("empate e tudo zero: mantém a ordem da casa", () => {
+    expect(tvOrder([o("a", 40), o("b", 40), o("c", 20)])).toEqual(["a", "b", "c"]);
+    expect(tvOrder([o("a", 0), o("b", 0)])).toEqual(["a", "b"]);
+  });
+});
+
+describe("tvLongQuestion e tvSlow", () => {
+  it("pergunta longa (mais de 44 letras) desce um tamanho", () => {
+    expect(tvLongQuestion("Qual prato sai primeiro hoje?")).toBe(false);
+    expect(tvLongQuestion("x".repeat(44))).toBe(false);
+    expect(tvLongQuestion("x".repeat(45))).toBe(true);
+    expect(tvLongQuestion("  " + "x".repeat(44) + "  ")).toBe(false);
+  });
+  it("TV fraca: média acima de 24 ms por quadro nos primeiros 2 s", () => {
+    expect(tvSlow(120, 2000)).toBe(false); // 16,7 ms
+    expect(tvSlow(84, 2000)).toBe(false); // 23,8 ms
+    expect(tvSlow(80, 2000)).toBe(true); // 25 ms
+    expect(tvSlow(0, 2000)).toBe(true); // nenhum quadro: travada
+    expect(tvSlow(10, 0)).toBe(false); // sem medida
+  });
+});
+
+describe("tvFeatSlides: o que roda no telão sem enquete", () => {
+  const post = (id: string, item_id: string, on_tv = true): PublicPost => ({
+    id, item_id, thumb: `/t/${id}`, photo: `/f/${id}`, on_tv, created_at: "2026-10-16T22:00:00Z",
+  });
+  const known = new Set(["burger", "pizza"]);
+  it("destaque da casa primeiro, depois as fotos da casa marcadas para o telão", () => {
+    expect(tvFeatSlides([post("p1", "pizza"), post("p2", "burger", false), post("p3", "sumiu")], known, "burger")).toEqual([
+      { kind: "highlight", item_id: "burger" },
+      { kind: "post", item_id: "pizza", post: post("p1", "pizza") },
+    ]);
+  });
+  it("no máximo 8; sem destaque, só as fotos; sem nada, vazio", () => {
+    const many = Array.from({ length: 12 }, (_, k) => post(`p${k}`, "pizza"));
+    expect(tvFeatSlides(many, known, "burger")).toHaveLength(8);
+    expect(tvFeatSlides([post("p1", "pizza")], known, null)).toEqual([{ kind: "post", item_id: "pizza", post: post("p1", "pizza") }]);
+    expect(tvFeatSlides([], known, null)).toEqual([]);
   });
 });
 
@@ -361,22 +466,6 @@ describe("pollChime", () => {
   });
 });
 
-describe("tvQuestionLong", () => {
-  // Medidas do Chromium a 62 px (line-height 1,04): uma linha 64,5 px, duas 129 px.
-  it("passa a 46 px só quando a pergunta quebra em mais de uma linha a 62 px", () => {
-    expect(tvQuestionLong(64.5, 62)).toBe(false);
-    expect(tvQuestionLong(65, 62)).toBe(false); // arredondamento da medida
-    expect(tvQuestionLong(129, 62)).toBe(true); // "Welches Dessert gewinnt heute?" (30 letras)
-    expect(tvQuestionLong(193.4, 62)).toBe(true);
-  });
-  it("sem medida (elemento ainda sem tamanho): fica nos 62 px", () => {
-    expect(tvQuestionLong(0, 62)).toBe(false);
-    expect(tvQuestionLong(Number.NaN, 62)).toBe(false);
-    expect(tvQuestionLong(129, 0)).toBe(false);
-    expect(tvQuestionLong(129, Number.NaN)).toBe(false);
-  });
-});
-
 describe("storyChoices (o que a folha do story oferece)", () => {
   const post = (id: string, item_id: string): PublicPost => ({
     id, item_id, thumb: `/t/${id}`, photo: `/f/${id}`, on_tv: false, created_at: "2026-10-16T22:00:00Z",
@@ -392,8 +481,13 @@ describe("storyChoices (o que a folha do story oferece)", () => {
     expect(storyChoices(tvState({ poll: tvPoll({ closed: true, winner: "a" }) }), base).poll).toBe("p1");
   });
 
+  it("logo depois do primeiro voto (o estado ainda diz sem votos): o meu voto já conta", () => {
+    expect(storyChoices(tvState({ poll: tvPoll({ has_votes: false }) }), { ...base, mine: "a" }).poll).toBe("p1");
+  });
+
   it("enquete sem votos não vira arte (encerrada sem votos mostra o destaque, sem compartilhar)", () => {
-    expect(storyChoices(tvState({ poll: tvPoll({ has_votes: false }) }), { ...base, mine: "a" }).poll).toBeNull();
+    expect(storyChoices(tvState({ poll: tvPoll({ has_votes: false }) }), base).poll).toBeNull();
+    expect(storyChoices(tvState({ poll: tvPoll({ closed: true, has_votes: false }) }), { ...base, mine: "a" }).poll).toBeNull();
     expect(storyChoices(tvState({ poll: tvPoll({ closed: true, has_votes: false }) }), base).poll).toBeNull();
     expect(storyChoices(tvState(), base).poll).toBeNull();
   });
@@ -413,5 +507,158 @@ describe("storyChoices (o que a folha do story oferece)", () => {
       poll: null,
       post: null,
     });
+  });
+});
+
+// ---------- Comunidade v2 (telas do celular) ----------
+
+describe("ringText: o anel do tempo em minutos", () => {
+  it("minutos arredondados para cima, com 'min'", () => {
+    expect(ringText(41 * 60_000)).toEqual({ n: "41", unit: "min" });
+    expect(ringText(40 * 60_000 + 1)).toEqual({ n: "41", unit: "min" });
+    expect(ringText(60_000)).toEqual({ n: "1", unit: "min" });
+  });
+  it("último minuto em segundos; acabou, 0 s", () => {
+    expect(ringText(59_999)).toEqual({ n: "1", unit: "min" });
+    expect(ringText(59_000)).toEqual({ n: "59", unit: "s" });
+    expect(ringText(42_000)).toEqual({ n: "42", unit: "s" });
+    expect(ringText(0)).toEqual({ n: "0", unit: "s" });
+    expect(ringText(-3_000)).toEqual({ n: "0", unit: "s" });
+  });
+  it("1 h ou mais: 3h47, sem unidade", () => {
+    expect(ringText(60 * 60_000)).toEqual({ n: "1h00", unit: "" });
+    expect(ringText(227 * 60_000 + 16_000)).toEqual({ n: "3h47", unit: "" });
+    expect(ringText(59 * 60_000 + 30_000)).toEqual({ n: "60", unit: "min" });
+  });
+});
+
+describe("pollOutcome: deu, empate ou sem votos", () => {
+  const opts = (pcts: number[]): PublicOption[] => pcts.map((pct, k) => ({ id: (["a", "b", "c"] as const)[k], label: "", item_id: null, pct }));
+  it("venceu com 1 ponto ou mais de diferença; as outras pela %", () => {
+    expect(pollOutcome({ has_votes: true, options: opts([31, 52, 17]) })).toEqual({ kind: "win", id: "b", rest: ["a", "c"] });
+    expect(pollOutcome({ has_votes: true, options: opts([50, 49, 1]) })).toEqual({ kind: "win", id: "a", rest: ["b", "c"] });
+  });
+  it("empate nas duas de cima: as duas, e a de fora", () => {
+    expect(pollOutcome({ has_votes: true, options: opts([43, 43, 14]) })).toEqual({ kind: "tie", ids: ["a", "b"], rest: ["c"] });
+    expect(pollOutcome({ has_votes: true, options: opts([14, 43, 43]) })).toEqual({ kind: "tie", ids: ["b", "c"], rest: ["a"] });
+    expect(pollOutcome({ has_votes: true, options: opts([33, 33, 33]) })).toEqual({ kind: "tie", ids: ["a", "b", "c"], rest: [] });
+  });
+  it("sem votos: nada", () => {
+    expect(pollOutcome({ has_votes: false, options: opts([0, 0, 0]) })).toEqual({ kind: "none" });
+    expect(pollOutcome({ has_votes: true, options: [] })).toEqual({ kind: "none" });
+  });
+});
+
+describe("soleLeader: barra acesa só sem empate", () => {
+  it("a maior sozinha; empate em cima ou tudo zero, nenhuma", () => {
+    expect(soleLeader({ a: 44, b: 37, c: 19 })).toBe("a");
+    expect(soleLeader({ a: 43, b: 43, c: 14 })).toBeNull();
+    expect(soleLeader({ a: 0, b: 0 })).toBeNull();
+    expect(soleLeader({ c: 100 })).toBe("c");
+  });
+});
+
+describe("priceInfo: o preço que aparece junto do nome", () => {
+  it("prato simples: promoção, senão o preço", () => {
+    expect(priceInfo(item("x", { price_cents: 4200 }))).toEqual({ cents: 4200, from: false });
+    expect(priceInfo(item("x", { price_cents: 4200, promo_price_cents: 3900 }))).toEqual({ cents: 3900, from: false });
+  });
+  it("com tamanhos: o menor, 'a partir de' só quando os preços variam", () => {
+    const sizes = [{ label: "Broto", price_cents: 3800 }, { label: "Grande", price_cents: 5400 }];
+    expect(priceInfo(item("x", { price_options: sizes }))).toEqual({ cents: 3800, from: true });
+    expect(priceInfo(item("x", { price_options: [{ label: "Única", price_cents: 5400 }] }))).toEqual({ cents: 5400, from: false });
+  });
+  it("preço escondido ou zero: nada", () => {
+    expect(priceInfo(item("x", { hide_price: true }))).toBeNull();
+    expect(priceInfo(item("x", { price_cents: 0 }))).toBeNull();
+    expect(priceInfo(item("x", { price_options: [{ label: "G", price_cents: 0 }] }))).toBeNull();
+    expect(priceInfo(undefined)).toBeNull();
+  });
+});
+
+describe("Pedir também: direto ou pela folha de tamanhos", () => {
+  const sizes = [{ label: "Broto", price_cents: 3800 }, { label: "Grande", price_cents: 5400 }];
+  const pizzaA = item("a", { category_id: "pz", half_half: true, price_options: sizes });
+  const pizzaB = item("b", { category_id: "pz", half_half: true, price_options: [{ label: "Grande", price_cents: 6000 }] });
+  const solo = item("s", { category_id: "pz2", half_half: true, price_cents: 3000 });
+  const m = menu([cat("pz", [pizzaA, pizzaB]), cat("pz2", [solo]), cat("c1", [item("burger")])]);
+  it("prato simples entra direto; tamanho único também, já com o tamanho", () => {
+    expect(buyFlow(item("burger"), m)).toEqual({ kind: "add", option: null });
+    expect(buyFlow(item("u", { price_options: [{ label: "Única", price_cents: 1000 }] }), m)).toEqual({ kind: "add", option: "Única" });
+    // meio a meio sem outro sabor na categoria: só a inteira
+    expect(buyFlow(solo, m)).toEqual({ kind: "add", option: null });
+  });
+  it("com tamanhos ou meio a meio possível: a folha", () => {
+    expect(buyFlow(item("t", { price_options: sizes }), m)).toEqual({ kind: "sheet" });
+    expect(buyFlow(item("h", { category_id: "pz", half_half: true, price_cents: 5000 }), menu([cat("pz", [item("h", { category_id: "pz", half_half: true, price_cents: 5000 }), item("i", { category_id: "pz", price_cents: 4000 })])]))).toEqual({ kind: "sheet" });
+  });
+  it("sizeChoices: os tamanhos com preço; sem tamanhos, a inteira", () => {
+    expect(sizeChoices(pizzaA)).toEqual([{ label: "Broto", cents: 3800 }, { label: "Grande", cents: 5400 }]);
+    expect(sizeChoices(item("x", { price_cents: 4200 }))).toEqual([{ label: null, cents: 4200 }]);
+    expect(sizeChoices(item("x", { hide_price: true }))).toEqual([]);
+  });
+  it("halfPartners: outros sabores da categoria com o mesmo tamanho", () => {
+    expect(halfPartners(m, pizzaA, "Grande").map((x) => x.id)).toEqual(["b"]);
+    expect(halfPartners(m, pizzaA, "Broto")).toEqual([]);
+    expect(halfPartners(m, item("burger"), null)).toEqual([]); // não aceita meio a meio
+    expect(halfPartners(null, pizzaA, "Grande")).toEqual([]);
+  });
+  it("cmuReturnDue: a Comunidade volta quando o meio a meio termina (sem escolha e sem folha)", () => {
+    expect(cmuReturnDue({ waiting: true, pick: false, sheet: false })).toBe(true);
+    expect(cmuReturnDue({ waiting: true, pick: true, sheet: false })).toBe(false);
+    expect(cmuReturnDue({ waiting: true, pick: false, sheet: true })).toBe(false);
+    expect(cmuReturnDue({ waiting: false, pick: false, sheet: false })).toBe(false);
+  });
+});
+
+describe("capa do Palco e textos curtos", () => {
+  it("stageCover: tríptico só com foto em todas as opções; senão a capa da casa", () => {
+    expect(stageCover(["a.webp", "b.webp", "c.webp"])).toEqual(["a.webp", "b.webp", "c.webp"]);
+    expect(stageCover(["a.webp", null])).toBeNull();
+    expect(stageCover(["a.webp"])).toBeNull();
+    expect(stageCover([])).toBeNull();
+  });
+  it("lowerFirst: 'Vote: qual prato…'; em alemão fica como está", () => {
+    expect(lowerFirst("Qual prato sai primeiro hoje?", "pt-BR")).toBe("qual prato sai primeiro hoje?");
+    expect(lowerFirst("¿Qué postre sale hoy?", "es")).toBe("¿qué postre sale hoy?");
+    expect(lowerFirst("Welches Dessert gewinnt heute?", "de")).toBe("Welches Dessert gewinnt heute?");
+    expect(lowerFirst("", "pt-BR")).toBe("");
+  });
+  it("balloonPath: corpo com cantos e a ponta no meio, embaixo", () => {
+    const d = balloonPath(262, 107, 24, 28, 12);
+    expect(d.startsWith("M24 0H238")).toBe(true);
+    expect(d).toContain("Q131 119"); // ponta em x = 131, y = 107 + 12
+    expect(d.endsWith("Z")).toBe(true);
+  });
+});
+
+describe("radioStep: setas do teclado no grupo de tamanhos", () => {
+  it("direita e baixo avançam; esquerda e cima voltam; dão a volta nas pontas", () => {
+    expect(radioStep(0, 3, "ArrowRight")).toBe(1);
+    expect(radioStep(1, 3, "ArrowDown")).toBe(2);
+    expect(radioStep(2, 3, "ArrowRight")).toBe(0);
+    expect(radioStep(1, 3, "ArrowLeft")).toBe(0);
+    expect(radioStep(0, 3, "ArrowUp")).toBe(2);
+  });
+  it("Home e End vão às pontas; outra tecla, ou grupo vazio, não mexe", () => {
+    expect(radioStep(1, 3, "Home")).toBe(0);
+    expect(radioStep(1, 3, "End")).toBe(2);
+    expect(radioStep(1, 3, "Enter")).toBeNull();
+    expect(radioStep(0, 0, "ArrowRight")).toBeNull();
+    expect(radioStep(-1, 3, "ArrowRight")).toBe(0);
+  });
+});
+
+describe("tvBgSize: o canvas do fundo no formato da tela", () => {
+  it("deitada 16:9: 64×36; em pé 9:16: 36×64 (sem esticar a foto)", () => {
+    expect(tvBgSize(1920, 1080)).toEqual({ w: 64, h: 36 });
+    expect(tvBgSize(1080, 1920)).toEqual({ w: 36, h: 64 });
+  });
+  it("outros formatos guardam a proporção com 64 no lado maior; tela sem medida volta ao 64×36", () => {
+    expect(tvBgSize(1000, 1000)).toEqual({ w: 64, h: 64 });
+    expect(tvBgSize(768, 1024)).toEqual({ w: 48, h: 64 });
+    expect(tvBgSize(0, 0)).toEqual({ w: 64, h: 36 });
+    expect(tvBgSize(Number.NaN, 500)).toEqual({ w: 64, h: 36 });
+    expect(tvBgSize(5000, 10)).toEqual({ w: 64, h: 1 });
   });
 });

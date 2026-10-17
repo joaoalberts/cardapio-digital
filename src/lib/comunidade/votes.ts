@@ -6,7 +6,7 @@ import { openStatus } from "@/lib/menu/hours";
 import type { OpeningHours } from "@/lib/menu/types";
 import { DAY_START_DEFAULT, currentPoll, pollPhase } from "./clock";
 import { communityOff } from "./off";
-import { buildPublicState, cacheControl, disabledState } from "./public-state";
+import { buildPublicState, cacheControl, disabledState, needsFreshResult, parseResult } from "./public-state";
 import { VOTE_CAP_PER_RESTAURANT, VOTE_CAP_PER_TABLE, effectiveVotes } from "./tally";
 import type { CommunityHead, OptionId, PollOption, PollRow, PollTemplate, PostRow, PublicState, TvRow, VoteRow } from "./types";
 
@@ -93,6 +93,7 @@ export function toHead(r: Raw | null): CommunityHead | null {
     instagram: str(r.instagram),
     logo_path: str(r.logo_path),
     brand_color: str(r.brand_color),
+    tv_simple: r.community_tv_simple === true,
   };
 }
 
@@ -103,23 +104,38 @@ function toOptions(v: unknown): PollOption[] {
     .map((o) => ({ id: o.id as OptionId, label: typeof o.label === "string" ? o.label : "", item_id: str(o.item_id) }));
 }
 
-function toPoll(r: Raw | null): PollRow | null {
+// Coluna JSON que veio em texto (o NocoDB às vezes devolve assim): tenta ler; senão, nada.
+function jsonOf(v: unknown): unknown {
+  if (typeof v !== "string") return v;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return null;
+  }
+}
+
+// Exportada para a retenção (retention.ts), que grava o result antes de apagar os votos.
+export function toPoll(r: Raw | null): PollRow | null {
   if (!r) return null;
   const id = str(r.id);
   const restaurant_id = str(r.restaurant_id);
   const starts_at = isoDate(r.starts_at);
   const ends_at = isoDate(r.ends_at);
   if (!id || !restaurant_id || !starts_at || !ends_at) return null;
+  const options = toOptions(r.options);
+  // Resultado final gravado pelo cron: só entra se bater com as opções.
+  const result = parseResult(jsonOf(r.result), options.map((o) => o.id));
   return {
     id,
     restaurant_id,
     template: TEMPLATES.includes(r.template as PollTemplate) ? (r.template as PollTemplate) : "custom",
     question: typeof r.question === "string" ? r.question : "",
-    options: toOptions(r.options),
+    options,
     starts_at,
     ends_at,
     closed_at: isoDate(r.closed_at),
     created_at: isoDate(r.created_at) ?? starts_at,
+    ...(result ? { result } : {}),
   };
 }
 
@@ -205,11 +221,31 @@ export async function readPublicState(deps: VoteDeps, slug: string, before?: str
     const known = posts.some((p) => p.restaurant_id === head.id && p.status === "approved" && Date.parse(p.created_at) === cut);
     if (!known) return { ok: false, code: "invalid" };
   }
+  let agenda = polls;
   const cur = currentPoll(polls.filter((p) => p.restaurant_id === head.id), now);
-  const votes = cur
+  // Com o result gravado (votos da enquete já apagados ou a apagar), nem lê os votos.
+  let votes = cur && !cur.result
     ? await deps.db.list<VoteRow>("community_votes", { restaurant_id: head.id, poll_id: cur.id }, { sort: "Id" })
     : [];
-  return { ok: true, state: buildPublicState({ head, open: true, polls, votes, posts, tvs, now, before }) };
+  // Encerrada, de antes da virada do dia e sem result no cache: o cron pode ter apagado parte
+  // dos votos. A linha é lida na hora, depois dos votos: o cron grava o result antes de
+  // apagar, então, se ela ainda vem sem result, os votos lidos acima estavam inteiros.
+  if (cur && needsFreshResult(cur, head, now)) {
+    const fresh = toPoll(await deps.db.first<Raw>("community_polls", { uid: cur.id, restaurant_id: head.id }));
+    if (fresh?.result && fresh.id === cur.id && fresh.restaurant_id === head.id) {
+      agenda = polls.map((p) => (p.id === fresh.id ? fresh : p));
+      votes = [];
+    }
+  }
+  return { ok: true, state: buildPublicState({ head, open: true, polls: agenda, votes, posts, tvs, now, before }) };
+}
+
+// Parâmetros da GET agregada: só ?antes=, uma vez. Qualquer outro (ou repetido) é recusado:
+// cada URL diferente seria uma entrada nova na CDN e cairia na função e no banco.
+export function parsePublicQuery(sp: URLSearchParams): { antes: string | null } | null {
+  const keys = [...sp.keys()];
+  if (keys.some((k) => k !== "antes") || keys.length > 1) return null;
+  return { antes: sp.get("antes") };
 }
 
 // Resposta da GET agregada (a rota só confere o slug e copia status, corpo e cache).

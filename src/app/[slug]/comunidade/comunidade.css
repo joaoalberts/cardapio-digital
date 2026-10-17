@@ -1,39 +1,82 @@
-/* Comunidade no cardápio (Palco da casa + Mural de pratos), fase 1a.
-   Valores da ficha aprovada (docs/prototipos/comunidade/README.md + prototipo.html).
+/* Comunidade no cardápio (Palco da casa + Mural de pratos), fase 1a, visual v2.
+   Valores da ficha aprovada (docs/prototipos/comunidade-v2/recomendada/README.md e
+   prototipo.html, telas de celular 01 a 15).
    Regras: só backdrop-filter, sem a linha -webkit- (o Lightning CSS gera as duas a partir
    dela; com as duas escritas, sobra só a prefixada e o Chrome fica sem desfoque); no máximo
-   um desfoque por camada (capa: só o balão; Comunidade: só a folha). Anima só transform,
-   opacity e o ângulo --cmu-left (@property). Cor da marca só por var(--accent); limão
-   (--o-lime) só nas ações. Títulos em .fd com a escala do tema; o resto herda var(--ui). */
+   um desfoque por camada (capa: só o balão ou a pílula; Comunidade: só a folha; avisos, ilha
+   e folha de tamanhos são tons opacos). Anima só transform, opacity e ângulos (@property).
+   Cor da marca só por var(--accent); limão (--o-lime) só nas ações. Palavras na fonte da casa
+   (.fd, com a escala do tema); números e interface em var(--ui). */
 
 @property --cmu-left {
   syntax: "<angle>";
   inherits: true;
   initial-value: 360deg;
 }
+@property --cmu-sp-a {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 0deg;
+}
 
 .cm .cmu-bal,
 .cm .cmu-layer,
 .cm .cmu-stl {
   --o-lime: #d8f05a;
-  --cmu-photo: rgba(26, 20, 16, 0.55); /* vidro escuro sobre foto */
-  --cmu-sheet: rgba(28, 22, 18, 0.7); /* folha (mesmo vidro do "Seu pedido") */
-  --cmu-tint-1: rgba(255, 255, 255, 0.06);
-  --cmu-tint-2: rgba(255, 255, 255, 0.09);
-  --cmu-faint: rgba(247, 239, 230, 0.55);
+  --cmu-ink: #140e0b;
+  --cmu-muted: rgba(247, 239, 230, 0.68);
+  --cmu-faint: rgba(247, 239, 230, 0.5);
+  --cmu-champ: #f3e7cf;
   --cmu-live: #ff6b5b;
-  --cmu-ink: #1b1714;
-  --cmu-ease: cubic-bezier(0.2, 0.9, 0.25, 1);
-  --cmu-spring: cubic-bezier(0.3, 1.3, 0.5, 1);
-  /* O protótipo media com a Karla, cuja altura "normal" é ~1,17; a fonte de texto de cada
+  --cmu-tint: rgba(255, 255, 255, 0.055);
+  --cmu-tint-1: rgba(255, 255, 255, 0.055);
+  --cmu-tint-2: rgba(255, 255, 255, 0.09);
+  --cmu-over: rgba(20, 14, 11, 0.6); /* tom escuro sobre foto, sem desfoque próprio */
+  --cmu-chrome: rgba(20, 14, 11, 0.74); /* abas, carrinho e fechar */
+  --cmu-sheet: rgba(28, 22, 18, 0.72); /* a folha (o único vidro da camada) */
+  --cmu-photo: rgba(22, 16, 13, 0.52); /* balão e pílula da capa */
+  --cmu-ease: cubic-bezier(0.23, 1, 0.32, 1);
+  --cmu-spectrum: #120f0c, #4a4136 14%, #b8a582 28%, #f3e7cf 40%, #ffffff 50%, #f3e7cf 60%, #b8a582 72%, #4a4136 86%, #120f0c;
+  --cmu-tick: linear-gradient(180deg, #000 0 20%, transparent 20% 80%, #000 80%);
+  /* O protótipo mede com a Karla, cuja altura "normal" é ~1,17; a fonte de texto de cada
      tema (Barlow, Jost...) tem outra, e o balão e as linhas têm altura fixa. */
   line-height: 1.17;
 }
 .cm .cmu-anchor {
   display: none;
 }
+.cm .cmu-layer .icon,
+.cm .cmu-bal .icon {
+  width: 22px;
+  height: 22px;
+}
+.cm .cmu-spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(247, 239, 230, 0.18);
+  border-top-color: currentColor;
+  animation: cmu-spin 0.9s linear infinite;
+  flex: none;
+}
+@keyframes cmu-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes cmu-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes cmu-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
 
-/* ================= Balão na capa ================= */
+/* ================= Balão e pílula na capa ================= */
 .cm .cmu-bal {
   position: absolute;
   z-index: 4;
@@ -43,6 +86,7 @@
   background: var(--cmu-photo);
   backdrop-filter: blur(18px) saturate(0.5);
   animation: cmu-bal-in 0.55s 0.15s var(--cmu-ease) both;
+  transition: transform 0.16s var(--cmu-ease);
 }
 .cm .cmu-bal:active {
   transform: scale(0.97);
@@ -53,237 +97,260 @@
     transform: translateY(10px) scale(0.96);
   }
 }
-/* (a) A casa falando: corpo de 254×106 + ponta de 12 px apontando para a logo. */
-.cm .cmu-bal-p {
-  width: 254px;
-  height: 118px;
-  margin-left: -127px;
-  padding: 11px 12px 0 11px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 36px;
-  grid-template-rows: 34px auto auto;
-  align-content: start;
-  column-gap: 8px;
-  border-radius: 24px;
-  clip-path: path("M24,0 H230 A24,24 0 0 1 254,24 V82 A24,24 0 0 1 230,106 H141 Q132,106 128.5,116.5 Q127,118 125.5,116.5 Q122,106 113,106 H24 A24,24 0 0 1 0,82 V24 A24,24 0 0 1 24,0 Z");
+.cm .cmu-bb {
+  display: block;
+  padding: 9px 11px 11px 14px;
 }
-.cm .cmu-bal-p .cmu-bh {
+/* Enquete: 262 de largura; "Enquete da casa ● no telão", a pergunta em até 2 linhas e
+   "Toque para votar"; o anel de 38 px à direita. */
+.cm .cmu-bal-p {
+  width: 262px;
+  margin-left: -131px;
+}
+.cm .cmu-bal-p .cmu-bb {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  column-gap: 8px;
+}
+.cm .cmu-bal-p .cmu-ring {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: start;
+  margin-top: 2px;
+  width: 38px;
+  height: 38px;
+}
+.cm .cmu-bal-p .cmu-ring b {
+  font-size: 13px;
+}
+.cm .cmu-bk {
+  grid-column: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
+  height: 26px;
   min-width: 0;
   font-size: 12.5px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.92);
+  font-weight: 600;
+  color: var(--accent);
   white-space: nowrap;
 }
-.cm .cmu-bal-p .cmu-bh img {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  object-fit: cover;
-  object-position: 50% 26%;
-  box-shadow: 0 0 0 1.5px var(--accent);
-  flex: none;
+.cm .cmu-bk .cmu-lv {
+  color: rgba(247, 239, 230, 0.78);
+  font-weight: 500;
 }
-.cm .cmu-bal-p .cmu-bq {
-  grid-column: 1 / -1;
-  font-size: calc(20px * var(--display-scale));
-  line-height: 1.12;
-  margin-top: 6px;
-  white-space: nowrap;
+.cm .cmu-bq {
+  grid-column: 1;
+  margin-top: 1px;
+  font-size: calc(19.5px * var(--display-scale));
+  line-height: 1.04;
+  text-wrap: balance;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
-.cm .cmu-bal-p .cmu-bc {
-  grid-column: 1 / -1;
+.cm .cmu-bc {
+  grid-column: 1;
+  display: block;
   margin-top: 5px;
-  /* 4 px de folga à esquerda para o halo do ponto "ao vivo" (inset -4px) não ser cortado
-     pelo overflow; o texto fica no mesmo lugar. */
-  margin-left: -4px;
-  padding-left: 4px;
-  font-size: 12.5px;
-  color: rgba(247, 239, 230, 0.72);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-  overflow: hidden;
-}
-.cm .cmu-bal-p .cmu-bc b {
-  color: var(--o-lime);
+  font-size: 13px;
+  line-height: 1.15;
   font-weight: 700;
+  color: var(--o-lime);
 }
-.cm .cmu-bal-p .cmu-tmr {
-  grid-column: 2;
-  grid-row: 1;
-  align-self: center;
-}
-/* (b) Sem enquete: o Mural, com até 3 miniaturas em leque. */
+/* Mural: 254 de largura, leque de 3 miniaturas de 46 px. */
 .cm .cmu-bal-m {
-  width: 240px;
-  height: 122px;
-  margin-left: -120px;
-  padding: 12px 14px;
-  border-radius: 26px;
+  width: 254px;
+  margin-left: -127px;
+  text-align: center;
+}
+.cm .cmu-bal-m .cmu-bb {
+  padding: 10px 14px 11px;
   display: grid;
   justify-items: center;
-  align-content: start;
-  text-align: center;
 }
 .cm .cmu-fan {
   position: relative;
-  width: 112px;
-  height: 54px;
+  width: 116px;
+  height: 48px;
 }
 .cm .cmu-fan img {
   position: absolute;
   top: 0;
   left: 50%;
-  width: 50px;
-  height: 50px;
-  margin-left: -25px;
+  width: 46px;
+  height: 46px;
+  margin-left: -23px;
   border-radius: 14px;
   object-fit: cover;
-  box-shadow: 0 0 0 2px rgba(28, 22, 18, 0.95), 0 6px 14px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
 }
 .cm .cmu-fan img.l {
-  transform: translateX(-34px) translateY(4px) rotate(-12deg) scale(0.88);
+  transform: translateX(-36px) translateY(4px) rotate(-11deg) scale(0.86);
+  opacity: 0.85;
 }
 .cm .cmu-fan img.r {
-  transform: translateX(34px) translateY(4px) rotate(12deg) scale(0.88);
+  transform: translateX(36px) translateY(4px) rotate(11deg) scale(0.86);
+  opacity: 0.85;
 }
 .cm .cmu-fan img.c {
   z-index: 2;
 }
-.cm .cmu-bal-m b {
+.cm .cmu-bt {
+  display: flex;
+  justify-content: center;
   max-width: 100%;
-  margin-top: 9px;
-  font-size: 14.5px;
-  font-weight: 700;
-  white-space: nowrap;
+  margin-top: 6px;
+  font-size: calc(15.5px * var(--display-scale));
+  line-height: 1.1;
+  white-space: pre;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cm .cmu-bal-m .cmu-s {
-  margin-top: 2px;
-  font-size: 12.5px;
-  color: rgba(247, 239, 230, 0.72);
+.cm .cmu-bt.long {
+  font-size: calc(14px * var(--display-scale));
 }
-/* (c) Tela baixa: pílula de uma linha na altura dos botões, entre o ≡ e o carrinho
+.cm .cmu-bt > * {
+  flex: none;
+}
+.cm .cmu-bt .cmu-bn {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cm .cmu-bt i {
+  font-style: normal;
+  color: var(--accent);
+}
+.cm .cmu-bal-m .cmu-bc {
+  margin-top: 4px;
+}
+/* Tela baixa: pílula de uma linha na altura dos botões, entre o ≡ e o carrinho
    (left/right/top medidos na capa). */
-.cm .cmu-bal-c {
+.cm .cmu-pill {
   z-index: 7;
   height: 40px;
   margin: 0;
-  padding: 0 6px 0 7px;
   border-radius: 20px;
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 0 12px 0 7px;
+  font-size: 13.5px;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
+  animation-duration: 0.5s;
+  animation-delay: 0.1s;
 }
-.cm .cmu-bal-c > img {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  object-fit: cover;
-  object-position: 50% 26%;
-  box-shadow: 0 0 0 1.5px var(--accent);
-  flex: none;
-}
-.cm .cmu-bal-c .cmu-t {
-  flex: 1;
+.cm .cmu-pill .cmu-t {
   min-width: 0;
-  font-size: 13px;
-  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cm .cmu-bal-c .cmu-tmr {
+.cm .cmu-pill b {
+  color: var(--o-lime);
+  font-weight: 700;
+}
+.cm .cmu-pill .cmu-ring {
   width: 28px;
   height: 28px;
 }
-.cm .cmu-mfan {
-  display: flex;
-  flex: none;
-  padding-left: 1px;
-}
-.cm .cmu-mfan img {
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
-  object-fit: cover;
-  box-shadow: 0 0 0 1.5px rgba(28, 22, 18, 0.95);
-}
-.cm .cmu-mfan img + img {
-  margin-left: -10px;
-}
 
-/* Anel de contagem: o ângulo --cmu-left anda 1 s por segundo. */
-.cm .cmu-tmr {
+/* Anel do tempo: conic-gradient com máscara de anel; --cmu-left = restante ÷ total × 360°. */
+.cm .cmu-ring {
+  --rw: 3px;
   position: relative;
-  width: 36px;
-  height: 36px;
+  flex: none;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.22);
-  box-shadow: 0 0 12px rgba(216, 240, 90, 0.18);
-  flex: none;
+  text-align: center;
+  line-height: 1;
   transition: --cmu-left 1s linear;
 }
-.cm .cmu-tmr .cmu-ring {
+.cm .cmu-ring::before {
+  content: "";
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: conic-gradient(var(--o-lime) var(--cmu-left), rgba(255, 255, 255, 0.16) 0);
-  mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+  background: conic-gradient(var(--o-lime) var(--cmu-left), rgba(247, 239, 230, 0.16) 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - var(--rw) - 0.5px), #000 calc(100% - var(--rw)));
 }
-.cm .cmu-tmr b {
+.cm .cmu-ring.paused::before {
+  background: conic-gradient(rgba(247, 239, 230, 0.5) var(--cmu-left), rgba(247, 239, 230, 0.12) 0);
+}
+.cm .cmu-ring > span {
   position: relative;
-  font-size: 10.5px;
+}
+.cm .cmu-ring b {
+  display: block;
+  font-family: var(--ui);
+  font-size: 14px;
   font-weight: 700;
+  color: var(--fg);
   font-variant-numeric: tabular-nums;
-  color: #fff;
 }
-
-.cm .cmu-live {
+.cm .cmu-ring small {
+  display: block;
+  margin-top: 1px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--cmu-muted);
+}
+.cm .cmu-lv {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.cm .cmu-lv em {
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cm .cmu-dot {
   position: relative;
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--cmu-live);
   flex: none;
-  display: inline-block;
 }
-.cm .cmu-live::after {
+.cm .cmu-dot::after {
   content: "";
   position: absolute;
-  inset: -4px;
+  inset: 0;
   border-radius: 50%;
-  background: rgba(255, 107, 91, 0.45);
+  background: var(--cmu-live);
   animation: cmu-pulse 1.6s ease-out infinite;
+}
+.cm .cmu-dot.off {
+  background: rgba(247, 239, 230, 0.4);
+}
+.cm .cmu-dot.off::after {
+  display: none;
 }
 @keyframes cmu-pulse {
   from {
-    transform: scale(0.45);
-    opacity: 1;
+    transform: scale(0.6);
+    opacity: 0.9;
   }
   to {
-    transform: scale(1.5);
+    transform: scale(2.4);
     opacity: 0;
   }
 }
 
-/* ================= Camada da Comunidade ================= */
+/* ================= Camada da Comunidade (a folha) ================= */
 .cm .cmu-layer {
   position: fixed;
   inset: 0;
   z-index: 35; /* acima do story (20); abaixo das folhas do pedido (41+) e das informações (40) */
-  display: flex;
-  flex-direction: column;
   color: var(--fg);
   background: var(--cmu-sheet);
   backdrop-filter: blur(30px) saturate(0.55);
@@ -300,19 +367,17 @@
   pointer-events: auto;
   transition: opacity 0.3s ease, transform 0.45s var(--cmu-ease), visibility 0s;
 }
-.cm .cmu-layer .icon {
-  width: 22px;
-  height: 22px;
-}
+/* Abas, carrinho e fechar por cima dos painéis, em tom escuro. Na tela larga, alinhados com
+   a coluna de 560 px. */
 .cm .cmu-h {
-  flex: none;
-  width: 100%;
-  max-width: 560px;
-  margin: 0 auto;
-  padding: calc(var(--safe-top) + 8px) 16px 10px;
+  position: absolute;
+  z-index: 7;
+  top: calc(var(--safe-top) + 8px);
+  left: max(16px, calc(50% - 264px));
+  right: max(16px, calc(50% - 264px));
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
 }
 .cm .cmu-seg {
   position: relative;
@@ -321,31 +386,27 @@
   width: 206px;
   height: 42px;
   padding: 3px;
-  border-radius: 999px;
-  background: var(--cmu-tint-2);
+  border-radius: 21px;
+  background: var(--cmu-chrome);
 }
 .cm .cmu-seg .cmu-th {
   position: absolute;
   top: 3px;
-  bottom: 3px;
   left: 3px;
   width: calc(50% - 3px);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
-  transition: transform 0.42s var(--cmu-spring);
-}
-.cm .cmu-seg[data-on="1"] .cmu-th {
-  transform: translateX(100%);
+  height: 36px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.14);
+  transform: translateX(calc(var(--tab, 0) * 100%));
+  transition: transform 0.42s var(--cmu-ease);
 }
 .cm .cmu-seg button {
   position: relative;
   z-index: 1;
-  padding: 0 18px;
+  text-align: center;
   font-size: 15px;
   font-weight: 600;
-  color: var(--cmu-faint);
-  transition: color 0.25s;
+  color: var(--cmu-muted);
 }
 .cm .cmu-seg button[aria-selected="true"] {
   color: var(--fg);
@@ -354,21 +415,39 @@
   flex: 1;
 }
 .cm .cmu-layer .cmu-cart {
+  position: relative;
   width: 44px;
   height: 44px;
-  background: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
   border: 0;
+  background: var(--cmu-chrome);
   box-shadow: none;
   backdrop-filter: none;
 }
 .cm .cmu-layer .cmu-cart .icon {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
 }
-/* O selo do número (order.css) traz desfoque próprio; dentro da folha só ela desfoca.
-   O fundo translúcido do selo fica. */
+/* O selo do número (order.css) traz desfoque próprio; dentro da folha só ela desfoca. Em
+   limão, e pula 0,45 s a cada item novo. */
 .cm .cmu-layer .o-cartbtn-n {
+  top: -2px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  font-size: 11px;
+  color: var(--cmu-ink);
+  background: var(--o-lime);
   backdrop-filter: none;
+  animation: cmu-bump 0.45s var(--cmu-ease);
+}
+@keyframes cmu-bump {
+  40% {
+    transform: scale(1.3);
+  }
 }
 .cm .cmu-x {
   width: 44px;
@@ -376,63 +455,18 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--cmu-chrome);
   color: #fff;
   flex: none;
-}
-.cm .cmu-layer .cmu-x .icon {
-  width: 20px;
-  height: 20px;
 }
 .cm .cmu-x:active,
 .cm .cmu-layer .cmu-cart:active {
   transform: scale(0.94);
 }
 
-/* Sem conexão: pílula discreta abaixo das abas; a enquete fica a 55% e sem toque. */
-.cm .cmu-offp {
-  position: absolute;
-  z-index: 3;
-  top: calc(var(--safe-top) + 64px);
-  left: 50%;
-  transform: translateX(-50%);
-  height: 30px;
-  padding: 0 13px 0 10px;
-  border-radius: 15px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: rgba(247, 239, 230, 0.8);
-  background: rgba(255, 255, 255, 0.08);
-  white-space: nowrap;
-  animation: cmu-fade-in 0.3s ease both;
-}
-.cm .cmu-spin {
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: rgba(255, 255, 255, 0.85);
-  animation: cmu-spin 0.9s linear infinite;
-  flex: none;
-}
-@keyframes cmu-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@keyframes cmu-fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
 .cm .cmu-b {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  width: 100%;
+  position: absolute;
+  inset: 0;
   max-width: 560px;
   margin: 0 auto;
   overflow: hidden;
@@ -441,175 +475,304 @@
   display: flex;
   width: 200%;
   height: 100%;
+  transform: translateX(calc(var(--tab, 0) * -50%));
   transition: transform 0.45s var(--cmu-ease);
 }
-.cm .cmu-layer[data-tab="mural"] .cmu-panes {
-  transform: translateX(-50%);
-}
 .cm .cmu-pane {
+  position: relative;
   width: 50%;
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  padding: 6px 16px calc(var(--safe-bottom) + 24px);
+  padding-bottom: calc(var(--safe-bottom) + 96px);
   scrollbar-width: none;
 }
 .cm .cmu-pane::-webkit-scrollbar {
   display: none;
 }
-.cm .cmu-layer.offline .cmu-pane {
-  padding-top: 46px;
-}
 
-/* ---------- Primeira vez ---------- */
-.cm .cmu-tip {
+/* Avisos do topo (sem desfoque novo: tom escuro). */
+.cm .cmu-note {
+  position: absolute;
+  z-index: 6;
+  top: calc(var(--safe-top) + 60px);
+  left: 16px;
+  right: 16px;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
-  margin-bottom: 12px;
+  padding: 12px 10px 12px 16px;
   border-radius: 20px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  animation: cmu-tip-in 0.5s 0.25s var(--cmu-ease) both;
+  background: rgba(20, 14, 11, 0.88);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: var(--cmu-muted);
+  animation: cmu-rise 0.5s 0.25s var(--cmu-ease) both;
+  transition: opacity 0.2s, transform 0.2s;
 }
-.cm .cmu-tip p {
+.cm .cmu-note.out {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+.cm .cmu-note p {
   flex: 1;
   margin: 0;
-  font-size: 14px;
-  line-height: 1.35;
 }
-.cm .cmu-tip button {
+.cm .cmu-note b {
+  color: var(--fg);
+  font-weight: 700;
+}
+.cm .cmu-note button {
+  flex: none;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 19px;
+  background: var(--cmu-tint-2);
+  color: var(--o-lime);
   font-size: 14px;
   font-weight: 700;
-  color: var(--o-lime);
-  padding: 6px 2px;
 }
-.cm .cmu-tip.out {
-  opacity: 0;
-  transform: translateY(-8px);
-  transition: opacity 0.18s, transform 0.18s;
-}
-@keyframes cmu-tip-in {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
+.cm .cmu-offp {
+  position: absolute;
+  z-index: 6;
+  top: calc(var(--safe-top) + 60px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 17px;
+  background: rgba(20, 14, 11, 0.88);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  animation: cmu-fade-in 0.3s ease both;
 }
 
-/* ---------- Palco ---------- */
-.cm .cmu-house {
+/* ================= Palco: capa de revista ================= */
+.cm .cmu-cov {
+  position: relative;
+  height: 392px;
+}
+.cm .cmu-tri,
+.cm .cmu-solo {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--n, 3), 1fr);
+  gap: 2px;
+  mask-image: linear-gradient(180deg, #000 52%, transparent 100%);
+}
+.cm .cmu-col,
+.cm .cmu-solo figure {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  transition: opacity 0.6s var(--cmu-ease);
+}
+.cm .cmu-col:disabled {
+  cursor: default;
+}
+.cm .cmu-col img,
+.cm .cmu-solo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cm .cmu-streak {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 22%, rgba(255, 255, 255, 0.04) 36%, rgba(255, 255, 255, 0.1) 46%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.1) 54%, rgba(255, 255, 255, 0.04) 64%, transparent 78%);
+  mix-blend-mode: overlay;
+  transform: translateX(-140%);
+}
+.cm .cmu-cov.voted .cmu-col:not(.lead) {
+  opacity: 0.34;
+}
+.cm .cmu-cov.voted .cmu-col.lead .cmu-streak,
+.cm .cmu-cov.win .cmu-streak {
+  animation: cmu-streak 1.6s 0.5s ease-in-out both;
+}
+@keyframes cmu-streak {
+  to {
+    transform: translateX(140%);
+  }
+}
+/* Véu de cacau: as abas e o fechar ficam sobre tom escuro; a cor da foto não vaza no vidro. */
+.cm .cmu-cov::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(20, 14, 11, 0.82) 0, rgba(20, 14, 11, 0.5) 18%, transparent 34%, rgba(20, 14, 11, 0.12) 44%, rgba(20, 14, 11, 0.6) 70%, transparent 100%);
+}
+.cm .cmu-ptx {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 20px 2px 22px;
+}
+.cm .cmu-kick {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px;
-  border-radius: 24px;
-  background: var(--cmu-tint-1);
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  text-shadow: 0 1px 10px rgba(20, 14, 11, 0.7);
 }
-.cm .cmu-house > img,
-.cm .cmu-house-l {
-  width: 46px;
-  height: 46px;
+.cm .cmu-kl {
+  flex: none;
+}
+.cm .cmu-ml {
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   object-fit: cover;
   object-position: 50% 26%;
-  box-shadow: 0 0 0 2px var(--accent);
-  flex: none;
+  box-shadow: 0 0 0 1.5px var(--accent);
   background: var(--surface);
+  flex: none;
 }
-.cm .cmu-hn {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  line-height: 1.2;
+.cm .cmu-kick .cmu-lv {
+  color: var(--cmu-muted);
+  font-weight: 500;
 }
-.cm .cmu-hn b {
-  font-size: 16px;
+.cm .cmu-lv-s {
+  display: none;
+}
+.cm .cmu-kick .cmu-ring {
+  margin-left: auto;
+}
+.cm .cmu-cov h2 {
+  margin: 10px 0 0;
+  font-size: calc(38px * var(--display-scale));
+  line-height: 1.02;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
+}
+.cm .cmu-gol {
+  margin: 10px 0 0;
+  text-shadow: 0 1px 10px rgba(20, 14, 11, 0.6);
+  font-size: 14px;
   font-weight: 700;
+  line-height: 1.3;
+  color: var(--o-lime);
+}
+.cm .cmu-gm {
+  color: var(--cmu-muted);
+  font-weight: 500;
+}
+
+/* Encerrada: a foto inteira vira a capa. */
+.cm .cmu-cov.win {
+  height: 418px;
+}
+.cm .cmu-cov.win .cmu-solo {
+  mask-image: linear-gradient(180deg, #000 58%, transparent 100%);
+}
+.cm .cmu-cov.win .cmu-solo img {
+  object-position: 50% 40%;
+}
+.cm .cmu-pq {
+  margin: 10px 0 0;
+  font-style: italic;
+  font-size: calc(17px * var(--display-scale));
+  color: var(--cmu-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cm .cmu-hn span {
-  font-size: 13px;
-  color: var(--muted);
+.cm .cmu-cov.win h2 {
+  margin-top: 2px;
+  font-size: calc(50px * var(--display-scale));
+}
+.cm .cmu-res {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 16px;
+  padding: 12px 22px 0;
 }
-.cm .cmu-hn em {
-  font-style: normal;
-}
-.cm .cmu-seal {
-  height: 30px;
-  padding: 0 11px 0 9px;
-  border-radius: 15px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  font-weight: 700;
-  white-space: nowrap;
+.cm .cmu-big {
+  font-family: var(--ui);
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-.cm .cmu-layer .cmu-seal .icon {
-  width: 16px;
-  height: 16px;
-  stroke-width: 2.1;
-}
-
-.cm .cmu-poll {
-  margin-top: 12px;
-  padding: 18px 14px 16px;
-  border-radius: 28px;
-  background: linear-gradient(170deg, color-mix(in srgb, var(--accent) 11%, transparent), rgba(255, 255, 255, 0.045) 55%);
-}
-.cm .cmu-ph {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 36px;
-}
-.cm .cmu-plb {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--accent);
-}
-.cm .cmu-ptm {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.cm .cmu-ptm > b {
-  color: var(--fg);
   font-variant-numeric: tabular-nums;
 }
-.cm .cmu-poll h2 {
-  font-size: calc(31px * var(--display-scale));
-  line-height: 1.1;
-  margin: 10px 0 16px;
-  overflow-wrap: anywhere;
+.cm .cmu-big small,
+.cm .cmu-pc small {
+  font-size: 0.56em;
+  font-weight: 700;
+  margin-left: 0.04em;
 }
+.cm .cmu-rest {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--cmu-muted);
+  line-height: 1.2;
+}
+.cm .cmu-rr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.cm .cmu-rr img {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex: none;
+}
+.cm .cmu-rr b {
+  color: var(--fg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Opções: foto do prato, nome e preço; a mesma linha vira barra depois do voto. */
 .cm .cmu-opts {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  padding: 16px 16px 0;
 }
 .cm .cmu-opt {
   position: relative;
-  overflow: hidden;
   width: 100%;
-  height: 64px;
+  height: 72px;
   border-radius: 20px;
-  display: flex;
+  overflow: hidden;
+  background: var(--cmu-tint);
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 11px;
-  padding: 0 14px 0 12px;
-  background: rgba(255, 255, 255, 0.07);
+  column-gap: 14px;
+  padding: 0 18px 0 10px;
   text-align: left;
-  transition: transform 0.15s, opacity 0.25s;
+  transition: transform 0.16s var(--cmu-ease), opacity 0.3s;
+}
+.cm .cmu-opt.nophoto {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-left: 18px;
 }
 .cm .cmu-opt:active {
   transform: scale(0.98);
@@ -617,340 +780,205 @@
 .cm .cmu-opt:disabled {
   cursor: default;
 }
-.cm .cmu-opt .cmu-fill {
-  position: absolute;
-  inset: 0;
-  transform-origin: left center;
-  transform: scaleX(0);
-  background: rgba(255, 255, 255, 0.1);
-  transition: transform 0.8s var(--cmu-ease);
-}
-.cm .cmu-opt.lead .cmu-fill {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 52%, transparent), color-mix(in srgb, var(--accent) 30%, transparent));
-}
-.cm .cmu-opt > *:not(.cmu-fill) {
-  position: relative;
-}
-/* No lugar do emoji do protótipo, a foto do prato da opção. */
-.cm .cmu-opt .cmu-em {
-  width: 34px;
-  height: 34px;
-  border-radius: 11px;
-  object-fit: cover;
-  flex: none;
-}
-.cm .cmu-opt .cmu-tx {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  line-height: 1.22;
-}
-.cm .cmu-opt .cmu-tx b {
-  font-size: 16px;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cm .cmu-opt .cmu-tx small {
-  font-size: 12.5px;
-  color: var(--cmu-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cm .cmu-opt.mine .cmu-tx small {
-  color: var(--o-lime);
-  font-weight: 700;
-}
-.cm .cmu-opt .cmu-pc {
-  font-size: 17px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  opacity: 0;
-  transition: opacity 0.3s;
-  min-width: 44px;
-  text-align: right;
-}
-.cm .cmu-opt .cmu-rd {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px rgba(247, 239, 230, 0.4);
-  flex: none;
-}
-.cm .cmu-poll.show .cmu-opt .cmu-pc {
-  opacity: 1;
-}
-.cm .cmu-poll.show .cmu-opt .cmu-rd {
-  display: none;
-}
-.cm .cmu-poll.show .cmu-opt:active {
+.cm .cmu-opt:disabled:active {
   transform: none;
 }
-.cm .cmu-poll:not(.show) .cmu-opt .cmu-pc {
-  display: none;
-}
-.cm .cmu-pf {
-  margin: 14px 0 0;
-  font-size: 13px;
-  color: var(--cmu-faint);
-  text-align: center;
-}
-.cm .cmu-pf b {
-  color: var(--o-lime);
-  font-weight: 700;
-}
-.cm .cmu-needmesa {
-  margin-top: 14px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-}
-.cm .cmu-layer .cmu-needmesa .icon {
-  width: 26px;
-  height: 26px;
-  color: var(--accent);
-  flex: none;
-}
-.cm .cmu-needmesa div {
-  display: grid;
-  line-height: 1.3;
-}
-.cm .cmu-needmesa b {
-  font-size: 14.5px;
-  font-weight: 700;
-}
-.cm .cmu-needmesa small {
-  font-size: 12.5px;
-  color: var(--muted);
-}
-.cm .cmu-layer.offline .cmu-opt {
-  opacity: 0.55;
-}
-
-/* Vencedora (ou destaque da casa) com foto. */
-.cm .cmu-win {
-  margin-top: 12px;
-  border-radius: 28px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
-}
-.cm .cmu-wph {
+.cm .cmu-oth {
   position: relative;
-  height: 176px;
-}
-.cm .cmu-wph img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.cm .cmu-wph::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, transparent 50%, rgba(28, 22, 18, 0.55));
-}
-.cm .cmu-chip {
-  position: absolute;
-  z-index: 2;
-  height: 28px;
-  padding: 0 11px;
-  border-radius: 14px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #fff;
-  background: var(--cmu-photo);
-  white-space: nowrap;
-}
-.cm .cmu-star {
-  font-style: normal;
-  color: var(--accent);
-}
-.cm .cmu-wph .cmu-chip {
-  left: 12px;
-  top: 12px;
-  height: 30px;
-  font-size: 13px;
-}
-.cm .cmu-wchip {
-  padding: 14px 16px 0;
-}
-.cm .cmu-wchip .cmu-chip {
-  position: static;
-  height: 30px;
-  font-size: 13px;
-}
-.cm .cmu-wb {
-  padding: 14px 16px 16px;
-  display: grid;
-  gap: 4px;
-}
-.cm .cmu-wb small {
-  font-size: 13px;
-  color: var(--cmu-faint);
-}
-.cm .cmu-wb h2 {
-  font-size: calc(31px * var(--display-scale));
-  line-height: 1.08;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.cm .cmu-wb p {
-  margin: 0;
-  font-size: 13.5px;
-  color: var(--muted);
-}
-.cm .cmu-wb p b {
-  color: var(--accent);
-}
-.cm .cmu-wb .cmu-also {
-  margin-top: 10px;
-  justify-self: start;
-}
-
-.cm .cmu-next {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 20px;
-  background: var(--cmu-tint-1);
-}
-.cm .cmu-layer .cmu-next .icon {
-  width: 20px;
-  height: 20px;
-  color: var(--accent);
-  flex: none;
-}
-.cm .cmu-next div {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  line-height: 1.25;
-}
-.cm .cmu-next small {
-  font-size: 12.5px;
-  color: var(--cmu-faint);
-}
-.cm .cmu-next b {
-  font-size: 14.5px;
-  font-weight: 600;
-}
-.cm .cmu-peek {
-  margin-top: 12px;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px 10px 10px;
-  border-radius: 20px;
-  background: var(--cmu-tint-1);
-  text-align: left;
-}
-.cm .cmu-pf3 {
-  display: flex;
-  flex: none;
-}
-.cm .cmu-pf3 img {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  object-fit: cover;
-  box-shadow: 0 0 0 2px rgba(40, 32, 27, 1);
-}
-.cm .cmu-pf3 img + img {
-  margin-left: -14px;
-}
-.cm .cmu-peek div {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  line-height: 1.25;
-}
-.cm .cmu-peek small {
-  font-size: 12.5px;
-  color: var(--cmu-faint);
-}
-.cm .cmu-peek b {
-  font-size: 14.5px;
-  font-weight: 600;
-}
-.cm .cmu-layer .cmu-peek .icon {
-  width: 18px;
-  height: 18px;
-  color: var(--cmu-faint);
-}
-.cm .cmu-peek:active {
-  transform: scale(0.98);
-}
-/* Enquete aberta sem nenhum voto: o destaque da casa embaixo. */
-.cm .cmu-hlrow {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px 10px 10px;
-  border-radius: 20px;
-  background: var(--cmu-tint-1);
-}
-.cm .cmu-hlrow > img {
+  z-index: 1;
   width: 52px;
   height: 52px;
   border-radius: 14px;
   object-fit: cover;
-  flex: none;
 }
-.cm .cmu-hlrow div {
-  flex: 1;
+.cm .cmu-tx {
+  position: relative;
   min-width: 0;
-  display: grid;
-  line-height: 1.25;
 }
-.cm .cmu-hlrow small {
+.cm .cmu-on {
+  display: block;
+  font-size: calc(22px * var(--display-scale));
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cm .cmu-od {
+  display: block;
+  margin-top: 3px;
   font-size: 12.5px;
-  color: var(--cmu-faint);
+  color: var(--cmu-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.cm .cmu-hlrow b {
-  font-size: 14.5px;
+.cm .cmu-od b {
+  color: var(--fg);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-right: 6px;
+}
+.cm .cmu-od.mine {
+  display: flex;
+  align-items: center;
+}
+.cm .cmu-layer .cmu-od .icon {
+  display: inline-block;
+  flex: none;
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.6;
+  vertical-align: -2px;
+  margin-right: 4px;
+  color: var(--o-lime);
+}
+.cm .cmu-rt {
+  position: relative;
+}
+.cm .cmu-radio {
+  display: block;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.75px rgba(247, 239, 230, 0.36);
+}
+.cm .cmu-pc {
+  font-family: var(--ui);
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: rgba(247, 239, 230, 0.86);
+}
+.cm .cmu-opt.lead .cmu-pc {
+  color: var(--accent);
+}
+.cm .cmu-opts.dim .cmu-opt {
+  opacity: 0.55;
+  pointer-events: none;
+}
+/* Preenchimento: translateX dentro do trilho; a ponta champanhe só nas bordas de cima e de
+   baixo (nunca cruza o nome nem a descrição). */
+.cm .cmu-fill {
+  position: absolute;
+  inset: 0;
+  transform: translateX(calc((var(--p, 0) - 100) * 1%));
+  transition: transform 0.8s var(--cmu-ease);
+  background: linear-gradient(90deg, rgba(247, 239, 230, 0.02), rgba(247, 239, 230, 0.09));
+}
+.cm .cmu-fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 2px;
+  background: var(--cmu-champ);
+  opacity: 0.3;
+  mask-image: var(--cmu-tick);
+}
+.cm .cmu-opt.lead > .cmu-fill {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 6%, transparent), color-mix(in srgb, var(--accent) 34%, transparent) calc(100% - 18px), color-mix(in srgb, var(--accent) 48%, transparent));
+}
+.cm .cmu-opt.lead > .cmu-fill::after {
+  opacity: 1;
+  width: 3px;
+}
+
+/* Depois do voto: o cartão "Seu voto" com "Pedir também" e "Postar". */
+.cm .cmu-after {
+  margin: 12px 16px 0;
+  padding: 12px;
+  border-radius: 24px;
+  background: var(--cmu-tint);
+  animation: cmu-rise 0.35s 0.8s var(--cmu-ease) both;
+}
+.cm .cmu-who {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: center;
+  padding: 2px 4px 0 2px;
+}
+.cm .cmu-who.nophoto {
+  grid-template-columns: minmax(0, 1fr);
+}
+.cm .cmu-who img {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  object-fit: cover;
+  grid-row: 1 / span 3;
+}
+.cm .cmu-who small {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cmu-muted);
+}
+.cm .cmu-who b {
+  font-size: calc(21px * var(--display-scale));
+  line-height: 1.05;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.cm .cmu-who span {
+  font-size: 13px;
+  color: var(--cmu-muted);
+  line-height: 1.3;
+}
+.cm .cmu-who em {
+  font-style: normal;
+  color: var(--fg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cm .cmu-arow {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.cm .cmu-arow .cmu-buy {
+  flex: 1;
+  height: 50px;
+  min-width: 0;
+  container-type: inline-size;
+}
+/* Sem espaço para o preço (R$ 29,90 ao lado do "Postar"), ele fica só na linha de cima. */
+@container (max-width: 250px) {
+  .cm .cmu-arow .cmu-buy .cmu-pr {
+    display: none;
+  }
+}
+.cm .cmu-arow .cmu-ghost {
+  height: 50px;
+  color: var(--cmu-muted);
+}
+.cm .cmu-arow .cmu-ghost.grow {
+  flex: 1;
+}
 
-/* ---------- "Pedir também" (limão) ---------- */
-.cm .cmu-also {
+/* "Pedir também": disco e texto em limão, preço em creme. */
+.cm .cmu-buy {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 34px;
-  padding: 0 13px 0 5px;
-  border-radius: 17px;
-  font-size: 13px;
+  gap: 10px;
+  height: 44px;
+  padding: 0 18px 0 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 15px;
   font-weight: 700;
   white-space: nowrap;
-  color: var(--o-lime);
-  background: rgba(216, 240, 90, 0.12);
-  box-shadow: 0 0 16px rgba(216, 240, 90, 0.1);
-  transition: transform 0.15s, background-color 0.25s, color 0.25s;
-  flex: none;
+  transition: transform 0.16s var(--cmu-ease);
 }
-.cm .cmu-also:active {
-  transform: scale(0.95);
+.cm .cmu-buy:active {
+  transform: scale(0.97);
 }
-.cm .cmu-pl {
-  position: relative;
-  width: 24px;
-  height: 24px;
+.cm .cmu-disc {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -958,196 +986,511 @@
   color: var(--cmu-ink);
   flex: none;
 }
-.cm .cmu-layer .cmu-pl svg {
-  position: absolute;
-  width: 14px;
-  height: 14px;
+.cm .cmu-layer .cmu-disc .icon {
+  width: 16px;
+  height: 16px;
   stroke-width: 2.6;
-  transition: opacity 0.2s, transform 0.3s var(--cmu-spring);
 }
-.cm .cmu-pl .ck {
-  opacity: 0;
-  transform: scale(0.4);
-}
-.cm .cmu-also.done {
-  color: rgba(247, 239, 230, 0.86);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: none;
-  cursor: default;
-}
-.cm .cmu-also.done:active {
-  transform: none;
-}
-.cm .cmu-also.done .cmu-pl {
-  background: rgba(216, 240, 90, 0.18);
+.cm .cmu-buy .cmu-t {
   color: var(--o-lime);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.cm .cmu-also.done .cmu-pl .ps {
-  opacity: 0;
-  transform: scale(0.4) rotate(90deg);
+.cm .cmu-buy .cmu-pr {
+  margin-left: auto;
+  padding-left: 4px;
+  font-weight: 600;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
 }
-.cm .cmu-also.done .cmu-pl .ck {
-  opacity: 1;
-  transform: none;
-}
-.cm .cmu-also.big {
-  height: 44px;
-  border-radius: 22px;
-  padding: 0 18px 0 7px;
-  font-size: 15px;
-  gap: 9px;
-}
-.cm .cmu-also.big .cmu-pl {
-  width: 30px;
-  height: 30px;
-}
-.cm .cmu-also:disabled {
-  color: var(--cmu-faint);
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: none;
+.cm .cmu-buy.done {
   cursor: default;
 }
-.cm .cmu-also:disabled .cmu-pl {
+.cm .cmu-buy.done:active {
+  transform: none;
+}
+.cm .cmu-buy.done .cmu-disc {
+  background: rgba(216, 240, 90, 0.16);
+  color: var(--o-lime);
+  animation: cmu-pop 0.45s var(--cmu-ease);
+}
+@keyframes cmu-pop {
+  40% {
+    transform: scale(1.18);
+  }
+}
+.cm .cmu-buy:disabled {
+  cursor: default;
+}
+.cm .cmu-buy.off .cmu-t {
+  color: var(--cmu-faint);
+}
+.cm .cmu-buy.off .cmu-disc {
   background: rgba(255, 255, 255, 0.08);
   color: var(--cmu-faint);
+}
+.cm .cmu-buy.sm {
+  height: 36px;
+  gap: 8px;
+  padding: 0 13px 0 5px;
+  font-size: 13.5px;
+}
+.cm .cmu-buy.sm .cmu-disc {
+  width: 26px;
+  height: 26px;
+}
+.cm .cmu-layer .cmu-buy.sm .cmu-disc .icon {
+  width: 13px;
+  height: 13px;
+}
+.cm .cmu-buy.sm .cmu-pr {
+  margin-left: 2px;
+}
+.cm .cmu-buy.photo {
+  background: var(--cmu-over);
+}
+.cm .cmu-buy.big {
+  width: 100%;
+  height: 56px;
+  font-size: 16px;
+  padding-right: 22px;
+}
+.cm .cmu-buy.big .cmu-disc {
+  width: 40px;
+  height: 40px;
+}
+.cm .cmu-layer .cmu-buy.big .cmu-disc .icon {
+  width: 19px;
+  height: 19px;
+}
+.cm .cmu-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--cmu-tint);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  transition: transform 0.16s var(--cmu-ease);
+}
+.cm .cmu-ghost:active {
+  transform: scale(0.97);
+}
+.cm .cmu-layer .cmu-ghost .icon {
+  width: 18px;
+  height: 18px;
 }
 
-/* ---------- Mural (fase 1a: só fotos da casa) ---------- */
+/* Coroação: "Pedir também" dentro do anel ônix e champanhe da oferta, 2 voltas e descansa. */
+.cm .cmu-ctas {
+  display: grid;
+  gap: 10px;
+  padding: 16px 16px 0;
+}
+.cm .cmu-ctas .cmu-ghost {
+  height: 44px;
+  color: var(--cmu-muted);
+}
+.cm .cmu-gowrap {
+  position: relative;
+  border-radius: 999px;
+}
+.cm .cmu-gowrap::before,
+.cm .cmu-gowrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: 1.5px;
+  background: conic-gradient(from var(--cmu-sp-a), var(--cmu-spectrum));
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0.85;
+  animation: cmu-sp-spin 2.6s linear 2, cmu-sp-rest 0.6s 5.2s ease forwards;
+}
+.cm .cmu-gowrap::after {
+  inset: -2px;
+  z-index: 0;
+  padding: 4px;
+  filter: blur(4px);
+  opacity: 0.4;
+}
+@keyframes cmu-sp-spin {
+  to {
+    --cmu-sp-a: 360deg;
+  }
+}
+@keyframes cmu-sp-rest {
+  to {
+    opacity: 0.45;
+  }
+}
+.cm .cmu-gowrap .cmu-buy {
+  position: relative;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+.cm .cmu-gowrap .cmu-buy .cmu-pr {
+  font-size: 16px;
+}
+
+/* Empate: os cartões alinhados embaixo de cada foto. */
+.cm .cmu-tie {
+  display: grid;
+  grid-template-columns: repeat(var(--n, 2), minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 16px 0;
+}
+.cm .cmu-tie > div {
+  min-width: 0;
+  padding: 12px 12px 12px 14px;
+  border-radius: 22px;
+  background: var(--cmu-tint);
+  display: grid;
+  gap: 2px;
+}
+.cm .cmu-tie b {
+  font-size: calc(21px * var(--display-scale));
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cm .cmu-tie > div > span {
+  font-size: 13px;
+  color: var(--cmu-muted);
+  font-variant-numeric: tabular-nums;
+}
+.cm .cmu-tie > div > span em {
+  font-style: normal;
+  font-weight: 800;
+  color: var(--accent);
+  margin-right: 6px;
+}
+.cm .cmu-tie .cmu-buy {
+  margin-top: 10px;
+  justify-self: start;
+  max-width: 100%;
+}
+
+/* "Pra acompanhar: ★ destaque da casa". */
+.cm .cmu-with {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 10px;
+  border-radius: 22px;
+  background: var(--cmu-tint);
+}
+.cm .cmu-with > img {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  object-fit: cover;
+  flex: none;
+}
+.cm .cmu-with div {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.cm .cmu-with small {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cmu-muted);
+}
+.cm .cmu-with small i {
+  font-style: normal;
+  color: var(--accent);
+}
+.cm .cmu-with b {
+  font-size: calc(20px * var(--display-scale));
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Sem mesa: vê o resultado, não vota. */
+.cm .cmu-nomesa {
+  margin: 14px 16px 0;
+  padding: 14px 16px;
+  border-radius: 22px;
+  background: var(--cmu-tint);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.cm .cmu-layer .cmu-nomesa .icon {
+  width: 30px;
+  height: 30px;
+  color: var(--accent);
+  stroke-width: 1.8;
+}
+.cm .cmu-nomesa b {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+}
+.cm .cmu-nomesa span {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--cmu-muted);
+}
+.cm .cmu-hint {
+  margin: 0;
+  padding: 14px 24px 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--cmu-muted);
+  text-align: center;
+  text-wrap: balance;
+}
+
+/* Rodapé único: a seguir + mural, separados por um fio da cor da casa. */
+.cm .cmu-strip {
+  margin: 14px 16px 0;
+  height: 62px;
+  border-radius: 20px;
+  background: var(--cmu-tint);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
+  align-items: center;
+}
+.cm .cmu-strip.one {
+  grid-template-columns: minmax(0, 1fr);
+}
+.cm .cmu-strip > i {
+  height: 30px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.cm .cmu-sb {
+  height: 100%;
+  padding: 0 14px 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  text-align: left;
+}
+.cm .cmu-stx {
+  min-width: 0;
+}
+.cm .cmu-stx small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--cmu-muted);
+}
+.cm .cmu-stx b {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cm .cmu-stack {
+  display: flex;
+  flex: none;
+}
+.cm .cmu-stack img {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  object-fit: cover;
+  box-shadow: 0 0 0 2px rgba(40, 31, 26, 1);
+}
+.cm .cmu-stack img + img {
+  margin-left: -10px;
+}
+
+/* ================= Mural: página de revista ================= */
 .cm .cmu-mhead {
+  padding: calc(var(--safe-top) + 70px) 22px 12px;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin: 4px 2px 12px;
 }
-.cm .cmu-mhead b {
-  font-size: calc(25px * var(--display-scale));
-  font-weight: var(--display-weight);
-}
-.cm .cmu-mhead span {
-  font-size: 12.5px;
-  color: var(--cmu-faint);
+.cm .cmu-mhead h2 {
+  margin: 0;
+  font-size: calc(29px * var(--display-scale));
+  line-height: 1;
   white-space: nowrap;
 }
-.cm .cmu-mos {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  align-items: start;
+.cm .cmu-mhead p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--cmu-muted);
+  white-space: nowrap;
 }
-.cm .cmu-col {
+.cm .cmu-spread {
   display: grid;
-  gap: 20px;
+  gap: 14px;
+  padding: 0 16px;
+}
+.cm .cmu-mp {
+  position: relative;
   min-width: 0;
 }
-.cm .cmu-col.r {
-  padding-top: 44px;
-}
-.cm .cmu-post {
-  display: grid;
-  min-width: 0;
-  animation: cmu-rise 0.45s var(--cmu-ease) both;
-  animation-delay: calc(var(--i, 0) * 50ms);
-}
-@keyframes cmu-rise {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-}
-.cm .cmu-pimg {
+.cm .cmu-ph {
   position: relative;
   display: block;
   width: 100%;
-  border-radius: 20px;
   overflow: hidden;
-  background: var(--cmu-tint-1);
-  box-shadow: 0 12px 28px -12px rgba(0, 0, 0, 0.6);
+  border-radius: 24px;
+  background: var(--cmu-tint);
 }
-.cm .cmu-pimg img.cmu-p {
+.cm .cmu-ph img {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-.cm .cmu-pimg::after {
+.cm .cmu-mp .cmu-streak {
+  animation: cmu-streak 1.6s var(--d, 0.3s) ease-in-out both;
+}
+.cm .cmu-ph::after {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.14), transparent 38%, transparent 70%, rgba(0, 0, 0, 0.3));
+  background: linear-gradient(180deg, rgba(20, 14, 11, 0.35) 0, transparent 22%, transparent 46%, rgba(20, 14, 11, 0.88) 100%);
   pointer-events: none;
 }
-.cm .cmu-by {
+.cm .cmu-mp.big .cmu-ph {
+  aspect-ratio: 1;
+}
+.cm .cmu-chip {
   position: absolute;
   z-index: 2;
-  left: 8px;
-  top: 8px;
-  height: 26px;
-  padding: 0 10px 0 3px;
+  top: 12px;
+  left: 12px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 15px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: 13px;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   color: #fff;
-  background: var(--cmu-photo);
+  background: var(--cmu-over);
+  white-space: nowrap;
+  pointer-events: none;
 }
-.cm .cmu-by img {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  object-fit: cover;
-  object-position: 50% 26%;
+.cm .cmu-chip i {
+  font-style: normal;
+  color: var(--accent);
 }
-.cm .cmu-pimg .cmu-chip {
-  left: 8px;
-  bottom: 8px;
-  height: 26px;
-  padding: 0 10px;
-  font-size: 12px;
+.cm .cmu-cap {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 14px 14px 18px;
+  pointer-events: none;
 }
-.cm .cmu-pm {
+.cm .cmu-cap .cmu-buy {
+  pointer-events: auto;
+}
+.cm .cmu-mp.big .cmu-cap {
   display: grid;
-  gap: 1px;
-  margin: 9px 2px 8px;
-  line-height: 1.25;
-  min-width: 0;
+  justify-items: start;
+  gap: 12px;
+  padding: 0 16px 16px 20px;
 }
-.cm .cmu-pm b {
-  font-size: 15px;
-  font-weight: 600;
+.cm .cmu-mp h3 {
+  margin: 0;
+  font-size: calc(30px * var(--display-scale));
+  line-height: 1.02;
+  overflow-wrap: anywhere;
+}
+.cm .cmu-meta {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--cmu-muted);
+}
+.cm .cmu-meta b {
+  color: var(--fg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cm .cmu-mrow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.cm .cmu-mbuy {
+  margin-top: -6px;
+}
+.cm .cmu-mbuy .cmu-buy {
+  width: 100%;
+}
+.cm .cmu-mp.sq .cmu-ph {
+  aspect-ratio: 1;
+  border-radius: 20px;
+}
+.cm .cmu-mp.sq .cmu-cap {
+  padding: 0 12px 11px 14px;
+}
+.cm .cmu-mp.sq h3 {
+  font-size: calc(19px * var(--display-scale));
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.cm .cmu-pm span {
+.cm .cmu-mp.sq .cmu-meta {
+  margin-top: 2px;
   font-size: 12.5px;
-  color: var(--cmu-faint);
 }
-.cm .cmu-post .cmu-also {
-  justify-self: start;
+.cm .cmu-mp.wide .cmu-ph {
+  aspect-ratio: 16 / 10;
 }
-.cm .cmu-post.off .cmu-pimg img.cmu-p {
+.cm .cmu-mp.wide .cmu-cap {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.cm .cmu-mp.wide .cmu-cap > div {
+  flex: 1;
+  min-width: 0;
+}
+.cm .cmu-mp.wide h3 {
+  font-size: calc(25px * var(--display-scale));
+}
+.cm .cmu-mp.off .cmu-ph img {
   filter: grayscale(1) brightness(0.55);
 }
-.cm .cmu-post.off .cmu-pm b {
-  color: var(--muted);
+.cm .cmu-mp.off h3 {
+  color: var(--cmu-muted);
 }
-.cm .cmu-post.off .cmu-pimg .cmu-chip {
-  left: 50%;
-  top: 50%;
-  bottom: auto;
-  transform: translate(-50%, -50%);
-  height: 30px;
-  font-size: 13px;
-}
-.cm .cmu-mend {
-  margin: 26px 0 0;
-  text-align: center;
+.cm .cmu-mfoot {
+  margin: 0;
+  padding: 18px 24px 0;
   font-size: 13px;
   color: var(--cmu-faint);
+  text-align: center;
+  text-wrap: balance;
+}
+.cm .cmu-mempty {
+  margin: 0;
+  padding: 0 22px 14px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--cmu-muted);
+}
+.cm .cmu-mempty b {
+  color: var(--fg);
+  font-weight: 600;
 }
 .cm .cmu-more {
   margin: 22px auto 0;
@@ -1163,37 +1506,242 @@
   font-weight: 600;
   background: rgba(255, 255, 255, 0.1);
 }
-.cm .cmu-el {
-  margin: 0 4px 12px;
-  font-size: 14px;
-  color: var(--muted);
-}
-.cm .cmu-top1 .cmu-pimg {
-  aspect-ratio: 4 / 3;
-}
-.cm .cmu-top1 .cmu-pm b {
-  font-size: calc(29px * var(--display-scale));
-  font-weight: var(--display-weight);
-  white-space: normal;
-}
-.cm .cmu-top1 .cmu-pm {
-  margin: 10px 2px 10px;
-}
-.cm .cmu-en {
-  margin: 22px 0 0;
-  padding: 14px 16px;
-  border-radius: 20px;
-  background: var(--cmu-tint-1);
-  font-size: 13.5px;
-  line-height: 1.4;
-  color: var(--muted);
+
+/* Ilha "Seu pedido" (a mesma do cardápio, sem desfoque novo). */
+.cm .cmu-island {
+  position: absolute;
+  z-index: 6;
+  left: max(16px, calc(50% - 264px));
+  right: max(16px, calc(50% - 264px));
+  bottom: calc(var(--safe-bottom) + 10px);
+  height: 58px;
+  border-radius: 29px;
+  padding: 0 8px 0 20px;
   display: flex;
+  align-items: center;
   gap: 12px;
+  background: rgba(24, 18, 15, 0.95);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+  animation: cmu-island-in 0.45s var(--cmu-ease) both;
+}
+@keyframes cmu-island-in {
+  from {
+    transform: translateY(calc(100% + 60px));
+  }
+}
+.cm .cmu-it {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.2;
+}
+.cm .cmu-it b {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 700;
+}
+.cm .cmu-it span {
+  display: block;
+  font-size: 12.5px;
+  color: var(--cmu-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cm .cmu-island button {
+  flex: none;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 21px;
+  background: rgba(216, 240, 90, 0.12);
+  color: var(--o-lime);
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+/* Folha de tamanhos: opaca, sem desfoque novo; a camada escurece atrás (nada vaza). */
+.cm .cmu-scrim {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  background: rgba(10, 7, 6, 0.66);
+  animation: cmu-fade-in 0.3s ease both;
+}
+.cm .cmu-sizes {
+  position: absolute;
+  z-index: 31;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 560px;
+  max-height: calc(100% - var(--safe-top) - 24px);
+  margin: 0 auto;
+  overflow-y: auto;
+  padding: 10px 16px calc(var(--safe-bottom) + 14px);
+  border-radius: 30px 30px 0 0;
+  background: #1d1612;
+  box-shadow: 0 -20px 50px rgba(0, 0, 0, 0.5);
+  animation: cmu-sheet-up 0.42s var(--cmu-ease) both;
+}
+@keyframes cmu-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+.cm .cmu-grab {
+  display: block;
+  width: 40px;
+  height: 5px;
+  margin: 0 auto 16px;
+  border-radius: 3px;
+  background: rgba(247, 239, 230, 0.2);
+}
+.cm .cmu-sh {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 14px;
   align-items: center;
 }
-.cm .cmu-layer .cmu-en .icon {
-  color: var(--accent);
+.cm .cmu-sh.nophoto {
+  grid-template-columns: minmax(0, 1fr);
+}
+.cm .cmu-sh img {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  object-fit: cover;
+}
+.cm .cmu-sh b {
+  display: block;
+  font-size: calc(28px * var(--display-scale));
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+.cm .cmu-sh span {
+  display: block;
+  margin-top: 5px;
+  font-size: 13px;
+  color: var(--cmu-muted);
+}
+.cm .cmu-sk {
+  margin: 16px 2px 10px;
+  font-size: 13px;
+  color: var(--cmu-muted);
+}
+.cm .cmu-so {
+  display: grid;
+  gap: 8px;
+}
+.cm .cmu-so button {
+  height: 58px;
+  border-radius: 18px;
+  background: var(--cmu-tint);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px 0 16px;
+  font-size: 15.5px;
+  font-weight: 600;
+  text-align: left;
+}
+.cm .cmu-so .cmu-pr {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--cmu-muted);
+}
+.cm .cmu-so button[aria-checked="true"] {
+  background: var(--cmu-tint-2);
+}
+.cm .cmu-so button[aria-checked="true"] .cmu-pr {
+  color: var(--fg);
+}
+.cm .cmu-rad {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
   flex: none;
+  box-shadow: inset 0 0 0 1.75px rgba(247, 239, 230, 0.36);
+  display: grid;
+  place-items: center;
+}
+.cm [aria-checked="true"] > .cmu-rad {
+  box-shadow: inset 0 0 0 1.75px var(--o-lime);
+}
+.cm [aria-checked="true"] > .cmu-rad::after {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--o-lime);
+}
+.cm .cmu-sizes .cmu-buy.big {
+  margin-top: 14px;
+}
+.cm .cmu-half {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+.cm .cmu-half p {
+  margin: 0 2px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--cmu-muted);
+}
+.cm .cmu-half .cmu-ghost {
+  height: 48px;
+  white-space: normal;
+}
+
+/* ================= Telas baixas (iPhone SE, 375×667) ================= */
+@media (max-height: 700px) {
+  .cm .cmu-cov {
+    height: 268px;
+  }
+  .cm .cmu-cov.win {
+    height: 330px;
+  }
+  /* Capa mais baixa: o rótulo cai mais alto na foto; o véu escurece antes. */
+  .cm .cmu-cov::before {
+    background: linear-gradient(180deg, rgba(20, 14, 11, 0.82) 0, rgba(20, 14, 11, 0.5) 22%, rgba(20, 14, 11, 0.32) 42%, rgba(20, 14, 11, 0.66) 70%, transparent 100%);
+  }
+  .cm .cmu-cov h2 {
+    margin-top: 8px;
+    font-size: calc(31px * var(--display-scale));
+  }
+  .cm .cmu-gol {
+    margin-top: 7px;
+    font-size: 13px;
+  }
+  .cm .cmu-lv-l {
+    display: none;
+  }
+  .cm .cmu-lv-s {
+    display: inline;
+  }
+  .cm .cmu-opts {
+    gap: 6px;
+    padding-top: 12px;
+  }
+  .cm .cmu-opt {
+    height: 62px;
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    column-gap: 12px;
+    padding: 0 16px 0 9px;
+    border-radius: 18px;
+  }
+  .cm .cmu-opt.nophoto {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding-left: 16px;
+  }
+  .cm .cmu-oth {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+  .cm .cmu-on {
+    font-size: calc(20px * var(--display-scale));
+  }
 }
 
 /* Foto grande do Mural: por cima da camada, sem desfoque próprio. */
@@ -1393,8 +1941,8 @@
   white-space: nowrap;
 }
 
-/* Com "reduzir movimento", tudo para, inclusive os pseudo-elementos (o pulso do ponto "ao
-   vivo" é o ::after de .cmu-live, que `*` não pega). Como no protótipo aprovado. */
+/* Com "reduzir movimento", tudo para e os valores vão direto ao final, inclusive os
+   pseudo-elementos (o pulso do ponto "ao vivo" e o anel do "Pedir também"). */
 @media (prefers-reduced-motion: reduce) {
   .cm .cmu-bal,
   .cm .cmu-bal::before,

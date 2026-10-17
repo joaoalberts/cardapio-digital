@@ -4,33 +4,37 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import { NextResponse, type NextRequest } from "next/server";
 import QRCode from "qrcode";
+import { QR_ECC, qrLink } from "@/lib/comunidade/qr";
 import { communityOff } from "@/lib/comunidade/off";
 import { getCommunityContent, getCommunityHead } from "@/lib/comunidade/server";
 import {
+  STORY_CACHE_PENDING,
   parseStoryQuery,
   qrPath,
   resolveStory,
   storyAccent,
   storyCache,
+  storyComeSize,
   storyHandle,
   storyImageSource,
   storyLead,
   storyTexts,
+  storyTitleSize,
   withAlpha,
   type StoryDeps,
   type StorySource,
 } from "@/lib/comunidade/story";
 import type { VoteRow } from "@/lib/comunidade/types";
+import { toPoll } from "@/lib/comunidade/votes";
 import * as db from "@/lib/db/nocodb";
 import { getPublicMenu } from "@/lib/menu/data";
 import { mediaUrl } from "@/lib/menu/media";
 import { isValidSlug } from "@/lib/slug";
 import { readLocalFile, storageDriver } from "@/lib/storage";
 
-// Cartão do story 9:16 (ficha do protótipo: telas 15 e 16): PNG 1080×1920 com o resultado
-// da enquete (?poll=<id>) ou uma foto da casa (?post=<id>), a marca, o @ e o QR de
-// /<slug>?ref=story. A arte do protótipo tem 288×512; aqui tudo é ×3,75. Sem desfoque: vira
-// imagem. A CDN guarda o PNG (60 s com a enquete aberta, 1 dia encerrada, 1 h a foto da casa,
+// Cartão do story 9:16 (ficha v2, telas 16 e 17): PNG 1080×1920 com o resultado da enquete
+// (?poll=<id>) ou uma foto da casa (?post=<id>), a marca, "Vem pro <casa>", o @ e o QR de
+// /<slug>?ref=story, tudo dentro das zonas seguras do Instagram. Sem desfoque: vira imagem. A CDN guarda o PNG (60 s com a enquete aberta, 1 dia encerrada, 1 h a foto da casa,
 // que a casa pode ocultar).
 //
 // Fontes (SIL Open Font License 1.1), baixadas do repositório google/fonts no GitHub, sem
@@ -38,6 +42,9 @@ import { readLocalFile, storageDriver } from "@/lib/storage";
 // aviso de copyright vai também na tabela "name" de cada arquivo:
 // - IMFellEnglish-Regular.ttf = ofl/imfellenglish/IMFeENrm28P.ttf (commit 90abd17b),
 //   © 2010 Igino Marini, nome reservado "IM FELL English Roman".
+// - IMFellEnglish-Italic.ttf = ofl/imfellenglish/IMFeENit28P.ttf (commit 90abd17b),
+//   © 2007 Igino Marini, nome reservado "IM FELL English Italic" (a pergunta da enquete).
+//   A licença é a mesma OFL-imfellenglish.txt da pasta ofl/imfellenglish.
 // - Karla-Bold.ttf = ofl/karla/static/Karla-Bold.ttf, versão 2.002 (commit 568985db),
 //   © 2019 The Karla Project Authors. A pasta static saiu do repositório em 2021, quando
 //   ficou só a fonte variável, que o next/og desenha sempre no peso padrão.
@@ -48,32 +55,29 @@ import { readLocalFile, storageDriver } from "@/lib/storage";
 // (dependência opcional do Next): convertidas e já recortadas no tamanho da arte. Sem sharp,
 // JPEG e PNG passam como estão e WebP fica de fora (a arte sai sem a foto).
 //
-// Tamanho: uma foto de prato em PNG 1080×1920 sem perda dá 2 a 3,4 MB, perto do teto de
-// 4,5 MB da resposta na Vercel e pesado no 4G. A foto entra a 2/3 da arte (720×1280; o
-// fundo já fica sob a sombra e o next/og amplia), e o PNG pronto passa de novo pelo sharp:
-// sem perda com filtro adaptativo e, se ainda passar de 1,5 MB, com paleta de 256 cores
-// (dither; texto, barras e QR ficam iguais à vista). Sem sharp, o PNG sai como o next/og fez.
+// Tamanho: no máximo 1,5 MB (4G e o teto de 4,5 MB da resposta na Vercel). A foto entra a
+// 2/3 do tamanho em que aparece (720×880; o next/og amplia e a parte de baixo já esmaece), e o
+// PNG pronto passa de novo pelo sharp: sem perda com filtro adaptativo; se passar de 1,5 MB,
+// com paleta de 256 cores (dither; texto e QR ficam iguais à vista) e, se ainda passar, de
+// 128. Sem sharp, o PNG sai como o next/og fez.
 
 const W = 1080;
 const H = 1920;
-const S = 3.75; // escala da arte do protótipo (288×512) para 1080×1920
-const px = (n: number) => Math.round(n * S);
+// A foto aparece nos 1320 px de cima e esmaece no ônix.
+const PHOTO_SHOWN_H = 1320;
 
 const FG = "#f7efe6";
 const INK = "#1b1714";
-const BG = "#1c1511";
-const PHOTO_GLASS = "rgba(26, 20, 16, 0.55)";
-// Sombra leve no texto que pode cair sobre a foto (rótulo e pergunta), para ler em qualquer prato.
-const TEXT_SHADOW = "0 2px 14px rgba(0, 0, 0, 0.5)";
+const BG = "#140e0b";
 const CACHE_NOT_FOUND = "public, max-age=0, s-maxage=60";
 const CACHE_ERROR = "public, max-age=0, s-maxage=5";
 const NO_STORE = "no-store";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const IMAGE_TIMEOUT_MS = 5_000;
-// Foto de fundo a 2/3 da arte, ampliada pelo next/og; PNG final até ~1,5 MB.
+// Foto de fundo a 2/3 do tamanho em que aparece, ampliada pelo next/og; PNG final até 1,5 MB.
 const PHOTO_W = 720;
-const PHOTO_H = 1280;
+const PHOTO_H = 880;
 const PNG_TARGET_BYTES = 1_500_000;
 
 type Ctx = { params: Promise<{ slug: string }> };
@@ -83,21 +87,25 @@ const deps: StoryDeps = {
   getContent: getCommunityContent,
   // Lidos na hora (sem cache), em ordem de gravação; story.ts filtra pelo restaurante.
   getVotes: (pollId) => db.list<VoteRow>("community_votes", { poll_id: pollId }, { sort: "Id" }),
+  // No NocoDB o uuid fica na coluna uid (o "id" do app); story.ts confere o restaurante.
+  getPoll: async (pollId) => toPoll(await db.first("community_polls", { uid: pollId })),
   getMenu: (slug) => getPublicMenu(slug),
   off: communityOff,
 };
 
 // ---------- Fontes ----------
 
-type Font = { name: string; data: Buffer; weight: 400 | 700; style: "normal" };
+type Font = { name: string; data: Buffer; weight: 400 | 700; style: "normal" | "italic" };
 let fonts: Promise<Font[]> | null = null;
 function loadFonts(): Promise<Font[]> {
   fonts ??= Promise.all([
     readFile(join(process.cwd(), "src/app/api/comunidade/[slug]/story/IMFellEnglish-Regular.ttf")),
+    readFile(join(process.cwd(), "src/app/api/comunidade/[slug]/story/IMFellEnglish-Italic.ttf")),
     readFile(join(process.cwd(), "src/app/api/comunidade/[slug]/story/Karla-Bold.ttf")),
   ]).then(
-    ([fell, karla]): Font[] => [
+    ([fell, fellItalic, karla]): Font[] => [
       { name: "IM Fell", data: fell, weight: 400, style: "normal" },
+      { name: "IM Fell", data: fellItalic, weight: 400, style: "italic" },
       { name: "Karla", data: karla, weight: 700, style: "normal" },
     ],
     (e) => {
@@ -167,8 +175,12 @@ async function smallerPng(png: ArrayBuffer): Promise<Uint8Array<ArrayBuffer>> {
     const lossless = new Uint8Array(await sharp(raw).png({ compressionLevel: 9, adaptiveFiltering: true }).toBuffer());
     if (lossless.byteLength < best.byteLength) best = lossless;
     if (best.byteLength <= PNG_TARGET_BYTES) return best;
-    const palette = new Uint8Array(await sharp(raw).png({ palette: true, quality: 90, compressionLevel: 9 }).toBuffer());
-    return palette.byteLength < best.byteLength ? palette : best;
+    for (const colours of [256, 128]) {
+      const palette = new Uint8Array(await sharp(raw).png({ palette: true, colours, quality: 90, compressionLevel: 9 }).toBuffer());
+      if (palette.byteLength < best.byteLength) best = palette;
+      if (best.byteLength <= PNG_TARGET_BYTES) return best;
+    }
+    return best;
   } catch {
     return raw;
   }
@@ -182,29 +194,35 @@ export async function GET(request: NextRequest, { params }: Ctx) {
   const q = parseStoryQuery(request.nextUrl.searchParams);
   if (!q) return new NextResponse(null, { status: 400, headers: { "cache-control": NO_STORE } });
 
-  let src: StorySource | null;
+  let src: StorySource | "pending" | null;
   try {
     src = await resolveStory(deps, slug, q);
   } catch {
     return new NextResponse(null, { status: 503, headers: { "cache-control": CACHE_ERROR } });
   }
   if (!src) return new NextResponse(null, { status: 404, headers: { "cache-control": CACHE_NOT_FOUND } });
+  if (src === "pending") return new NextResponse(null, { status: 404, headers: { "cache-control": STORY_CACHE_PENDING } });
 
   // O QR leva ao cardápio sem mesa, pelo mesmo endereço por onde a arte foi pedida.
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host;
   const proto = request.headers.get("x-forwarded-proto") ?? (/^(localhost|127\.0\.0\.1)(:|$)/.test(host) ? "http" : "https");
-  const link = `${proto}://${host}/${slug}?ref=story`;
+  const link = qrLink(proto, host, slug, "story");
 
   try {
     const photoUrl = src.kind === "poll" ? src.photo : src.post.photo_path;
-    const [font, photo, logo] = await Promise.all([
+    // Miniaturas só das perdedoras (a vencedora já é a foto grande).
+    const lead = src.kind === "poll" ? storyLead(src.poll) : null;
+    const thumbIds = src.kind === "poll" ? src.poll.options.filter((o) => o.id !== lead && src.thumbs[o.id]).map((o) => o.id) : [];
+    const [font, photo, logo, ...thumbImgs] = await Promise.all([
       loadFonts(),
       artImage(photoUrl, PHOTO_W, PHOTO_H, "jpeg"),
-      artImage(mediaUrl(src.head.logo_path), 144, 144, "png"),
+      artImage(mediaUrl(src.head.logo_path), 208, 208, "png"),
+      ...thumbIds.map((id) => artImage(src.kind === "poll" ? (src.thumbs[id] ?? null) : null, 116, 116, "jpeg")),
     ]);
-    const qr = QRCode.create(link, { errorCorrectionLevel: "M" });
+    const thumbs = Object.fromEntries(thumbIds.map((id, i) => [id, thumbImgs[i]]));
+    const qr = QRCode.create(link, { errorCorrectionLevel: QR_ECC });
     const art = (
-      <Art src={src} photo={photo} logo={logo} qr={{ size: qr.modules.size, d: qrPath(qr.modules.size, (r, c) => !!qr.modules.get(r, c)) }} />
+      <Art src={src} photo={photo} logo={logo} thumbs={thumbs} qr={{ size: qr.modules.size, d: qrPath(qr.modules.size, (r, c) => !!qr.modules.get(r, c)) }} />
     );
     // Desenha antes de responder, para um erro virar 503 em vez de um PNG cortado.
     const png = await smallerPng(await new ImageResponse(art, { width: W, height: H, fonts: font }).arrayBuffer());
@@ -222,24 +240,41 @@ export async function GET(request: NextRequest, { params }: Ctx) {
 }
 
 // ---------- Arte ----------
+// Ficha v2 (tela 16): a foto da vencedora sangra no alto (1320 px) e esmaece no ônix; a marca
+// em y 270; o resultado termina em y ~1300 e cresce para cima; o rodapé de y 1404 a 1620 com
+// "Vem pro <casa>", o @, o convite e o QR. Tudo entre y 270 e 1620, fora do que o Instagram
+// cobre (0–250 em cima e 1670–1920 embaixo, tela 17).
 
-function Art({ src, photo, logo, qr }: { src: StorySource; photo: string | null; logo: string | null; qr: { size: number; d: string } }) {
+const SIDE = 84;
+const MUTED = "rgba(247,239,230,0.68)";
+const SP_LINE = "linear-gradient(90deg, rgba(184,165,130,0) 0%, #b8a582 22%, #fff8ea 50%, #b8a582 78%, rgba(184,165,130,0) 100%)";
+const VEIL =
+  "linear-gradient(180deg, rgba(20,14,11,0.74) 0%, rgba(20,14,11,0.5) 13%, rgba(20,14,11,0) 25%, rgba(20,14,11,0) 34%, rgba(20,14,11,0.72) 48%, rgba(20,14,11,0.94) 60%, #140e0b 70%)";
+
+type ArtProps = {
+  src: StorySource;
+  photo: string | null;
+  logo: string | null;
+  thumbs: Partial<Record<string, string | null>>;
+  qr: { size: number; d: string };
+};
+
+function Art({ src, photo, logo, thumbs, qr }: ArtProps) {
   const accent = storyAccent(src.head.brand_color);
   const t = storyTexts(src);
   const handle = storyHandle(src.head.instagram);
   const name = src.head.name || src.head.slug;
   const poll = src.kind === "poll" ? src.poll : null;
-  // Sombra de baixo: na enquete, sobe mais cedo (pergunta e barras); na foto, deixa o prato.
-  const shade =
-    src.kind === "poll"
-      ? "linear-gradient(180deg, rgba(20,14,11,0.35) 0%, rgba(20,14,11,0) 22%, rgba(28,22,18,0.25) 34%, rgba(28,22,18,0.93) 52%, #1c1511 100%)"
-      : "linear-gradient(180deg, rgba(20,14,11,0.4) 0%, rgba(20,14,11,0) 22%, rgba(20,14,11,0) 46%, rgba(28,22,18,0.88) 70%, #1c1511 100%)";
   const lead = poll ? storyLead(poll) : null;
+  const leadOpt = poll?.options.find((o) => o.id === lead) ?? null;
+  const rest = poll ? poll.options.filter((o) => o.id !== lead).sort((a, b) => b.pct - a.pct) : [];
+  const come = storyComeSize(t.come);
+  const titleSize = storyTitleSize(t.title);
 
   return (
     <div style={{ width: W, height: H, display: "flex", position: "relative", background: BG, color: FG, fontFamily: "Karla", fontWeight: 700 }}>
       {photo ? (
-        <img src={photo} width={W} height={H} alt="" style={{ position: "absolute", left: 0, top: 0, width: W, height: H, objectFit: "cover" }} />
+        <img src={photo} width={W} height={PHOTO_SHOWN_H} alt="" style={{ position: "absolute", left: 0, top: 0, width: W, height: PHOTO_SHOWN_H, objectFit: "cover" }} />
       ) : (
         // Sem foto: um brilho discreto da cor da casa no alto.
         <div
@@ -248,144 +283,74 @@ function Art({ src, photo, logo, qr }: { src: StorySource; photo: string | null;
             left: 0,
             top: 0,
             width: W,
-            height: H,
-            backgroundImage: `radial-gradient(circle at 30% 18%, ${withAlpha(accent, 0.32)} 0%, rgba(28,22,18,0) 55%)`,
+            height: PHOTO_SHOWN_H,
+            backgroundImage: `radial-gradient(circle at 30% 30%, ${withAlpha(accent, 0.3)} 0%, rgba(20,14,11,0) 60%)`,
           }}
         />
       )}
-      <div style={{ position: "absolute", left: 0, top: 0, width: W, height: H, backgroundImage: shade }} />
+      <div style={{ position: "absolute", left: 0, top: 0, width: W, height: H, backgroundImage: VEIL }} />
 
-      {/* Marca em vidro no topo: logo com aro da casa, nome e @. */}
-      <div style={{ position: "absolute", left: 0, right: 0, top: px(18), display: "flex", justifyContent: "center" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            height: px(46),
-            padding: `0 ${px(16)}px 0 ${px(5)}px`,
-            borderRadius: px(23),
-            background: PHOTO_GLASS,
-          }}
-        >
-          <div
-            style={{
-              width: px(36) + 12,
-              height: px(36) + 12,
-              borderRadius: 999,
-              background: accent,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginRight: px(9),
-            }}
-          >
-            {logo ? (
-              <img src={logo} width={px(36)} height={px(36)} alt="" style={{ width: px(36), height: px(36), borderRadius: 999 }} />
-            ) : (
-              <div
-                style={{
-                  width: px(36),
-                  height: px(36),
-                  borderRadius: 999,
-                  background: BG,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontFamily: "IM Fell",
-                  fontWeight: 400,
-                  fontSize: px(20),
-                  color: accent,
-                }}
-              >
-                {name.slice(0, 1).toUpperCase()}
+      {/* Marca: logo com aro da casa, nome e @. */}
+      <div style={{ position: "absolute", left: SIDE, right: SIDE, top: 270, display: "flex", alignItems: "center" }}>
+        <div style={{ width: 112, height: 112, borderRadius: 999, background: accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          {logo ? (
+            <img src={logo} width={104} height={104} alt="" style={{ width: 104, height: 104, borderRadius: 999 }} />
+          ) : (
+            <div style={{ width: 104, height: 104, borderRadius: 999, background: BG, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "IM Fell", fontWeight: 400, fontSize: 56, color: accent }}>
+              {name.slice(0, 1).toUpperCase()}
+            </div>
+          )}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", marginLeft: 24, minWidth: 0, flex: 1 }}>
+          <div style={{ fontFamily: "IM Fell", fontWeight: 400, fontSize: 58, lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
+          {handle && <div style={{ fontSize: 36, marginTop: 8 }}>{handle}</div>}
+        </div>
+      </div>
+
+      {/* Resultado (ou a foto da casa): termina em y ~1300 e cresce para cima. */}
+      <div style={{ position: "absolute", left: SIDE, right: SIDE, bottom: H - 1300, display: "flex", flexDirection: "column" }}>
+        <div style={{ fontSize: 32, color: accent }}>{t.kicker}</div>
+        {t.question && <div style={{ marginTop: 12, fontFamily: "IM Fell", fontWeight: 400, fontStyle: "italic", fontSize: 40, lineHeight: 1.1, color: MUTED }}>{t.question}</div>}
+        <div style={{ marginTop: 6, fontFamily: "IM Fell", fontWeight: 400, fontSize: titleSize, lineHeight: 0.98 }}>{t.title}</div>
+        {poll && leadOpt && (
+          <div style={{ display: "flex", alignItems: "center", marginTop: 30 }}>
+            <div style={{ display: "flex", alignItems: "baseline", color: accent, fontSize: 160, lineHeight: 0.85, letterSpacing: -6 }}>
+              {String(leadOpt.pct)}
+              <span style={{ fontSize: 90, letterSpacing: 0, marginLeft: 4 }}>%</span>
+            </div>
+            {rest.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", marginLeft: 44 }}>
+                {rest.map((o, i) => (
+                  <div key={o.id} style={{ display: "flex", alignItems: "center", marginTop: i ? 14 : 0, fontSize: 38, color: MUTED }}>
+                    {thumbs[o.id] && <img src={thumbs[o.id] as string} width={58} height={58} alt="" style={{ width: 58, height: 58, borderRadius: 14, marginRight: 16 }} />}
+                    <div style={{ display: "flex", maxWidth: 420, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.label}</div>
+                    <div style={{ display: "flex", marginLeft: 14, color: FG }}>{`${o.pct}%`}</div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
-            <div style={{ fontFamily: "IM Fell", fontWeight: 400, fontSize: px(19), maxWidth: px(190), whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {name}
-            </div>
-            {handle && <div style={{ fontSize: px(11.5), color: "rgba(247,239,230,0.78)", marginTop: 6 }}>{handle}</div>}
-          </div>
-        </div>
-      </div>
-
-      {/* Corpo: rótulo, pergunta (ou nome do prato) e as barras em %. */}
-      <div
-        style={{
-          position: "absolute",
-          left: px(18),
-          right: px(18),
-          bottom: px(poll ? 102 : 108),
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <div style={{ fontSize: px(12), color: accent, textShadow: TEXT_SHADOW }}>{t.kicker}</div>
-        {poll ? (
-          <div style={{ marginTop: px(8), fontFamily: "IM Fell", fontWeight: 400, fontSize: px(27), lineHeight: 1.08, textWrap: "balance", textShadow: TEXT_SHADOW }}>
-            {t.title}
-          </div>
-        ) : (
-          <div style={{ marginTop: px(8), fontFamily: "IM Fell", fontWeight: 400, fontSize: px(38), lineHeight: 1, textShadow: TEXT_SHADOW }}>{t.title}</div>
         )}
-        {poll?.options.map((o) => (
-          <div
-            key={o.id}
-            style={{
-              position: "relative",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginTop: px(8),
-              height: px(32),
-              padding: `0 ${px(11)}px`,
-              borderRadius: px(11),
-              overflow: "hidden",
-              background: "rgba(255,255,255,0.08)",
-              fontSize: px(13),
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: `${o.pct}%`,
-                backgroundImage:
-                  o.id === lead
-                    ? `linear-gradient(90deg, ${withAlpha(accent, 0.6)}, ${withAlpha(accent, 0.34)})`
-                    : "linear-gradient(90deg, rgba(255,255,255,0.1), rgba(255,255,255,0.1))",
-              }}
-            />
-            <div style={{ display: "flex", flex: 1, minWidth: 0, marginRight: px(10), whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {o.label}
-            </div>
-            <div style={{ display: "flex" }}>{`${o.pct}%`}</div>
-          </div>
-        ))}
         {t.sub && (
-          <div style={{ display: "flex", alignItems: "center", marginTop: px(8), fontSize: px(13.5), color: "rgba(247,239,230,0.8)" }}>
-            <Star color={accent} size={px(13.5)} />
-            <div style={{ marginLeft: px(5) }}>{t.sub}</div>
+          <div style={{ display: "flex", alignItems: "center", marginTop: 22, fontSize: 38, color: MUTED }}>
+            <Star color={accent} size={36} />
+            <div style={{ marginLeft: 12 }}>{t.sub}</div>
           </div>
         )}
+        <div style={{ height: 2, marginTop: 46, backgroundImage: SP_LINE, opacity: 0.8 }} />
       </div>
 
-      {/* Pé: QR creme (abre /<slug>?ref=story) e o convite. */}
-      <div style={{ position: "absolute", left: px(18), right: px(18), bottom: px(18), display: "flex", alignItems: "center" }}>
-        <div style={{ display: "flex", width: px(72), height: px(72), padding: px(5), borderRadius: px(12), background: FG, flexShrink: 0 }}>
-          <svg width={px(62)} height={px(62)} viewBox={`0 0 ${qr.size} ${qr.size}`}>
+      {/* Rodapé: fala com quem não está na casa, e o QR creme (abre /<slug>?ref=story). */}
+      <div style={{ position: "absolute", left: SIDE, right: SIDE, top: 1404, height: 216, display: "flex", alignItems: "center" }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, marginRight: 36 }}>
+          <div style={{ fontFamily: "IM Fell", fontWeight: 400, fontSize: come.size, lineHeight: 1 }}>{come.text}</div>
+          {handle && <div style={{ fontSize: 50, marginTop: 12 }}>{handle}</div>}
+          <div style={{ fontSize: 30, color: MUTED, marginTop: 6 }}>{t.point}</div>
+        </div>
+        <div style={{ display: "flex", width: 196, height: 196, padding: 18, borderRadius: 22, background: FG, flexShrink: 0 }}>
+          <svg width={160} height={160} viewBox={`0 0 ${qr.size} ${qr.size}`}>
             <path d={qr.d} fill={INK} />
           </svg>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0, marginLeft: px(12), lineHeight: 1.2 }}>
-          {/* Numa linha, como no protótipo (a IM Fell aqui é um pouco mais larga que no navegador). */}
-          <div style={{ fontFamily: "IM Fell", fontWeight: 400, fontSize: px(16.5), whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {t.foot}
-          </div>
-          <div style={{ fontSize: px(12), color: "rgba(247,239,230,0.72)", marginTop: 4 }}>{t.footSub}</div>
         </div>
       </div>
     </div>

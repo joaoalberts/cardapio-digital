@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import type { OpeningHours } from "@/lib/menu/types";
 import { disabledState } from "./public-state";
-import type { CommunityHead, OptionId, PollRow, PostRow } from "./types";
+import { retentionPlan } from "./retention";
+import type { CommunityHead, OptionId, PollRow, PostRow, VoteRow } from "./types";
 import {
   PUBLIC_CACHE_ERROR,
   answerPublicRead,
   castVote,
   parseBefore,
+  parsePublicQuery,
   readPublicState as readResult,
   toContent,
   toHead,
@@ -33,6 +35,7 @@ const head = (over: Partial<CommunityHead> = {}): CommunityHead => ({
   instagram: "@forno",
   logo_path: null,
   brand_color: null,
+  tv_simple: false,
   ...over,
 });
 const OTHER = head({ id: "r2", slug: "outro", name: "Outro", instagram: null });
@@ -347,6 +350,19 @@ describe("readPublicState", () => {
     for (const secret of [U(301), U(302), U(303), MESA_7, MESA_9, "device_id", "table_id"]) expect(json).not.toContain(secret);
   });
 
+  it("enquete recém-encerrada com result gravado: usa o result e não lê votos", async () => {
+    const closed = poll(P_OPEN, {
+      starts_at: iso(now - 20 * MIN),
+      ends_at: iso(now - 2 * MIN),
+      result: { a: 25, b: 75, c: 0, has_votes: true, winner: "b" },
+    });
+    const s = setup({ polls: [closed] });
+    const st = await readPublicState(s.deps, "forno");
+    expect(st?.poll).toMatchObject({ id: P_OPEN, closed: true, has_votes: true, winner: "b" });
+    expect(st?.poll?.options.map((o) => o.pct)).toEqual([25, 75, 0]);
+    expect(s.calls.list).toHaveLength(0);
+  });
+
   it("sem enquete aberta nem recém-encerrada: não lê votos", async () => {
     const s = setup({ content: [poll(P_SCHED, { starts_at: iso(now + 10 * MIN), ends_at: iso(now + 20 * MIN) })] });
     const st = await readPublicState(s.deps, "forno");
@@ -399,6 +415,82 @@ describe("readPublicState", () => {
     }
     // Sem antes, o estado desligado continua respondendo normal.
     expect(await readResult(setup({ off: true }).deps, "forno")).toEqual({ ok: true, state: disabledState(NOW) });
+  });
+});
+
+// Verificador, 16/10: o cron grava o result e apaga os votos de antes da virada do dia; a
+// agenda em cache pode seguir sem o result. Enquete das 04h30 às 05h55 em São Paulo (virada
+// às 05h00 = 08:00Z), ainda no Palco às 06h05: 3 votos em A e 2 em B antes da virada, 1 em C depois.
+describe("readPublicState: enquete no Palco com votos apagados pelo cron e agenda em cache sem result", () => {
+  const P_DAWN = U(17);
+  const AFTER_CRON = new Date("2026-10-16T09:05:00Z");
+  const row = poll(P_DAWN, { starts_at: "2026-10-16T07:30:00.000Z", ends_at: "2026-10-16T08:55:00.000Z", created_at: "2026-10-16T07:00:00.000Z" });
+  const v = (option: OptionId, k: number, at: string): VoteRow => ({
+    id: U(7000 + k),
+    restaurant_id: "r1",
+    poll_id: P_DAWN,
+    option_id: option,
+    device_id: U(7100 + k),
+    table_id: U(7200 + k),
+    created_at: at,
+  });
+  const SIX = [
+    v("a", 1, "2026-10-16T07:35:00.000Z"),
+    v("a", 2, "2026-10-16T07:40:00.000Z"),
+    v("a", 3, "2026-10-16T07:45:00.000Z"),
+    v("b", 4, "2026-10-16T07:50:00.000Z"),
+    v("b", 5, "2026-10-16T07:55:00.000Z"),
+    v("c", 6, "2026-10-16T08:10:00.000Z"),
+  ];
+  // Banco depois do cron (se ran): result gravado e só os votos de depois da virada; a agenda
+  // em cache (content) é a de antes, sem result.
+  function dawnSetup(ran: boolean) {
+    const plan = retentionPlan({ votes: SIX, polls: [row], clocks: [{ id: "r1", timezone: TZ, day_start: "05:00" }], tallies: [], posts: [], tvs: [], now: AFTER_CRON });
+    const result = plan.results[0]?.result;
+    const s = setup({ polls: [ran ? { ...row, result } : row], content: [row] });
+    const gone = new Set(ran ? plan.votes : []);
+    s.tables.community_votes.push(...SIX.filter((x) => !gone.has(x.id)).map((x) => ({ uid: x.id, ...x })));
+    s.deps.now = () => AFTER_CRON;
+    return { s, result };
+  }
+
+  it("6 votos, o cron grava {a:50,b:33,c:17}: o Palco mostra 50/33/17 e nunca C com 100%", async () => {
+    const { s, result } = dawnSetup(true);
+    expect(result).toEqual({ a: 50, b: 33, c: 17, has_votes: true, winner: "a" });
+    expect(s.tables.community_votes).toHaveLength(1);
+    const st = await readPublicState(s.deps, "forno");
+    expect(st?.poll).toMatchObject({ id: P_DAWN, closed: true, has_votes: true, winner: "a" });
+    expect(st?.poll?.options.map((o) => o.pct)).toEqual([50, 33, 17]);
+  });
+
+  it("linha lida na hora ainda sem result (cron não rodou): conta os votos, lidos antes da linha", async () => {
+    const { s } = dawnSetup(false);
+    const order: string[] = [];
+    const { list, first } = s.deps.db;
+    s.deps.db.list = async (t, w, o) => (order.push(`list:${t}`), list(t, w, o));
+    s.deps.db.first = async (t, w) => (order.push(`first:${t}:${JSON.stringify(w)}`), first(t, w));
+    const st = await readPublicState(s.deps, "forno");
+    expect(st?.poll?.options.map((o) => o.pct)).toEqual([50, 33, 17]);
+    // O cron grava o result antes de apagar: linha sem result depois dos votos = votos inteiros.
+    expect(order).toEqual(["list:community_votes", `first:community_polls:${JSON.stringify({ uid: P_DAWN, restaurant_id: "r1" })}`]);
+  });
+
+  it("enquete aberta hoje, depois da virada: não lê a linha de novo", async () => {
+    const s = setup();
+    const first = vi.spyOn(s.deps.db, "first");
+    await readPublicState(s.deps, "forno");
+    expect(first).not.toHaveBeenCalled();
+  });
+});
+
+describe("parsePublicQuery (parâmetros da GET agregada)", () => {
+  const q = (s: string) => parsePublicQuery(new URLSearchParams(s));
+  it("sem parâmetro ou só ?antes= uma vez", () => {
+    expect(q("")).toEqual({ antes: null });
+    expect(q("antes=2026-10-16T22%3A55%3A00.000Z")).toEqual({ antes: "2026-10-16T22:55:00.000Z" });
+  });
+  it("qualquer outro parâmetro, ou antes repetido, é recusado (cada URL nova fura a CDN)", () => {
+    for (const s of ["x=1", "_=123", "antes=a&antes=b", "antes=a&v=2", "ANTES=a", "mesa=ABC234"]) expect(q(s)).toBeNull();
   });
 });
 
@@ -477,7 +569,13 @@ describe("toHead (linha de restaurants do NocoDB)", () => {
       instagram: "@forno",
       logo_path: "/logo.webp",
       brand_color: "#c33",
+      tv_simple: false,
     });
+  });
+
+  it("modo simples do telão: só true liga", () => {
+    expect(toHead(row({ community_tv_simple: true }))?.tv_simple).toBe(true);
+    for (const v of [undefined, null, false, "true", 1]) expect(toHead(row({ community_tv_simple: v }))?.tv_simple).toBe(false);
   });
 
   it("interruptor vazio = desligada; hora do dia vazia ou malformada = 05:00", () => {
@@ -524,6 +622,25 @@ describe("toContent (linhas do NocoDB → agenda, posts e telões)", () => {
       closed_at: iso(now - MIN),
       created_at: iso(now - HOUR),
     });
+  });
+
+  it("result do banco entra só se bater com as opções; inválido fica de fora", () => {
+    const good = { a: 40, b: 60, c: 0, has_votes: true, winner: "b" };
+    const { polls } = toContent(
+      {
+        polls: [
+          pollRow(U(1), { result: JSON.parse(JSON.stringify(good)) }),
+          pollRow(U(2), { result: { a: 50, b: 60, c: 0, has_votes: true, winner: "b" } }),
+          pollRow(U(3), { result: null }),
+        ],
+        posts: [],
+        tvs: [],
+      },
+      NOW,
+    );
+    expect(polls[0].result).toEqual(good);
+    expect(polls[1]).not.toHaveProperty("result");
+    expect(polls[2]).not.toHaveProperty("result");
   });
 
   it("guarda as enquetes que terminaram nas últimas 24 h e as futuras", () => {

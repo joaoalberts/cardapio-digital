@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MURAL_PAGE, TV_FRESH_MS, buildPublicState, cacheControl, disabledState } from "./public-state";
+import { MURAL_PAGE, TV_FRESH_MS, buildPublicState, cacheControl, disabledState, needsFreshResult, parseResult, pollResult } from "./public-state";
 import type { CommunityHead, OptionId, PollRow, PostRow, TvRow, VoteRow } from "./types";
 
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -20,6 +20,7 @@ const HEAD: CommunityHead = {
   instagram: "@forno",
   logo_path: null,
   brand_color: null,
+  tv_simple: false,
 };
 
 const POLL = U(10);
@@ -131,7 +132,7 @@ describe("buildPublicState: o que nunca sai pela rota pública", () => {
   it("a enquete e o post públicos têm só as chaves combinadas", () => {
     const s = buildPublicState(input());
     expect(Object.keys(s).sort()).toEqual(["enabled", "has_tv", "instagram", "mural", "next", "now", "open", "poll", "v"]);
-    expect(Object.keys(s.poll!).sort()).toEqual(["closed", "ends_at", "has_votes", "id", "options", "question", "starts_at", "template", "winner"]);
+    expect(Object.keys(s.poll!).sort()).toEqual(["closed", "closed_at", "ends_at", "has_votes", "id", "options", "question", "starts_at", "template", "winner"]);
     expect(Object.keys(s.poll!.options[0]).sort()).toEqual(["id", "item_id", "label", "pct"]);
     expect(Object.keys(s.mural[0]).sort()).toEqual(["created_at", "id", "item_id", "on_tv", "photo", "thumb"]);
   });
@@ -158,6 +159,16 @@ describe("buildPublicState: enquete", () => {
       { id: "b", label: "Pudim", item_id: U(21), pct: 33 },
       { id: "c", label: "Sorvete da casa", item_id: null, pct: 0 },
     ]);
+  });
+
+  it("closed_at sai só na enquete encerrada pela casa (o telão conta o \"Deu X\" dele)", () => {
+    expect(buildPublicState(input({ votes: votes(2, 1, 0) })).poll?.closed_at).toBeNull();
+    const early = iso(now - 2 * MIN);
+    const s = buildPublicState(input({ polls: [poll({ closed_at: early })], votes: votes(2, 1, 0) }));
+    expect(s.poll).toMatchObject({ closed: true, closed_at: early, winner: "a" });
+    // encerrada no fim marcado, sem closed_at: nada a mais
+    const late = buildPublicState(input({ polls: [poll({ ends_at: iso(now - MIN) })], votes: votes(2, 1, 0) }));
+    expect(late.poll).toMatchObject({ closed: true, closed_at: null });
   });
 
   it("só o primeiro voto de cada device conta", () => {
@@ -207,6 +218,22 @@ describe("buildPublicState: enquete", () => {
     const s = buildPublicState(input({ polls: [closed], votes: [] }));
     expect(s.poll?.closed).toBe(true);
     expect(s.poll?.winner).toBeNull();
+  });
+
+  it("com result gravado (votos já apagados pelo cron), usa o result e não os votos", () => {
+    const closed = poll({
+      starts_at: iso(now - 20 * MIN),
+      ends_at: iso(now - 2 * MIN),
+      result: { a: 30, b: 52, c: 18, has_votes: true, winner: "b" },
+    });
+    const s = buildPublicState(input({ polls: [closed], votes: [] }));
+    expect(s.poll?.options.map((o) => o.pct)).toEqual([30, 52, 18]);
+    expect(s.poll?.has_votes).toBe(true);
+    expect(s.poll?.winner).toBe("b");
+    // Mesmo com votos (de antes da limpeza) na lista, o result manda.
+    const both = buildPublicState(input({ polls: [closed], votes: votes(5, 0, 0) }));
+    expect(both.poll?.options.map((o) => o.pct)).toEqual([30, 52, 18]);
+    expect(both.poll?.winner).toBe("b");
   });
 
   it("encerrada há mais de 15 min sai do poll", () => {
@@ -330,5 +357,68 @@ describe("v (hash do conteúdo)", () => {
   });
   it("é curto", () => {
     expect(buildPublicState(input()).v).toMatch(/^[0-9a-f]{8}$/);
+  });
+});
+
+describe("pollResult e parseResult (resultado final gravado antes de apagar os votos)", () => {
+  it("pollResult: % pelo maior resto, has_votes e vencedora pela contagem, só das opções da enquete", () => {
+    expect(pollResult(poll(), votes(2, 1, 0))).toEqual({ a: 67, b: 33, c: 0, has_votes: true, winner: "a" });
+    expect(pollResult(poll(), votes(0, 50, 51))).toEqual({ a: 0, b: 50, c: 50, has_votes: true, winner: "c" });
+    expect(pollResult(poll(), [])).toEqual({ a: 0, b: 0, c: 0, has_votes: false, winner: null });
+    const two = poll({ options: poll().options.slice(0, 2) });
+    expect(pollResult(two, [...votes(1, 1, 0), vote("c")])).toEqual({ a: 50, b: 50, has_votes: true, winner: "a" });
+  });
+
+  it("pollResult aplica os tetos e o voto repetido do mesmo device", () => {
+    const dev = U(9999);
+    const repeated = [vote("a", { device_id: dev }), vote("b", { device_id: dev })];
+    expect(pollResult(poll(), repeated)).toEqual({ a: 100, b: 0, c: 0, has_votes: true, winner: "a" });
+  });
+
+  it("parseResult aceita só o formato certo para as opções da enquete", () => {
+    const ids = ["a", "b", "c"] as OptionId[];
+    const ok = { a: 30, b: 52, c: 18, has_votes: true, winner: "b" };
+    expect(parseResult(ok, ids)).toEqual(ok);
+    expect(parseResult({ a: 0, b: 0, c: 0, has_votes: false, winner: null }, ids)).toEqual({ a: 0, b: 0, c: 0, has_votes: false, winner: null });
+    for (const bad of [
+      null,
+      "x",
+      [],
+      { ...ok, a: 31 }, // soma 101
+      { ...ok, c: undefined },
+      { ...ok, a: -1, b: 83 },
+      { ...ok, a: 30.5, b: 51.5 },
+      { ...ok, winner: "d" },
+      { ...ok, has_votes: "true" },
+      { a: 0, b: 0, c: 0, has_votes: false, winner: "a" },
+      { a: 50, b: 50, c: 0, has_votes: false, winner: null },
+    ])
+      expect(parseResult(bad, ids)).toBeNull();
+  });
+});
+
+describe("needsFreshResult: enquete encerrada que o cron já pode ter limpado", () => {
+  // 06:30 em São Paulo
+  const at = new Date("2026-10-16T09:30:00Z");
+  const night = poll({ starts_at: "2026-10-16T00:00:00Z", ends_at: "2026-10-16T01:00:00Z" }); // ontem às 21h
+  it("day_start 05:00: começou antes da virada de hoje, lê a linha", () => {
+    expect(needsFreshResult(night, HEAD, at)).toBe(true);
+  });
+  it("day_start 07:00: o cron das 06h já apagou os votos da noite, lê a linha", () => {
+    expect(needsFreshResult(night, { ...HEAD, day_start: "07:00" }, at)).toBe(true);
+  });
+  it("enquete da manhã com day_start depois dela: começou depois da rodada do cron, segue o cache", () => {
+    // day_start 12:00, enquete das 10:00 às 10:30 em São Paulo; o cron das 06h não a tocou
+    const morning = poll({ starts_at: "2026-10-16T13:00:00Z", ends_at: "2026-10-16T13:30:00Z" });
+    const head = { ...HEAD, day_start: "12:00" };
+    expect(needsFreshResult(morning, head, new Date("2026-10-16T14:00:00Z"))).toBe(false);
+    expect(needsFreshResult(morning, head, new Date("2026-10-16T18:00:00Z"))).toBe(false);
+    // depois da rodada do dia seguinte, os votos podem ter saído: lê a linha
+    expect(needsFreshResult(morning, head, new Date("2026-10-17T09:30:00Z"))).toBe(true);
+  });
+
+  it("com result gravado, ou ainda aberta, segue o cache", () => {
+    expect(needsFreshResult({ ...night, result: { a: 100, b: 0, c: 0, has_votes: true, winner: "a" } }, HEAD, at)).toBe(false);
+    expect(needsFreshResult(poll({ starts_at: "2026-10-16T09:00:00Z", ends_at: "2026-10-16T10:00:00Z" }), HEAD, at)).toBe(false);
   });
 });

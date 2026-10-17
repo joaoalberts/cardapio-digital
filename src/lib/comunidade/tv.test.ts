@@ -34,6 +34,7 @@ const head = (over: Partial<CommunityHead> = {}): CommunityHead => ({
   instagram: "@forno",
   logo_path: null,
   brand_color: null,
+  tv_simple: false,
   ...over,
 });
 const OTHER = head({ id: R2, slug: "outro", name: "Outro" });
@@ -392,9 +393,17 @@ describe("checkTv", () => {
 
   it("TV pareada: paired true e atualiza last_seen_at", async () => {
     const s = setup({ rows: [await paired()] });
-    expect(await checkTv(s.deps, "forno", SECRET_A)).toEqual({ ok: true, paired: true });
+    expect(await checkTv(s.deps, "forno", SECRET_A)).toEqual({ ok: true, paired: true, simple: false });
     expect(s.tvs[0].last_seen_at).toBe(iso(now));
     expect(s.calls.update).toHaveLength(1);
+  });
+
+  it("TV pareada recebe o modo simples do painel; a pendente não recebe nada da casa", async () => {
+    const s = setup({ rows: [await paired()], head: head({ tv_simple: true }) });
+    expect(await checkTv(s.deps, "forno", SECRET_A)).toEqual({ ok: true, paired: true, simple: true });
+    const row = tv(1, { secret_hash: await sha256Hex(SECRET_A), pair_code: "K7M3QX", pair_expires_at: noco(now + 5 * MIN) });
+    const p = setup({ rows: [row], head: head({ tv_simple: true }) });
+    expect(await checkTv(p.deps, "forno", SECRET_A)).toEqual({ ok: true, paired: false });
   });
 
   it("TV pendente: paired false, sem gravar nada", async () => {
@@ -411,7 +420,7 @@ describe("checkTv", () => {
     expect(s.calls.update).toHaveLength(0);
     expect(s.tvs[0].last_seen_at).toBe(theirs.last_seen_at);
     // No restaurante dela, o mesmo segredo entra.
-    expect(await checkTv(s.deps, "outro", SECRET_A)).toEqual({ ok: true, paired: true });
+    expect(await checkTv(s.deps, "outro", SECRET_A)).toEqual({ ok: true, paired: true, simple: false });
   });
 
   it("TV revogada dá 401, mesmo com outra linha pareada do mesmo segredo", async () => {
@@ -456,7 +465,7 @@ describe("pareamento de ponta a ponta", () => {
     // Quem só leu o código na tela não tem o segredo.
     expect(await checkTv(s.deps, "forno", SECRET_A)).toEqual({ ok: false, status: 401 });
     expect(await confirmPair(s.deps, R1, "K7M3QX", "Salão")).toEqual({ ok: true });
-    expect(await checkTv(s.deps, "forno", SECRET_C)).toEqual({ ok: true, paired: true });
+    expect(await checkTv(s.deps, "forno", SECRET_C)).toEqual({ ok: true, paired: true, simple: false });
     // O banco só guarda o hash: o segredo não aparece em nenhuma coluna.
     expect(JSON.stringify(s.tvs)).not.toContain(SECRET_C);
   });

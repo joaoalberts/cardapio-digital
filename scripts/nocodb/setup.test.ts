@@ -20,14 +20,14 @@ describe("setup.mjs: esquema da Comunidade", () => {
   });
 
   it("restaurants ganha o interruptor e a hora do dia; orders ganha discarded", () => {
-    expect(cols("restaurants")).toMatchObject({ community_enabled: BOOL, community_day_start: TEXT });
+    expect(cols("restaurants")).toMatchObject({ community_enabled: BOOL, community_day_start: TEXT, community_tv_simple: BOOL });
     expect(cols("orders")).toMatchObject({ discarded: BOOL });
   });
 
   it("community_polls", () => {
     expect(cols("community_polls")).toEqual({
       uid: TEXT, restaurant_id: TEXT, template: TEXT, question: LONG, options: JSONT,
-      starts_at: DATE, ends_at: DATE, closed_at: DATE, created_at: DATE,
+      starts_at: DATE, ends_at: DATE, closed_at: DATE, created_at: DATE, result: JSONT,
     });
   });
 

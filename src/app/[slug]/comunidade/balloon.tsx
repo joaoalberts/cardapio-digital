@@ -1,19 +1,21 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- logo e miniaturas pequenas, já no tamanho certo */
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { BALLOON_H, balloonMode, balloonNeed, clockText, houseHighlight, pollTiming, questionText } from "@/lib/comunidade/client-logic";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BALLOON_H, balloonMode, balloonNeed, balloonPath, houseHighlight, lowerFirst, pollTiming, questionText } from "@/lib/comunidade/client-logic";
 import { ct, ctf } from "@/lib/comunidade/i18n";
-import { mediaUrl, thumbSrc } from "@/lib/menu/media";
+import { thumbSrc } from "@/lib/menu/media";
 import { useOrder } from "../order/order-context";
 import { Live, Ring, useClock } from "./parts";
 import { useComunidade } from "./provider";
 
-// Balão da Comunidade na capa (ficha do protótipo, "Balão na capa: posição real").
+// Balão da Comunidade na capa (ficha v2, "Balão na capa: posição real", telas 01 a 03).
 // Fica na faixa livre entre os botões do topo e a logo, sem cobrir nenhum dos dois. Se a
-// faixa não comporta o balão grande + 8 px de cada lado, vira a pílula compacta de uma linha
-// na altura dos botões, entre o ≡ e o carrinho. Com enquete aberta: a casa falando (pergunta
-// e anel do tempo); sem enquete: o Mural (miniaturas e o destaque da casa).
+// faixa não comporta o balão + 16 px, vira a pílula de uma linha na altura dos botões, entre
+// o ≡ e o carrinho. Com enquete aberta: "Enquete da casa", a pergunta em até 2 linhas, o anel
+// "41 min" e "Toque para votar"; sem enquete: o leque de 3 miniaturas, "★ X é o destaque da
+// casa" e "Ver o mural e pedir". A ponta aponta para a logo (clip-path medido, para o
+// desfoque seguir a ponta).
 // Só aparece com a Comunidade ligada, o restaurante aberto e uma mesa válida (lida agora ou
 // lembrada). Quem veio pelo QR do telão sem mesa não vê balão (a camada abre sozinha).
 
@@ -27,7 +29,8 @@ type Geom = {
   pillLeft: number; // a pílula vai do ≡ + 8 px…
   pillRight: number; // …até o carrinho (ou o ⓘ) − 8 px, medido da direita
 };
-const W = { poll: 254, mural: 240 } as const;
+const W = { poll: 262, mural: 254 } as const;
+const TAIL = { w: 28, h: 12 } as const;
 const GAP = 8;
 
 function measure(hero: HTMLElement): Geom | null {
@@ -67,6 +70,7 @@ export function Balloon() {
   const L = o.lang;
   const anchor = useRef<HTMLSpanElement>(null);
   const [geom, setGeom] = useState<Geom | null>(null);
+  const [bodyH, setBodyH] = useState(0);
 
   // Mede a capa quando ela muda de tamanho (tela, altura do 52vh) e quando a logo sobe com o
   // selo "Aberto" que aparece depois. O carrinho só existe com o pedido ligado.
@@ -98,10 +102,18 @@ export function Balloon() {
     }
   }, [show, track]);
 
+  // Altura real do corpo (a pergunta tem 1 ou 2 linhas): a ponta e o centro na faixa saem dela.
+  const body = useCallback((el: HTMLSpanElement | null) => {
+    if (!el) return;
+    setBodyH(Math.ceil(el.offsetHeight));
+    const ro = new ResizeObserver(() => setBodyH(Math.ceil(el.offsetHeight)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const anchorEl = <span ref={anchor} className="cmu-anchor" aria-hidden />;
   if (!show || !geom || !kind || !s) return anchorEl;
 
-  const logo = mediaUrl(o.menu?.restaurant.logo_path);
   const width = W[kind];
   // A coluna de idiomas desce mais que os botões: se o balão chega perto dela, a faixa começa
   // embaixo dela.
@@ -123,74 +135,92 @@ export function Balloon() {
       return (
         <>
           {anchorEl}
-          <button className="cmu-bal cmu-bal-c" style={style} onClick={open} aria-label={ctf("openPollAria", L, { q: question })}>
-            {logo && <img src={logo} alt="" />}
-            <span className="cmu-t">{ct("pollOpen", L)}</span>
+          <button className="cmu-bal cmu-pill" style={style} onClick={open} aria-label={ctf("openPollAria", L, { q: question })}>
             <Ring angle={timing?.angle ?? 0} />
+            <span className="cmu-t">
+              <b>{ct("pillVote", L)}</b> {lowerFirst(question, L)}
+            </span>
           </button>
         </>
       );
     }
-    const mini = (thumbs.length ? thumbs : hlThumb ? [hlThumb] : []).slice(0, 2);
+    const mini = [hlThumb, ...thumbs].filter((x, k, a): x is string => !!x && a.indexOf(x) === k).slice(0, 2);
     return (
       <>
         {anchorEl}
-        <button className="cmu-bal cmu-bal-c" style={style} onClick={open} aria-label={ct("openMuralAria", L)}>
+        <button className="cmu-bal cmu-pill" style={style} onClick={open} aria-label={ct("openMuralAria", L)}>
           {mini.length > 0 && (
-            <span className="cmu-mfan">
+            <span className="cmu-stack">
               {mini.map((src, k) => (
                 <img key={k} src={src} alt="" />
               ))}
             </span>
           )}
-          <span className="cmu-t">🔥 {ct("muralPill", L)}</span>
+          <span className="cmu-t">
+            <b>{ct("pillSee", L)}</b> {ct("pillSeeRest", L)}
+          </span>
         </button>
       </>
     );
   }
 
-  const top = Math.round(bandTop + (band - BALLOON_H[kind]) / 2);
+  // Corpo medido (até medir, a altura da ficha) + a ponta; centrado na faixa livre.
+  const r = kind === "poll" ? 24 : 26;
+  const h = bodyH || BALLOON_H[kind] - TAIL.h;
+  const top = Math.round(bandTop + (band - h - TAIL.h) / 2);
+  const shape = { top, height: h + TAIL.h, clipPath: `path("${balloonPath(width, h, r, TAIL.w, TAIL.h)}")` };
+
   if (kind === "poll" && poll && timing) {
     return (
       <>
         {anchorEl}
-        <button className="cmu-bal cmu-bal-p" style={{ top }} onClick={open} aria-label={ctf("openPollAria", L, { q: question })}>
-          <span className="cmu-bh">
-            {logo && <img src={logo} alt="" />}
-            <span>{ct("pollOpen", L)}</span>
-          </span>
-          <Ring angle={timing.angle} text={clockText(timing.left)} />
-          <span className="cmu-bq fd">{question}</span>
-          <span className="cmu-bc">
-            <Live />
-            {ct(s.has_tv ? "liveOnTv" : "liveNowCap", L)} · <b>{voted ? ct("youVotedMark", L) : ct("tapToVote", L)}</b>
+        <button className="cmu-bal cmu-bal-p" style={shape} onClick={open} aria-label={ctf("openPollAria", L, { q: question })}>
+          <span className="cmu-bb" ref={body}>
+            <span className="cmu-bk">
+              <span>{ct("housePoll", L)}</span>
+              <span className="cmu-lv">
+                <Live />
+                <em>{ct(s.has_tv ? "onTv" : "live", L)}</em>
+              </span>
+            </span>
+            <Ring angle={timing.angle} left={timing.left} lang={L} />
+            <span className="cmu-bq fd">{question}</span>
+            <span className="cmu-bc">{ct(voted ? "balSeeResult" : "balTapToVote", L)}</span>
           </span>
         </button>
       </>
     );
   }
 
-  // Mural: até 3 miniaturas em leque (a mais nova no meio, por cima) e o destaque da casa.
-  const fan = thumbs.length ? thumbs : hlThumb ? [hlThumb] : [];
+  // Mural: leque de 3 miniaturas (o destaque, ou a mais nova, no meio e por cima).
+  const center = hlThumb ?? thumbs[0] ?? null;
+  const sides = thumbs.filter((t) => t !== center).slice(0, 2);
   const n = s.mural.length;
-  const title = n
-    ? highlight
-      ? `🔥 ${ctf("muralHighlight", L, { name: highlight.name })}`
-      : `🔥 ${ct("muralPill", L)}`
-    : highlight
-      ? ctf("highlightIs", L, { name: highlight.name })
-      : "";
+  const hlParts = ct("balHighlight", L).split("{name}");
   return (
     <>
       {anchorEl}
-      <button className="cmu-bal cmu-bal-m" style={{ top }} onClick={open} aria-label={ct("openMuralAria", L)}>
-        <span className="cmu-fan">
-          {fan[1] && <img className="l" src={fan[1]} alt="" />}
-          {fan[2] && <img className="r" src={fan[2]} alt="" />}
-          {fan[0] && <img className="c" src={fan[0]} alt="" />}
+      <button className="cmu-bal cmu-bal-m" style={shape} onClick={open} aria-label={ct("openMuralAria", L)}>
+        <span className="cmu-bb" ref={body}>
+          <span className="cmu-fan">
+            {sides.map((src, k) => (
+              <img key={k} className={k ? "r" : "l"} src={src} alt="" />
+            ))}
+            {center && <img className="c" src={center} alt="" />}
+          </span>
+          {highlight ? (
+            // O nome encolhe com reticências; "é o destaque da casa" fica sempre inteiro.
+            <span className={`cmu-bt fd${highlight.name.length > 8 ? " long" : ""}`}>
+              <i>{"★ "}</i>
+              {hlParts[0] && <span>{hlParts[0]}</span>}
+              <span className="cmu-bn">{highlight.name}</span>
+              {hlParts[1] && <span>{hlParts[1]}</span>}
+            </span>
+          ) : (
+            <span className="cmu-bt fd">{n === 1 ? ct("muralCount1", L) : ctf("muralCount", L, { n })}</span>
+          )}
+          <span className="cmu-bc">{ct("balMuralGo", L)}</span>
         </span>
-        <b>{title}</b>
-        {n > 0 && <span className="cmu-s">{n === 1 ? ct("muralCount1", L) : ctf("muralCount", L, { n })}</span>}
       </button>
     </>
   );

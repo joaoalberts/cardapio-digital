@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { startTransition, useEffect, useOptimistic, useRef, useState, useTransition } from "react";
+import type { Goals } from "@/lib/comunidade/scoreboard";
 import type { FunnelKey, PollTemplate } from "@/lib/comunidade/types";
 import { extOf, IMAGE_TYPES, shrinkImage } from "@/lib/images/shrink";
 import { uploadFile } from "@/lib/upload-client";
@@ -22,12 +23,13 @@ import {
   setCommunityEnabled,
   setDayStart,
   setPostTv,
+  setTvSimple,
 } from "./actions";
 import { LABEL_MAX, POLL_MINUTES, QUESTION_MAX, TEMPLATES, suggestOptions, templateQuestion, type PollMinutes } from "./validate";
 
 // Seção "Comunidade" do painel: interruptor, Instagram e hora do dia, enquetes por modelo,
-// fotos da casa no Mural, pareamento do telão e o placar do dia. Visual das telas 21 e 22
-// do protótipo, no molde do painel (cartões brancos, botões dourados). As regras e as
+// fotos da casa no Mural, pareamento do telão e o placar do dia com as metas. Visual dos
+// prints 38 e 39 da ficha v2 (docs/prototipos/comunidade-v2/recomendada), no molde do painel (cartões brancos, botões dourados). As regras e as
 // mensagens estão em validate.ts; o servidor confere tudo de novo ao gravar.
 
 export type EditorPoll = {
@@ -36,6 +38,7 @@ export type EditorPoll = {
   question: string;
   meta: string;
   options: string;
+  thumb: string | null;
   phase: "open" | "scheduled" | "closed";
 };
 type Dish = { id: string; name: string; thumb: string | null };
@@ -48,11 +51,15 @@ export type EditorData = {
   dayStart: string;
   dayStartText: string;
   tvUrl: string;
+  tvSimple: boolean;
   categories: { name: string; items: Dish[] }[];
   polls: { open: EditorPoll[]; scheduled: EditorPoll[]; closed: EditorPoll[] };
   posts: { id: string; thumb: string; dish: string; when: string; onTv: boolean; hidden: boolean }[];
   tvs: { id: string; label: string; seen: string }[];
   score: { orders: number; lines: number; cents: number; funnel: Record<FunnelKey, number>; tables: { qr: number; open: number; pct: number }; polls: number };
+  goals: { night: Goals; month: Goals };
+  // Primeira noite contada inteira quando o teto de leitura cortou o período ("DD/MM"); senão null.
+  goalsFrom: string | null;
 };
 
 type Res = { error?: string };
@@ -173,7 +180,7 @@ function MainCard({ data, run }: { data: EditorData; run: Run }) {
         </button>
       </div>
       {!data.isOwner && <p className="cp-note">Só o dono do restaurante liga ou desliga a Comunidade.</p>}
-      <p className="cp-lead">Enquetes da casa e mural de pratos para quem está no salão. Só aparece para quem leu o QR da mesa.</p>
+      <p className="cp-lead">Enquetes da casa e mural de pratos para quem está no salão. Só vota quem leu o QR da mesa.</p>
 
       <div className="cp-fld">
         <span>Instagram da casa</span>
@@ -279,12 +286,11 @@ function PollGroup({ title, polls, restaurantId, run }: { title: string; polls: 
         {polls.map((p) => (
           <li key={p.id} className={`cp-prow ${p.phase}`}>
             <span className="cp-pe" aria-hidden>
-              {TPL[p.template].emoji}
+              {p.thumb ? <img src={p.thumb} alt="" /> : TPL[p.template].emoji}
             </span>
-            <span className="cp-pt">
+            <span className="cp-pt" title={p.options}>
               <b>{p.question}</b>
               <small>{p.meta}</small>
-              <small className="cp-popts">{p.options}</small>
             </span>
             <span className={`cp-tag ${p.phase}`}>{p.phase === "open" ? "no ar" : p.phase === "scheduled" ? "agendada" : "encerrada"}</span>
             {p.phase === "open" && (
@@ -631,6 +637,15 @@ function PostsCard({ data, run, saved }: { data: EditorData; run: Run; saved: Sa
 function TvCard({ data, run }: { data: EditorData; run: Run }) {
   const [code, setCode] = useState("");
   const [busy, startPair] = useTransition();
+  // Mesmo molde do interruptor da Comunidade: valor novo até o refresh; falhou, volta sozinho.
+  const [simple, setSimple] = useOptimistic(data.tvSimple);
+  const [simpleBusy, startSimple] = useTransition();
+  const toggleSimple = () =>
+    startSimple(async () => {
+      const next = !simple;
+      setSimple(next);
+      await run(() => setTvSimple(data.restaurantId, next), next ? "Modo simples ligado." : "Modo simples desligado.");
+    });
   const [ok, setOk] = useState<string | null>(null);
   const labels = new Set(data.tvs.map((t) => t.label));
   let label = "TV do salão";
@@ -684,7 +699,7 @@ function TvCard({ data, run }: { data: EditorData; run: Run }) {
         </div>
       </div>
       {ok && <p className="cp-pairok">✓ {ok} pareada agora</p>}
-      <div className="cp-tvs">
+      <div className={`cp-tvs${data.tvs.length ? " has" : ""}`}>
         <span>TVs pareadas</span>
         {data.tvs.length ? (
           <ul>
@@ -701,6 +716,15 @@ function TvCard({ data, run }: { data: EditorData; run: Run }) {
         ) : (
           <b>nenhuma ainda</b>
         )}
+      </div>
+      <div className="cp-sw-row cp-sw-last">
+        <div>
+          <b id="cp-simple-l">Modo simples</b>
+          <small>Para TV mais antiga: sem animação. Liga sozinho se a TV engasgar.</small>
+        </div>
+        <button className="cp-sw" role="switch" aria-checked={simple} aria-labelledby="cp-simple-l" disabled={simpleBusy} onClick={toggleSimple}>
+          <i />
+        </button>
       </div>
     </section>
   );
@@ -734,8 +758,42 @@ function ScoreCard({ data }: { data: EditorData }) {
         </span>
       </div>
       <p className="cp-score-sub">
-        <b>{brl(s.cents)}</b> em {s.lines} {plural(s.lines, "linha", "linhas")} com &quot;Pedir também&quot;
+        <b>{brl(s.cents)}</b> em pedidos com &quot;Pedir também&quot;
       </p>
+
+      <Goals goals={data.goals} from={data.goalsFrom} />
+
+      <p className="cp-tiles-h">A noite em números</p>
+      <div className="cp-tiles">
+        <div>
+          <b>{s.tables.pct}%</b>
+          <span>
+            das mesas que leram o QR abriram a Comunidade ({s.tables.open} de {s.tables.qr})
+          </span>
+        </div>
+        <div>
+          <b>{f.buy_tap}</b>
+          <span>{plural(f.buy_tap, "toque em Pedir também", "toques em Pedir também")}</span>
+        </div>
+        <div>
+          <b>{s.polls}</b>
+          <span>{plural(s.polls, "enquete hoje", "enquetes hoje")}</span>
+        </div>
+        <div>
+          <b>{f.vote}</b>
+          <span>{plural(f.vote, "voto", "votos")}</span>
+        </div>
+        <div>
+          <b>{f.share}</b>
+          <span>{plural(f.share, "compartilhamento no story", "compartilhamentos no story")}</span>
+        </div>
+        <div>
+          <b>{f.ref_story + f.ref_telao}</b>
+          <span>
+            {plural(f.ref_story + f.ref_telao, "chegada", "chegadas")} pelo story ({f.ref_story}) e pelo QR do telão ({f.ref_telao})
+          </span>
+        </div>
+      </div>
 
       <p className="cp-tiles-h">O caminho de hoje</p>
       <ol className="cp-funnel">
@@ -747,37 +805,91 @@ function ScoreCard({ data }: { data: EditorData }) {
           </li>
         ))}
       </ol>
-
-      <p className="cp-tiles-h">A noite em números</p>
-      <div className="cp-tiles">
-        <div>
-          <b>{s.tables.pct}%</b>
-          <span>
-            das mesas que leram o QR abriram a Comunidade ({s.tables.open} de {s.tables.qr})
-          </span>
-        </div>
-        <div>
-          <b>{f.vote}</b>
-          <span>{plural(f.vote, "voto", "votos")}</span>
-        </div>
-        <div>
-          <b>{s.polls}</b>
-          <span>{plural(s.polls, "enquete no ar", "enquetes no ar")}</span>
-        </div>
-        <div>
-          <b>{f.share}</b>
-          <span>{plural(f.share, "compartilhamento no story", "compartilhamentos no story")}</span>
-        </div>
-        <div>
-          <b>{f.ref_story}</b>
-          <span>{plural(f.ref_story, "chegada pelo story", "chegadas pelo story")}</span>
-        </div>
-        <div>
-          <b>{f.ref_telao}</b>
-          <span>{plural(f.ref_telao, "chegada pelo QR do telão", "chegadas pelo QR do telão")}</span>
-        </div>
-      </div>
       <p className="cp-note">Conta a partir das {data.dayStartText}. O funil chega em lotes, com até 1 minuto de atraso.</p>
     </section>
+  );
+}
+
+// ---------- Metas: vender mais e mais interação ----------
+
+const pctText = (n: number) => `${n.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${pctText(Math.abs(n))}`;
+const dec = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+type GoalRow = { key: string; name: string; goal: string; cell: (g: Goals) => { value: string; hint: string; hit: boolean | null } };
+const GOAL_ROWS: GoalRow[] = [
+  {
+    key: "share",
+    name: "Itens pedidos que saíram da Comunidade",
+    goal: "meta 5%",
+    cell: (g) => ({ value: g.share.pct === null ? "—" : pctText(g.share.pct), hint: "das linhas pedidas pelo QR", hit: g.share.hit }),
+  },
+  {
+    key: "ticket",
+    name: "Ticket por mesa",
+    goal: "meta +5%",
+    cell: (g) => ({
+      value: g.ticket.cents === null ? "—" : brl(Math.round(g.ticket.cents)),
+      hint:
+        g.ticket.delta === null
+          ? "sem base para comparar"
+          : `${signed(g.ticket.delta)} sobre ${brl(Math.round(g.ticket.baseline ?? 0))}`,
+      hit: g.ticket.hit,
+    }),
+  },
+  {
+    key: "interactions",
+    name: "Interações por mesa",
+    goal: "meta 1,5",
+    cell: (g) => ({ value: g.interactions.perTable === null ? "—" : dec(g.interactions.perTable), hint: "votos, Pedir também e stories por mesa que leu o QR", hit: g.interactions.hit }),
+  },
+];
+
+function Mark({ hit }: { hit: boolean | null }) {
+  if (hit === null) return <em className="cp-goal-mark none">sem dados</em>;
+  return <em className={`cp-goal-mark ${hit ? "hit" : "miss"}`}>{hit ? "✓ atingiu" : "não atingiu"}</em>;
+}
+
+function Goals({ goals, from }: { goals: EditorData["goals"]; from: string | null }) {
+  return (
+    <div className="cp-goals">
+      <p className="cp-tiles-h">Metas</p>
+      <ul>
+        {GOAL_ROWS.map((r) => {
+          const night = r.cell(goals.night);
+          const month = r.cell(goals.month);
+          return (
+            <li key={r.key}>
+              <div className="cp-goal-h">
+                <b>{r.name}</b>
+                <small>{r.goal}</small>
+              </div>
+              <div className="cp-goal-cols">
+                <div>
+                  <span>Hoje</span>
+                  <strong>{night.value}</strong>
+                  <small>{night.hint}</small>
+                  <Mark hit={night.hit} />
+                </div>
+                <div>
+                  <span>4 semanas</span>
+                  <strong>{month.value}</strong>
+                  <small>{month.hint}</small>
+                  <Mark hit={month.hit} />
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="cp-note">
+        O ticket de hoje é comparado com o mesmo dia da semana nas 4 semanas anteriores; o de 4 semanas, com as 4 semanas de antes.
+      </p>
+      {from && (
+        <p className="cp-note">
+          Período cortado: o painel lê no máximo 5.000 pedidos e 5.000 registros do funil, então as metas só contam inteiras a partir de {from}.
+        </p>
+      )}
+    </div>
   );
 }

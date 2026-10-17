@@ -1,23 +1,26 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- miniaturas e fotos da casa já vêm no tamanho certo */
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { houseHighlight, muralColumns, orderableNow, relativeTime } from "@/lib/comunidade/client-logic";
+import { Fragment, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { houseHighlight, muralLayout, orderableNow, priceInfo, relativeTime } from "@/lib/comunidade/client-logic";
 import { ct, ctf } from "@/lib/comunidade/i18n";
 import type { PublicPost } from "@/lib/comunidade/types";
-import { mediaUrl, thumbSrc } from "@/lib/menu/media";
+import { thumbSrc } from "@/lib/menu/media";
+import type { MenuItem } from "@/lib/menu/types";
 import { MURAL_PAGE } from "@/lib/comunidade/public-state";
 import { useOrder } from "../order/order-context";
 import { BuyButton } from "./buy-button";
-import { IconCamera, IconClose, useClock } from "./parts";
+import { IconClose, priceText, useClock } from "./parts";
 import { useComunidade } from "./provider";
 import { ShareStoryButton } from "./share";
 
-// Mural de pratos, fase 1a: só fotos da casa (ficha: telas 11 e 12). Mosaico de 2 colunas
-// desencontradas, miniatura no mosaico (carregada só perto da tela) e a foto grande ao
-// tocar. Cada cartão: o prato no idioma do cliente, há quanto tempo e "Pedir também". Prato
-// que saiu do cardápio fica cinza com "indisponível hoje". Sem fotos: o destaque da casa.
-// Páginas de 20; "Ver mais" busca as mais antigas (?antes=<created_at da última>).
+// Mural de pratos, fase 1a: só fotos da casa (ficha v2, telas 10 a 13). Página de revista:
+// a foto mais nova grande (1:1) com "Pedir também" e o preço no botão; depois duas quadradas
+// com o nome e o preço dentro da foto e o "Pedir também" embaixo; e uma larga (16:10). Tudo
+// o que vende fica acima da dobra. Tocar na foto abre a foto grande (com o story). Prato que
+// saiu do cardápio, ou que o carrinho recusaria agora, fica cinza com "indisponível hoje".
+// Sem fotos: o destaque da casa. Páginas de 20; "Ver mais" busca as mais antigas
+// (?antes=<created_at da última>).
 
 // Foto aberta em tamanho grande; shareable = o prato ainda está no cardápio (a rota do story
 // recusa post de prato que saiu).
@@ -70,67 +73,86 @@ export function Mural({ onPhoto }: { onPhoto: (p: Photo) => void }) {
   };
 
   if (!s || !menu) return null;
-  const logo = mediaUrl(menu.restaurant.logo_path);
 
   if (!posts.length) {
+    const th = highlight ? thumbSrc(highlight) : null;
     return (
-      <div className="cmu-empty">
-        <p className="cmu-el">{ct(highlight ? "emptyLead" : "emptyNone", L)}</p>
-        {highlight && (
-          <article className="cmu-post cmu-top1">
-            <div className="cmu-pimg">
-              {thumbSrc(highlight) && <img className="cmu-p" src={thumbSrc(highlight)!} alt="" />}
-              <span className="cmu-chip">
-                <i className="cmu-star">★</i> {ct("highlightLower", L)}
-              </span>
-            </div>
-            <div className="cmu-pm">
-              <b className="fd">{highlight.name}</b>
-              <span>{ct("fromMenu", L)}</span>
-            </div>
-            <BuyButton itemId={highlight.id} source={null} big />
-          </article>
-        )}
-        <p className="cmu-en">
-          <IconCamera />
-          {ct("emptyNote", L)}
+      <>
+        <div className="cmu-mhead">
+          <h2 className="fd">{ct("muralHead", L)}</h2>
+        </div>
+        <p className="cmu-mempty">
+          <b>{ct(highlight ? "emptyLead" : "emptyNone", L)}</b> {highlight && ct("emptyLead2", L)}
         </p>
-      </div>
+        {highlight && (
+          <div className="cmu-spread">
+            <article className="cmu-mp big">
+              <div className="cmu-ph">{th && <img src={th} alt="" />}</div>
+              <span className="cmu-chip">
+                <i>★</i>
+                {ct("highlightLower", L)}
+              </span>
+              <div className="cmu-cap">
+                <div>
+                  <h3 className="fd">{highlight.name}</h3>
+                  {highlight.description && <p className="cmu-meta">{highlight.description}</p>}
+                </div>
+                <BuyButton itemId={highlight.id} source={null} photo price />
+              </div>
+            </article>
+          </div>
+        )}
+        <p className="cmu-mfoot">{ct("emptyNote", L)}</p>
+      </>
     );
   }
 
-  const { left, right } = muralColumns(posts);
-  const card = ({ post, ar, i }: { post: PublicPost; ar: string; i: number }) => {
+  type Card = { post: PublicPost; item: MenuItem | undefined; off: boolean; name: string; rel: string };
+  const info = (post: PublicPost): Card => {
     const item = o.itemById(post.item_id);
     // Fora do cardápio, ou que o carrinho recusaria agora (categoria fora do horário):
     // "indisponível hoje", como o "Pedir também" do cartão.
-    const off = !item || !menu || !orderableNow(menu, item.id, new Date(minute));
-    const name = item?.name ?? ct("unavailable", L);
+    const off = !item || !orderableNow(menu, item.id, new Date(minute));
+    return { post, item, off, name: item?.name ?? ct("unavailable", L), rel: relativeTime(post.created_at, new Date(now), L) };
+  };
+
+  const card = (k: Card, kind: "big" | "sq" | "wide", i: number) => {
+    const { post, item, off, name, rel } = k;
+    const pr = priceText(priceInfo(item), L);
+    const star = !off && kind === "big" && highlight?.id === post.item_id;
+    const chip = off ? ct("unavailableToday", L) : kind === "big" ? null : rel;
     return (
-      <article key={post.id} className={`cmu-post${off ? " off" : ""}`} style={{ "--i": Math.min(i, 8) } as CSSProperties}>
+      <article key={post.id} className={`cmu-mp ${kind}${off ? " off" : ""}`} style={{ "--d": `${0.3 + Math.min(i, 8) * 0.08}s` } as CSSProperties}>
         <button
-          className="cmu-pimg"
-          style={{ aspectRatio: ar }}
+          className="cmu-ph"
           onClick={() => onPhoto({ id: post.id, src: post.photo, name, shareable: !!item })}
           aria-label={ctf("photoOpen", L, { name })}
         >
-          <img className="cmu-p" src={post.thumb} alt="" loading="lazy" decoding="async" />
-          <span className="cmu-by">
-            {logo && <img src={logo} alt="" />}
-            {ct("byHouse", L)}
-          </span>
-          {!off && highlight?.id === post.item_id && (
-            <span className="cmu-chip">
-              <i className="cmu-star">★</i> {ct("highlightLower", L)}
-            </span>
-          )}
-          {off && <span className="cmu-chip">{ct("unavailableToday", L)}</span>}
+          <img src={kind === "sq" ? post.thumb : post.photo} alt="" loading={i > 0 ? "lazy" : undefined} decoding="async" />
+          <span className="cmu-streak" />
         </button>
-        <div className="cmu-pm">
-          <b>{name}</b>
-          <span>{relativeTime(post.created_at, new Date(now), L)}</span>
+        {star ? (
+          <span className="cmu-chip">
+            <i>★</i>
+            {ct("highlightLower", L)}
+          </span>
+        ) : chip ? (
+          <span className="cmu-chip">{chip}</span>
+        ) : null}
+        <div className="cmu-cap">
+          <div>
+            <h3 className="fd">{name}</h3>
+            {kind === "big" ? (
+              <p className="cmu-meta">{ctf("fromKitchen", L, { t: rel })}</p>
+            ) : pr && !off ? (
+              <p className="cmu-meta">
+                <b>{pr}</b>
+              </p>
+            ) : null}
+          </div>
+          {kind === "big" && <BuyButton itemId={post.item_id} source={{ kind: "mural", ref: post.id }} photo price />}
+          {kind === "wide" && <BuyButton itemId={post.item_id} source={{ kind: "mural", ref: post.id }} variant="sm" photo />}
         </div>
-        <BuyButton itemId={post.item_id} source={{ kind: "mural", ref: post.id }} />
       </article>
     );
   };
@@ -138,19 +160,33 @@ export function Mural({ onPhoto }: { onPhoto: (p: Photo) => void }) {
   return (
     <>
       <div className="cmu-mhead">
-        <b className="fd">{ct("muralHead", L)}</b>
-        <span>{ct("muralHeadSub", L)}</span>
+        <h2 className="fd">{ct("muralHead", L)}</h2>
+        <p>{ct("muralHeadSub", L)}</p>
       </div>
-      <div className="cmu-mos">
-        <div className="cmu-col">{left.map(card)}</div>
-        <div className="cmu-col r">{right.map(card)}</div>
+      <div className="cmu-spread">
+        {muralLayout(posts.map(info)).map((b) =>
+          b.kind === "pair" ? (
+            <Fragment key={b.posts[0].post.id}>
+              <div className="cmu-mrow">{b.posts.map((k, j) => card(k, "sq", b.i + j))}</div>
+              <div className="cmu-mrow cmu-mbuy">
+                {b.posts.map((k) => (
+                  <div key={k.post.id}>
+                    <BuyButton itemId={k.post.item_id} source={{ kind: "mural", ref: k.post.id }} variant="sm" />
+                  </div>
+                ))}
+              </div>
+            </Fragment>
+          ) : (
+            card(b.posts[0], b.kind, b.i)
+          ),
+        )}
       </div>
       {canMore ? (
         <button className="cmu-more" onClick={() => void loadMore()} disabled={more === "loading"} aria-busy={more === "loading"}>
           {more === "loading" ? <i className="cmu-spin" aria-hidden /> : ct("seeMore", L)}
         </button>
       ) : (
-        <p className="cmu-mend">{ct("muralEnd", L)}</p>
+        <p className="cmu-mfoot">{ct("muralFoot", L)}</p>
       )}
     </>
   );

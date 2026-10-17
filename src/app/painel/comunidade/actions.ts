@@ -224,6 +224,20 @@ export async function pairTv(restaurantId: string, code: string, label: string):
   return {};
 }
 
+// Modo simples do telão (TV mais antiga): sem animação. A TV pareada lê o valor na conferência
+// de estado (a cada 5 min) e aplica sem recarregar.
+export async function setTvSimple(restaurantId: string, on: boolean): Promise<Result> {
+  const r = await mine(restaurantId);
+  if (!r) return { error: DENIED };
+  try {
+    await db.updateRows("restaurants", [{ Id: r.Id, community_tv_simple: on === true }]);
+  } catch {
+    return { error: FAIL };
+  }
+  refresh(r);
+  return {};
+}
+
 // A TV desconectada recebe 401 na próxima conferência, apaga o segredo e volta ao código.
 export async function revokeTv(restaurantId: string, id: string): Promise<Result> {
   const r = okId(id) ? await mine(restaurantId) : null;

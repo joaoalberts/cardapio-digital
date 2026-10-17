@@ -2,6 +2,7 @@
 
 import { updateTag } from "next/cache";
 import { isOwner } from "@/lib/auth";
+import { communityTags } from "@/lib/comunidade/tags";
 import * as db from "@/lib/db/nocodb";
 import { menuTag } from "@/lib/menu/data";
 import type { OpeningHours } from "@/lib/menu/types";
@@ -28,13 +29,20 @@ async function updateRestaurant(restaurantId: string, patch: Record<string, unkn
   return before;
 }
 
+// Cardápio e cabeça da Comunidade (nome, logo, cor, horário e Instagram aparecem no telão e
+// no story, com cache de 5 min): a mudança vale na hora.
+function refreshBoth(slug: string) {
+  updateTag(menuTag(slug));
+  updateTag(communityTags.slug(slug));
+}
+
 // Guarda a logo já enviada ao Storage e apaga a anterior da pasta do restaurante.
 export async function setLogo(restaurantId: string, path: string | null): Promise<{ error?: string }> {
   if (path !== null && !(typeof path === "string" && ownsFile(restaurantId, path))) return { error: "Arquivo inválido." };
   const before = await updateRestaurant(restaurantId, { logo_path: path });
   if (!before) return { error: DENIED };
   if (before.logo_path && before.logo_path !== path) await removeFiles([before.logo_path]);
-  updateTag(menuTag(before.slug));
+  refreshBoth(before.slug);
   return {};
 }
 
@@ -58,7 +66,7 @@ export async function saveHours(restaurantId: string, hours: OpeningHours): Prom
   const clean = hours.map((day) => day.map(({ open, close }) => ({ open, close })));
   const data = await updateRestaurant(restaurantId, { opening_hours: clean });
   if (!data) return { error: DENIED };
-  updateTag(menuTag(data.slug));
+  refreshBoth(data.slug);
   return {};
 }
 
@@ -90,7 +98,7 @@ export async function saveMenuSettings(
       wifi_password: opt(input.wifiPassword, 60),
     });
   if (!data) return { error: DENIED };
-  updateTag(menuTag(data.slug));
+  refreshBoth(data.slug);
   return {};
 }
 
@@ -143,6 +151,6 @@ export async function saveProfile(restaurantId: string, input: ProfileInput): Pr
     const res = await replaceMedia(restaurantId, { banner: restaurantId }, input.banner);
     if (res.error) return res;
   }
-  updateTag(menuTag(data.slug));
+  refreshBoth(data.slug);
   return {};
 }

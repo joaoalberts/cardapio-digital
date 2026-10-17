@@ -4,6 +4,7 @@ import type { CommunityHead, OptionId, PollRow, PostRow, VoteRow } from "./types
 import {
   STORY_CACHE_DONE,
   STORY_CACHE_LIVE,
+  STORY_CACHE_PENDING,
   STORY_CACHE_POST,
   parseStoryQuery,
   qrPath,
@@ -13,6 +14,8 @@ import {
   storyHandle,
   storyImageSource,
   storyPhoto,
+  storyComeSize,
+  storyTitleSize,
   storyTexts,
   type StoryDeps,
   type StorySource,
@@ -37,6 +40,7 @@ const head = (over: Partial<CommunityHead> = {}): CommunityHead => ({
   instagram: "forno",
   logo_path: null,
   brand_color: "#b8862f",
+  tv_simple: false,
   ...over,
 });
 
@@ -179,6 +183,7 @@ function deps(over: Partial<StoryDeps> & { headRow?: CommunityHead | null } = {}
     })),
     getVotes: vi.fn(async (pollId: string) => VOTES[pollId] ?? []),
     getMenu: vi.fn(async (slug: string) => (slug === "forno" ? MENU : null)),
+    getPoll: vi.fn(async (id: string): Promise<PollRow | null> => POLLS.find((p) => p.id === id) ?? null),
     now: () => NOW,
     off: () => false,
     ...rest,
@@ -186,12 +191,12 @@ function deps(over: Partial<StoryDeps> & { headRow?: CommunityHead | null } = {}
   return d;
 }
 
-const asPoll = (s: StorySource | null) => {
-  if (!s || s.kind !== "poll") throw new Error("esperava enquete");
+const asPoll = (s: StorySource | "pending" | null) => {
+  if (!s || s === "pending" || s.kind !== "poll") throw new Error("esperava enquete");
   return s;
 };
-const asPost = (s: StorySource | null) => {
-  if (!s || s.kind !== "post") throw new Error("esperava foto da casa");
+const asPost = (s: StorySource | "pending" | null) => {
+  if (!s || s === "pending" || s.kind !== "post") throw new Error("esperava foto da casa");
   return s;
 };
 
@@ -272,6 +277,38 @@ describe("resolveStory: enquete", () => {
     expect(s.lang).toBe("pt-BR");
   });
 
+  it("encerrada com result gravado (votos já apagados pelo cron): usa o result, sem ler votos", async () => {
+    const withResult = POLLS.map((p) =>
+      p.id === P_CLOSED ? { ...p, result: { a: 0, b: 52, c: 48, has_votes: true, winner: "b" as const } } : p,
+    );
+    const d = deps({
+      getContent: vi.fn(async () => ({ polls: withResult, posts: POSTS, tvs: [] })),
+      getVotes: vi.fn(async () => []),
+    });
+    const s = asPoll(await resolveStory(d, "forno", { poll: P_CLOSED }));
+    expect(s.poll.winner).toBe("b");
+    expect(s.poll.options.map((o) => o.pct)).toEqual([0, 52, 48]);
+    expect(d.getVotes).not.toHaveBeenCalled();
+  });
+
+  it("miniatura de cada opção (a das perdedoras aparece ao lado do %); sem prato, nada", async () => {
+    const s = asPoll(await resolveStory(deps(), "forno", { poll: P_CLOSED }));
+    expect(s.thumbs).toEqual({
+      a: "https://x.public.blob.vercel-storage.com/r1/items/burger.webp-t",
+      b: "https://x.public.blob.vercel-storage.com/r1/items/pizza.webp-t",
+      c: null,
+    });
+    expect(asPoll(await resolveStory(deps(), "forno", { poll: P_MUSIC })).thumbs).toEqual({ a: null, b: null });
+  });
+
+  it("storyTitleSize: \"Deu X\" a 124 px; nome comprido desce", () => {
+    expect(storyTitleSize("Deu Burger two")).toBe(124);
+    expect(storyTitleSize("x".repeat(16))).toBe(124);
+    expect(storyTitleSize("x".repeat(17))).toBe(104);
+    expect(storyTitleSize("x".repeat(25))).toBe(104);
+    expect(storyTitleSize("x".repeat(26))).toBe(84);
+  });
+
   it("aberta: a foto de quem lidera agora", async () => {
     const s = asPoll(await resolveStory(deps(), "forno", { poll: P_OPEN }));
     expect(s.poll.closed).toBe(false);
@@ -334,29 +371,50 @@ describe("parseStoryQuery", () => {
 });
 
 describe("textos, cor, @ e foto da arte", () => {
-  it("textos da enquete encerrada e da foto da casa", async () => {
+  it("textos da enquete encerrada e da foto da casa (ficha v2, tela 16)", async () => {
     const closed = asPoll(await resolveStory(deps(), "forno", { poll: P_CLOSED }));
     expect(storyTexts(closed)).toEqual({
-      kicker: "Enquete da casa · encerrada",
-      title: "Qual sai hoje?",
+      kicker: "Enquete da casa, encerrada",
+      question: "Qual sai hoje?",
+      title: "Deu Burger Two",
       sub: null,
-      foot: "Vem votar com a gente",
-      footSub: "aponte a câmera para o cardápio",
+      come: "Vem pro Forno",
+      point: "o cardápio da casa: aponte a câmera",
     });
     const open = asPoll(await resolveStory(deps(), "forno", { poll: P_OPEN }));
-    expect(storyTexts(open).kicker).toBe("Enquete da casa · ao vivo");
+    expect(storyTexts(open)).toMatchObject({ kicker: "Enquete da casa, ao vivo", title: "Pizza doce na frente" });
     const music = asPoll(await resolveStory(deps(), "forno", { poll: P_MUSIC }));
-    expect(storyTexts(music).title).toBe("Qual a próxima música?");
+    expect(storyTexts(music)).toMatchObject({ question: "Qual a próxima música?", title: "Deu Samba" });
     const house = asPost(await resolveStory(deps(), "forno", { post: POST_PIZZA }));
     expect(storyTexts(house)).toEqual({
       kicker: "Saindo agora da cozinha",
+      question: null,
       title: "Pizza doce",
       sub: "destaque da casa",
-      foot: "Peça o seu",
-      footSub: "aponte a câmera para o cardápio",
+      come: "Vem pro Forno",
+      point: "o cardápio da casa: aponte a câmera",
     });
     const plain = asPost(await resolveStory(deps(), "forno", { post: POST_OK }));
     expect(storyTexts(plain).sub).toBeNull();
+  });
+
+  it("\"Vem pro\" usa o nome inteiro da casa (sem campo novo); sem nome, o slug", async () => {
+    const depot = deps({ headRow: head({ name: "Depot Medieval" }) });
+    expect(storyTexts(asPoll(await resolveStory(depot, "forno", { poll: P_CLOSED }))).come).toBe("Vem pro Depot Medieval");
+    const noName = deps({ headRow: head({ name: "" }) });
+    expect(storyTexts(asPoll(await resolveStory(noName, "forno", { poll: P_CLOSED }))).come).toBe("Vem pro forno");
+  });
+
+  it("storyComeSize: 72 px numa linha; nome comprido desce o tamanho e corta com reticências", () => {
+    // Medido no PNG: "Vem pro depotmedieval" (21 letras) a 72 px quebra na coluna de 680 px.
+    expect(storyComeSize("Vem pro Depot")).toEqual({ text: "Vem pro Depot", size: 72 });
+    expect(storyComeSize("Vem pro Depot Bar")).toEqual({ text: "Vem pro Depot Bar", size: 60 });
+    expect(storyComeSize("Vem pro Depot Medieval")).toEqual({ text: "Vem pro Depot Medieval", size: 60 });
+    expect(storyComeSize("Vem pro Cantina da Nona Rosa").size).toBe(52);
+    const long = storyComeSize("Vem pro " + "x".repeat(80));
+    expect(long.size).toBe(52);
+    expect(long.text).toHaveLength(44);
+    expect(long.text.endsWith("…")).toBe(true);
   });
 
   it("cor da marca só em hexadecimal; senão, a do cardápio", () => {
@@ -425,5 +483,87 @@ describe("tempo de enquete aberta que acaba de passar do fim", () => {
   it("encerrada há mais de 1 h ainda vira arte enquanto está na agenda em cache", async () => {
     const later = deps({ now: () => new Date(now + 2 * HOUR) });
     expect(asPoll(await resolveStory(later, "forno", { poll: P_CLOSED })).poll.closed).toBe(true);
+  });
+});
+
+// Verificador, 16/10: o cron grava o result e apaga os votos de antes da virada do dia; a
+// agenda em cache pode seguir sem o result por um tempo. Enquete das 04h30 às 05h30 em São
+// Paulo (virada às 05h00 = 08:00Z): 3 votos em A e 2 em B antes da virada, 1 em C depois.
+describe("resolveStory: enquete com votos apagados pelo cron e agenda em cache sem result", () => {
+  const P_DAWN = U(16);
+  const AFTER_CRON = new Date("2026-10-16T09:05:00Z"); // 06h05 em São Paulo, cron já rodou
+  const dawn = (over: Partial<PollRow> = {}) =>
+    poll(P_DAWN, { starts_at: "2026-10-16T07:30:00.000Z", ends_at: "2026-10-16T08:30:00.000Z", created_at: "2026-10-16T07:00:00.000Z", ...over });
+  const v = (option: OptionId, k: number, at: string) =>
+    vote(P_DAWN, option, DEV(40 + k), { id: `dawn-${k}`, table_id: U(950 + k), created_at: at });
+  const SIX = [
+    v("a", 1, "2026-10-16T07:35:00.000Z"),
+    v("a", 2, "2026-10-16T07:40:00.000Z"),
+    v("a", 3, "2026-10-16T07:45:00.000Z"),
+    v("b", 4, "2026-10-16T07:50:00.000Z"),
+    v("b", 5, "2026-10-16T07:55:00.000Z"),
+    v("c", 6, "2026-10-16T08:10:00.000Z"),
+  ];
+
+  // O que a retenção de verdade faz com esses 6 votos: o result gravado e os votos que sobram.
+  async function afterCron(row: PollRow, votes: VoteRow[]) {
+    const { retentionPlan } = await import("./retention");
+    const plan = retentionPlan({
+      votes,
+      polls: [row],
+      clocks: [{ id: "r1", timezone: TZ, day_start: "05:00" }],
+      tallies: [],
+      posts: [],
+      tvs: [],
+      now: AFTER_CRON,
+    });
+    const gone = new Set(plan.votes);
+    return { result: plan.results.find((r) => r.poll_id === row.id)?.result, left: votes.filter((x) => !gone.has(x.id)) };
+  }
+
+  function staleDeps(stale: PollRow, fresh: PollRow | null, left: VoteRow[]) {
+    return deps({
+      now: () => AFTER_CRON,
+      getContent: vi.fn(async () => ({ polls: [stale], posts: [], tvs: [] })),
+      getVotes: vi.fn(async () => left),
+      getPoll: vi.fn(async () => fresh),
+    });
+  }
+
+  it("6 votos, o cron grava {a:50,b:33,c:17}: o story mostra 50/33/17 e nunca \"Deu C 100%\"", async () => {
+    const row = dawn();
+    const { result, left } = await afterCron(row, SIX);
+    expect(result).toEqual({ a: 50, b: 33, c: 17, has_votes: true, winner: "a" });
+    expect(left.map((x) => x.option_id)).toEqual(["c"]);
+    const d = staleDeps(row, { ...row, result }, left);
+    const s = asPoll(await resolveStory(d, "forno", { poll: P_DAWN }));
+    expect(s.poll.options.map((o) => o.pct)).toEqual([50, 33, 17]);
+    expect(s.poll.winner).toBe("a");
+    expect(storyTexts(s).title).toBe("Deu Burger Two");
+    expect(s.poll.options.some((o) => o.pct === 100)).toBe(false);
+    expect(storyCache(s, AFTER_CRON)).toBe(STORY_CACHE_DONE);
+    expect(d.getPoll).toHaveBeenCalledWith(P_DAWN);
+  });
+
+  it("enquete que encerrou antes da virada (todos os votos apagados): o result vem da linha lida na hora", async () => {
+    const row = dawn({ ends_at: "2026-10-16T07:58:00.000Z" });
+    const five = SIX.slice(0, 5);
+    const { result, left } = await afterCron(row, five);
+    expect(left).toEqual([]);
+    const s = asPoll(await resolveStory(staleDeps(row, { ...row, result }, left), "forno", { poll: P_DAWN }));
+    expect(s.poll.options.map((o) => o.pct)).toEqual([60, 40, 0]);
+  });
+
+  it("linha lida na hora ainda sem result (cron não rodou ou falhou): sem arte, 404 de cache curto", async () => {
+    const row = dawn();
+    const s = await resolveStory(staleDeps(row, row, SIX), "forno", { poll: P_DAWN });
+    expect(s).toBe("pending");
+    expect(STORY_CACHE_PENDING).toBe("public, max-age=0, s-maxage=10");
+  });
+
+  it("enquete aberta só hoje (depois da virada) não lê a linha de novo", async () => {
+    const d = deps({ getPoll: vi.fn(async () => null) });
+    expect(asPoll(await resolveStory(d, "forno", { poll: P_CLOSED })).poll.closed).toBe(true);
+    expect(d.getPoll).not.toHaveBeenCalled();
   });
 });

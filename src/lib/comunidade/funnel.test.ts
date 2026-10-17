@@ -173,6 +173,7 @@ describe("recordFunnelWith", () => {
     instagram: "@forno",
     logo_path: null,
     brand_color: null,
+    tv_simple: false,
     ...over,
   });
   const TABLES: Record<string, { id: string; code: string; active: boolean }[]> = {

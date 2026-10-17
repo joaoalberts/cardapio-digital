@@ -57,7 +57,8 @@ type OrderApi = {
   unit: (l: Pick<CartLine, "item" | "option" | "half" | "claim_cents">) => number | null;
   itemById: (id: string) => MenuItem | undefined;
   inCart: (itemId: string) => number;
-  add: (l: NewLine, from?: HTMLElement | null) => void;
+  // quiet: sem o aviso "Adicionado" (a Comunidade mostra "✓ No pedido" e a ilha dela).
+  add: (l: NewLine, from?: HTMLElement | null, opts?: { quiet?: boolean }) => void;
   // Oferta relâmpago: grava o registro no servidor e põe a linha com o preço garantido.
   takeSpecial: (item: MenuItem, qty: number) => Promise<{ ok: true; cents: number } | { ok: false }>;
   replace: (key: string, l: NewLine) => void;
@@ -212,12 +213,13 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
   );
 
   const add = useCallback(
-    (l: NewLine, from?: HTMLElement | null) => {
+    (l: NewLine, from?: HTMLElement | null, opts?: { quiet?: boolean }) => {
       dirty.current = true;
       setLines((c) => addLine(c, l));
       try {
         navigator.vibrate?.(12);
       } catch {}
+      if (opts?.quiet) return;
       const it = index?.items.get(l.item)?.item;
       const img = it ? thumbSrc(it) : null;
       const half = l.half ? index?.items.get(l.half)?.item : undefined;
