@@ -402,8 +402,8 @@
 .cm .o-tabs button { min-height: 28px; font-size: 13px; }
 /* Oferta relâmpago no pedido: raio pequeno em champanhe ao lado do nome (16/10). */
 .cm .o-bolt { width: 13px; height: 13px; margin-left: 6px; vertical-align: -1px; color: #e9dcc4; fill: rgba(233, 220, 196, 0.25); }
-/* Título e total do carrinho discretos (pedido do João, 17/10): 16 e 18 px. */
-.cm .g-title.cart h2.o-fix { font-size: 16px; }
+/* Título e total do carrinho discretos (pedido do João, 17/10): 15 e 18 px. */
+.cm .g-title.cart h2.o-fix { font-size: 15px; } /* o mesmo tamanho do "Editar" (pedido do João, 17/10) */
 .cm .o-total strong.o-fix { font-size: 18px; }
 /* "Seu pedido" 10 px para dentro, alinhado com o "Total" (pedido do João, 17/10). */
 .cm .g-title.cart .g-ttl { padding-left: 10px; }
