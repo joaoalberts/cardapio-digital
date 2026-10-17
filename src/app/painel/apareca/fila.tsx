@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  alertPattern, alertStep, latestOnly, NOTICE_MS, noticeOn, noticeText, type AlertState, type Notice, type NoticeEvent, type QueueItem,
+  alertPattern, alertStep, latestOnly, NOTICE_MS, noticeOn, noticeText, WARN_TEXT, type AlertState, type Notice, type NoticeEvent, type QueueItem,
 } from "@/lib/apareca/panel-logic";
 import { useHls } from "@/lib/menu/use-hls";
 import { approveVideo, listQueue, rejectVideo, removeFromTv, type QueueResult } from "./actions";
@@ -16,11 +16,6 @@ const POLL_MS = 10_000;
 const UNDO_MS = 5_000;
 const LOAD_FAIL = "Não foi possível atualizar a fila. Confira a internet.";
 const SAVE_FAIL = "Não foi possível salvar. Confira a internet.";
-
-const WARN_TEXT = {
-  warn: "O uso do Mux deste mês passou de 75%.",
-  paused: "Envios pausados: o teto do Mux está perto.",
-} as const;
 
 // Dois sinais curtos gerados no navegador (sem arquivo de som).
 function chime(ctx: AudioContext) {

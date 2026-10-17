@@ -3,10 +3,11 @@
 import { updateTag } from "next/cache";
 import { currentUser } from "@/lib/auth";
 import * as db from "@/lib/db/nocodb";
-import { aiAllowedPatch, allowedPatch, isSuperAdmin } from "@/lib/apareca/superadmin";
+import { aiAllowedPatch, allowedPatch, isSuperAdminUser } from "@/lib/apareca/superadmin";
 import { aparecaTags } from "@/lib/apareca/store";
 
-// Super admin do Apareça: só quem está em SUPERADMIN_EMAILS (variável do servidor) grava.
+// Super admin do Apareça: só quem está em SUPERADMIN_EMAILS (e, com SUPERADMIN_SINCE, com conta
+// criada antes dessa data; variáveis do servidor) grava.
 // Toda action confere de novo aqui, sem confiar na página: dono comum recebe erro e nada é gravado.
 // Depois de gravar, limpa a cabeça do restaurante no cache do Next (por slug e por id).
 
@@ -19,7 +20,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 async function target(rid: unknown): Promise<Rest | null> {
   const u = await currentUser().catch(() => null);
-  if (!isSuperAdmin(u?.email, process.env.SUPERADMIN_EMAILS)) return null;
+  if (!isSuperAdminUser(u)) return null;
   if (typeof rid !== "string" || !UUID.test(rid)) return null;
   const r = await db.first<Rest>("restaurants", { uid: rid }).catch(() => null);
   return r && r.id === rid ? r : null;

@@ -859,6 +859,10 @@
   & .app-adm-usd b {
     font-size: 22px;
   }
+  & .app-band-stop {
+    background: rgba(214, 60, 60, 0.1);
+    color: #9e2323;
+  }
   & .app-adm-meter {
     height: 10px;
     margin-bottom: 10px;

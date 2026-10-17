@@ -1,4 +1,5 @@
 import { parseConfig } from "./config";
+import { parseDbDate } from "./reports";
 import { isExpired } from "./retention";
 
 // Super admin do Apareça (T17): o João, dono do sistema, libera o recurso e a IA por restaurante.
@@ -14,9 +15,29 @@ export function superAdminList(env: string | undefined): Set<string> {
   );
 }
 
-export function isSuperAdmin(email: string | null | undefined, env: string | undefined): boolean {
+// since (SUPERADMIN_SINCE, ISO, opcional): o cadastro não confirma e-mail, então quem criasse a conta
+// de um e-mail da lista que ainda não tem conta viraria super admin. Com since definido, só vale a
+// conta criada ANTES dessa data. Data da conta ausente ou ilegível, ou since ilegível = não (fecha).
+export function isSuperAdmin(
+  email: string | null | undefined,
+  env: string | undefined,
+  opts: { createdAt?: unknown; since?: string } = {},
+): boolean {
   const e = typeof email === "string" ? email.trim().toLowerCase() : "";
-  return e !== "" && superAdminList(env).has(e);
+  if (e === "" || !superAdminList(env).has(e)) return false;
+  const since = opts.since?.trim();
+  if (!since) return true;
+  const limit = parseDbDate(since);
+  const created = parseDbDate(opts.createdAt);
+  return Number.isFinite(limit) && Number.isFinite(created) && created < limit;
+}
+
+// Conferência do servidor: lê as duas variáveis (nunca vão para o navegador).
+export function isSuperAdminUser(
+  user: { email?: string | null; created_at?: string | null } | null | undefined,
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return isSuperAdmin(user?.email, env.SUPERADMIN_EMAILS, { createdAt: user?.created_at, since: env.SUPERADMIN_SINCE });
 }
 
 // Desligar a liberação desliga também o interruptor do dono: religar depende dele de novo.

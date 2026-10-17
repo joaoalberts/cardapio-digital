@@ -1,10 +1,10 @@
 // Super admin do Apareça (T17): quem é super admin, a liberação em cadeia e o uso por restaurante.
 // E-mails só fictícios (@exemplo.com); a lista real fica na variável SUPERADMIN_EMAILS da Vercel.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { adminRows, aiAllowedPatch, allowedPatch, isSuperAdmin, superAdminList } from "./superadmin";
+import { adminRows, aiAllowedPatch, allowedPatch, isSuperAdmin, isSuperAdminUser, superAdminList } from "./superadmin";
 
 const h = vi.hoisted(() => ({
-  user: null as { id: string; email: string } | null,
+  user: null as { id: string; email: string; created_at?: string | null } | null,
   row: null as Record<string, unknown> | null,
   updateTag: vi.fn<(tag: string) => void>(),
   updateRows: vi.fn<(t: string, rows: Record<string, unknown>[]) => Promise<void>>(async () => {}),
@@ -26,6 +26,7 @@ const OWNER = { id: "u2", email: "dono@exemplo.com" };
 
 beforeEach(() => {
   process.env.SUPERADMIN_EMAILS = " admin@exemplo.com , outro@exemplo.com";
+  delete process.env.SUPERADMIN_SINCE;
   h.user = ADMIN;
   h.row = { Id: 7, id: RID, slug: "Forno", apareca_allowed: true, apareca_enabled: true, apareca_ai_allowed: true, apareca_config: { mode: "automatico" } };
   h.first.mockImplementation(async (_t, w) => (h.row && w.uid === h.row.id ? h.row : null));
@@ -54,6 +55,34 @@ describe("isSuperAdmin", () => {
   it("e-mail parecido não vale", () => {
     expect(isSuperAdmin("joao@x.com.br", "joao@x.com")).toBe(false);
     expect(isSuperAdmin("xjoao@x.com", "joao@x.com")).toBe(false);
+  });
+});
+
+describe("SUPERADMIN_SINCE (cadastro não confirma e-mail)", () => {
+  const L = "joao@x.com";
+  const since = "2026-10-20T00:00:00Z";
+  it("e-mail na lista, mas conta criada depois de SUPERADMIN_SINCE → não é super admin", () => {
+    expect(isSuperAdmin("joao@x.com", L, { createdAt: "2026-10-21T10:00:00Z", since })).toBe(false);
+    expect(isSuperAdmin("joao@x.com", L, { createdAt: "2026-10-20 00:00:00+00:00", since })).toBe(false); // na hora exata também não
+  });
+  it("conta criada antes vale, inclusive no formato do NocoDB", () => {
+    expect(isSuperAdmin("joao@x.com", L, { createdAt: "2026-10-01T10:00:00Z", since })).toBe(true);
+    expect(isSuperAdmin("joao@x.com", L, { createdAt: "2026-10-01 10:00:00+00:00", since })).toBe(true);
+  });
+  it("com SUPERADMIN_SINCE, data da conta ausente ou ilegível, ou data do limite ilegível → não", () => {
+    expect(isSuperAdmin("joao@x.com", L, { createdAt: null, since })).toBe(false);
+    expect(isSuperAdmin("joao@x.com", L, { createdAt: "ontem", since })).toBe(false);
+    expect(isSuperAdmin("joao@x.com", L, { createdAt: "2026-10-01T10:00:00Z", since: "amanhã" })).toBe(false);
+  });
+  it("sem SUPERADMIN_SINCE (ou vazio), só a lista conta", () => {
+    expect(isSuperAdmin("joao@x.com", L, { createdAt: "2030-01-01T00:00:00Z" })).toBe(true);
+    expect(isSuperAdmin("joao@x.com", L, { createdAt: null, since: "  " })).toBe(true);
+  });
+  it("isSuperAdminUser lê as duas variáveis", () => {
+    const env = { SUPERADMIN_EMAILS: L, SUPERADMIN_SINCE: since };
+    expect(isSuperAdminUser({ email: "joao@x.com", created_at: "2026-10-01T00:00:00Z" }, env)).toBe(true);
+    expect(isSuperAdminUser({ email: "joao@x.com", created_at: "2026-10-25T00:00:00Z" }, env)).toBe(false);
+    expect(isSuperAdminUser(null, env)).toBe(false);
   });
 });
 
@@ -93,6 +122,16 @@ describe("actions do super admin", () => {
     delete process.env.SUPERADMIN_EMAILS;
     expect((await actions.setAllowed(RID, true)).error).toBeTruthy();
     expect(h.updateRows).not.toHaveBeenCalled();
+  });
+
+  it("conta criada depois de SUPERADMIN_SINCE → erro e nada gravado, mesmo com o e-mail na lista", async () => {
+    process.env.SUPERADMIN_SINCE = "2026-10-20T00:00:00Z";
+    h.user = { ...ADMIN, created_at: "2026-10-21 09:00:00+00:00" };
+    expect((await actions.setAllowed(RID, true)).error).toBeTruthy();
+    expect((await actions.setAiAllowed(RID, false)).error).toBeTruthy();
+    expect(h.updateRows).not.toHaveBeenCalled();
+    h.user = { ...ADMIN, created_at: "2026-10-01 09:00:00+00:00" };
+    expect(await actions.setAllowed(RID, true)).toEqual({});
   });
 
   it("id inválido ou restaurante inexistente → erro", async () => {

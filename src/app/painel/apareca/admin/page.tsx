@@ -7,7 +7,8 @@ import * as db from "@/lib/db/nocodb";
 import { estimateUsd, tetoUsd, uploadGate } from "@/lib/apareca/cost";
 import { deleteMuxAsset } from "@/lib/apareca/mux-video";
 import { monthUsage } from "@/lib/apareca/store";
-import { adminRows, isSuperAdmin } from "@/lib/apareca/superadmin";
+import { WARN_TEXT } from "@/lib/apareca/panel-logic";
+import { adminRows, isSuperAdminUser } from "@/lib/apareca/superadmin";
 import { Liberacao } from "./liberacao";
 import "../../panel.css";
 import "../apareca.css";
@@ -22,7 +23,7 @@ export const instant = false;
 export default async function AdminPage() {
   await connection();
   const user = await currentUser().catch(() => null);
-  if (!isSuperAdmin(user?.email, process.env.SUPERADMIN_EMAILS)) notFound();
+  if (!isSuperAdminUser(user)) notFound();
   return (
     <div className="ap">
       <main className="app-setup app-admin">
@@ -37,11 +38,6 @@ export default async function AdminPage() {
     </div>
   );
 }
-
-const WARN_TEXT = {
-  warn: "O uso do Mux deste mês passou de 75%.",
-  paused: "Envios pausados: o teto do Mux está perto.",
-} as const;
 
 // Mês do teto no fuso de Brasília, como no painel e nas rotas do cliente.
 const monthOf = (now: Date) =>

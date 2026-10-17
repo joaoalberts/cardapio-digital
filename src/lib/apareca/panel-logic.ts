@@ -186,6 +186,12 @@ export async function teamDecide(d: DecideDeps, rid: string, id: string, action:
 // Frase da cadeia de interruptores: o João ainda não liberou o Apareça para a casa.
 export const NOT_ALLOWED = "Este recurso ainda não foi liberado para a sua casa.";
 
+// Faixa do teto do Mux: os mesmos textos na fila do painel e no super admin.
+export const WARN_TEXT = {
+  warn: "O uso do Mux deste mês passou de 75%.",
+  paused: "Envios pausados: o teto do Mux está perto.",
+} as const;
+
 // Institucionais: a TV carrega cada um inteiro na memória a cada exibição (T14), então o envio é
 // limitado (decisão do controlador na T15): até 3 min e 200 MB. O tamanho é conferido no navegador
 // antes do envio; a duração, quando o Mux devolve o asset (acima disso, o asset é apagado).

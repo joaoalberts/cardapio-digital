@@ -10,8 +10,9 @@ import { SESSION_COOKIE, SESSION_DAYS, createSessionValue, readSessionValue } fr
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>;
 
-export type User = { id: string; email: string };
-type UserRow = { Id: number; id: string; email: string; password_hash: string | null };
+// created_at: só currentUser preenche (o super admin confere a data da conta com SUPERADMIN_SINCE).
+export type User = { id: string; email: string; created_at?: string | null };
+type UserRow = { Id: number; id: string; email: string; password_hash: string | null; created_at?: string | null };
 
 export const EMAIL = /^[^\s@,()~]+@[^\s@,()~]+\.[^\s@,()~]+$/;
 
@@ -79,7 +80,7 @@ export async function currentUser(): Promise<User | null> {
   const id = await currentUserId();
   if (!id) return null;
   const u = await db.first<UserRow>("users", { uid: id });
-  return u ? { id: u.id, email: u.email } : null;
+  return u ? { id: u.id, email: u.email, created_at: typeof u.created_at === "string" ? u.created_at : null } : null;
 }
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

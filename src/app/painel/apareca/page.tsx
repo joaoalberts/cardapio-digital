@@ -7,7 +7,7 @@ import { parseConfig } from "@/lib/apareca/config";
 import { frameUrl } from "@/lib/apareca/mux-video";
 import { aparecaOff } from "@/lib/apareca/off";
 import { allowedModes, HOUSE_MAX_S } from "@/lib/apareca/panel-logic";
-import { isSuperAdmin } from "@/lib/apareca/superadmin";
+import { isSuperAdminUser } from "@/lib/apareca/superadmin";
 import type { HouseVideoRow } from "@/lib/apareca/types";
 import { mediaUrl } from "@/lib/menu/media";
 import { muxEnabled } from "@/lib/mux";
@@ -63,8 +63,8 @@ async function Apareca() {
     db.list<Raw>("community_tvs", mine).catch(() => [] as Raw[]),
     currentUser().catch(() => null),
   ]);
-  // Link discreto para a liberação por restaurante: só o super admin (SUPERADMIN_EMAILS, no servidor) vê.
-  const superAdmin = isSuperAdmin(user?.email, process.env.SUPERADMIN_EMAILS);
+  // Link discreto para a liberação por restaurante: só o super admin (conferido no servidor) vê.
+  const superAdmin = isSuperAdminUser(user);
   const cfg = parseConfig(r.apareca_config);
   const allowed = r.apareca_allowed === true;
   const modes = allowedModes({ ai_allowed: r.apareca_ai_allowed === true }, Boolean(process.env.ANTHROPIC_API_KEY) && !aparecaOff());
