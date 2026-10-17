@@ -10,8 +10,9 @@ import { tvStatus, type TvStatus } from "./tv-status";
 
 export type AgoraPoll = { id: string; question: string; votes: number | null; endsAt: string };
 export type AgoraTv = { id: string; label: string; status: TvStatus };
+// queueOk false: a leitura da fila falhou; enquete e TVs continuam valendo e a tela avisa só no bloco de vídeos.
 export type AgoraResult = {
-  queue: QueueResult; poll: AgoraPoll | null; tvs: AgoraTv[]; communityOn: boolean; aparecaAllowed: boolean;
+  queue: QueueResult; queueOk: boolean; poll: AgoraPoll | null; tvs: AgoraTv[]; communityOn: boolean; aparecaAllowed: boolean;
 };
 
 export const EMPTY_QUEUE: QueueResult = { items: [], newest: null, warn: "ok" };
@@ -31,7 +32,7 @@ function votesOf(p: PollRow): number | null {
 }
 
 export function agoraFrom(i: {
-  queue: QueueResult; pollRows: PollRow[]; tvRows: Record<string, unknown>[]; now: Date; communityOn: boolean; aparecaAllowed: boolean;
+  queue: QueueResult | null; pollRows: PollRow[]; tvRows: Record<string, unknown>[]; now: Date; communityOn: boolean; aparecaAllowed: boolean;
   restaurantId: string;
 }): AgoraResult {
   // A casa não agenda duas ao mesmo tempo (pollOverlap); se houver, vale a que abriu primeiro.
@@ -48,7 +49,8 @@ export function agoraFrom(i: {
     .sort((a, b) => b.paired - a.paired)
     .map((x) => x.tv);
   return {
-    queue: i.aparecaAllowed ? i.queue : EMPTY_QUEUE,
+    queue: (i.aparecaAllowed && i.queue) || EMPTY_QUEUE,
+    queueOk: !i.aparecaAllowed || i.queue !== null,
     poll: open ? { id: open.id, question: questionText(open, "pt-BR"), votes: votesOf(open), endsAt: open.ends_at } : null,
     tvs,
     communityOn: i.communityOn,

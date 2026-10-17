@@ -29,7 +29,8 @@ async function readAgora(rid: string): Promise<AgoraResult> {
   const now = new Date();
   const aparecaAllowed = r?.apareca_allowed === true;
   return agoraFrom({
-    queue: aparecaAllowed ? await listQueue(rid) : EMPTY_QUEUE,
+    // Falha da fila (retrato, contexto) não derruba a enquete nem as TVs: vira queueOk false.
+    queue: aparecaAllowed ? await listQueue(rid).catch(() => null) : EMPTY_QUEUE,
     pollRows: toContent({ polls, posts: [], tvs: [] }, now).polls,
     tvRows,
     now,

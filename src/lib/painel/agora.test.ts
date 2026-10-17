@@ -36,6 +36,14 @@ const tv = (id: string, extra: Record<string, unknown> = {}) => ({
 const base = { queue: QUEUE, pollRows: [] as PollRow[], tvRows: [] as Record<string, unknown>[], now: NOW, communityOn: true, aparecaAllowed: true, restaurantId: RID };
 
 describe("agoraFrom", () => {
+  it("fila que falhou (null) não derruba a enquete nem as TVs", () => {
+    const r = agoraFrom({ ...base, queue: null, pollRows: [poll("no-ar", -5, 10)], tvRows: [tv("ok")] });
+    expect(r.queueOk).toBe(false);
+    expect(r.queue).toEqual({ items: [], newest: null, warn: "ok" });
+    expect(r.poll?.id).toBe("no-ar");
+    expect(r.tvs.map((t) => t.id)).toEqual(["ok"]);
+  });
+
   it("escolhe a enquete que está no ar", () => {
     const r = agoraFrom({ ...base, pollRows: [poll("agendada", 30, 40), poll("no-ar", -5, 10), poll("velha", -60, -50)] });
     expect(r.poll).toEqual({ id: "no-ar", question: "Qual sobremesa sai hoje?", votes: null, endsAt: min(10) });
@@ -81,12 +89,14 @@ describe("agoraFrom", () => {
   it("Apareça não liberado: fila vazia", () => {
     const r = agoraFrom({ ...base, aparecaAllowed: false });
     expect(r.queue).toEqual({ items: [], newest: null, warn: "ok" });
+    expect(r.queueOk).toBe(true);
     expect(r.aparecaAllowed).toBe(false);
   });
 
   it("Apareça liberado: a fila passa como veio, com os interruptores", () => {
     const r = agoraFrom({ ...base, communityOn: false });
     expect(r.queue).toBe(QUEUE);
+    expect(r.queueOk).toBe(true);
     expect(r.communityOn).toBe(false);
     expect(r.aparecaAllowed).toBe(true);
   });

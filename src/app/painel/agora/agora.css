@@ -14,7 +14,11 @@
   & > .app-bar + .ap-card {
     margin-top: 0;
   }
+  /* Links das faixas com 44 px de altura para o dedo, como o .app-moved a. */
   & .app-band a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
     color: inherit;
     font-weight: 700;
     text-decoration: underline;

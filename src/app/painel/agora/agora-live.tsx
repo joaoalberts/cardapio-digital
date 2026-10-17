@@ -20,14 +20,15 @@ import { loadAgora } from "./actions";
 
 const POLL_MS = 10_000;
 const LOAD_FAIL = "Não foi possível atualizar a tela. Confira a internet.";
+const QUEUE_FAIL = "Não foi possível atualizar os vídeos. Confira a internet.";
 const SAVE_FAIL = "Não foi possível salvar. Confira a internet.";
 
 const minutesLeft = (iso: string, now: number) => Math.max(0, Math.ceil((Date.parse(iso) - now) / 60_000));
 
 export function AgoraLive({
-  rid, initial, initialOk, aparecaOff, maker, setup,
+  rid, isOwner, initial, initialOk, aparecaOff, maker, setup,
 }: {
-  rid: string; initial: AgoraResult; initialOk: boolean; aparecaOff: boolean; maker: HousePhotoData; setup?: ReactNode;
+  rid: string; isOwner: boolean; initial: AgoraResult; initialOk: boolean; aparecaOff: boolean; maker: HousePhotoData; setup?: ReactNode;
 }) {
   const [data, setData] = useState(initial);
   // Cada resposta de consulta sobe loaded: é quando o aviso sonoro confere se chegou vídeo novo.
@@ -36,7 +37,7 @@ export function AgoraLive({
   const [prev, setPrev] = useState(initial);
   if (initialOk && initial !== prev) {
     setPrev(initial);
-    setData(initial);
+    setData((d) => (initial.queueOk ? initial : { ...initial, queue: d.queue }));
     setLoaded((n) => n + 1);
   }
   const [notice, setNotice] = useState<Notice>({ load: null, action: null });
@@ -63,7 +64,8 @@ export function AgoraLive({
       }
       if (!q.current(n)) return;
       note({ type: "load_ok" });
-      setData(r);
+      // Fila que falhou: fica a última lista boa (o aviso do bloco de vídeos diz que não atualizou).
+      setData((d) => (r.queueOk ? r : { ...r, queue: d.queue }));
       setLoaded((k) => k + 1);
       setNow(Date.now());
     },
@@ -163,7 +165,7 @@ export function AgoraLive({
     void load();
   };
 
-  const { queue, poll, tvs, communityOn, aparecaAllowed } = data;
+  const { queue, queueOk, poll, tvs, communityOn, aparecaAllowed } = data;
   const items = queue.items;
   const silent = tvs.filter((t) => !t.status.on);
   const pending = items.some((i) => i.status === "pending");
@@ -175,7 +177,9 @@ export function AgoraLive({
       {/* 1. Avisos que travam a noite */}
       {!communityOn && (
         <p className="app-band app-band-off" role="status">
-          A Comunidade está desligada: sem enquete, sem Mural e sem telão. <Link href="/painel/comunidade">Abrir Comunidade</Link>
+          A Comunidade está desligada: sem enquete, sem Mural e sem telão.{" "}
+          {/* O interruptor é só do dono. */}
+          {isOwner ? <Link href="/painel/comunidade">Abrir Comunidade</Link> : <b>Peça ao dono.</b>}
         </p>
       )}
       {aparecaAllowed && aparecaOff && (
@@ -209,6 +213,11 @@ export function AgoraLive({
       {setup}
 
       {/* 3. Vídeos para aprovar, com o aviso sonoro */}
+      {aparecaAllowed && !queueOk && (
+        <p className="app-band app-band-off" role="status">
+          {QUEUE_FAIL}
+        </p>
+      )}
       {aparecaAllowed && (
         <PendingVideos
           rid={rid}

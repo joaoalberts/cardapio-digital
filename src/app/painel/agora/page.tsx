@@ -50,7 +50,7 @@ async function Agora() {
   ]);
   // Sem a leitura (erro ou rede), a tela abre vazia e o ciclo de 10 s tenta de novo.
   const initial: AgoraResult = agora ?? {
-    queue: EMPTY_QUEUE, poll: null, tvs: [], communityOn: r.community_enabled === true && !communityOff(), aparecaAllowed: allowed,
+    queue: EMPTY_QUEUE, queueOk: true, poll: null, tvs: [], communityOn: r.community_enabled === true && !communityOff(), aparecaAllowed: allowed,
   };
 
   const steps = setupSteps({
@@ -70,6 +70,7 @@ async function Agora() {
       <p className="ag-lead">Aqui fica o que pede um toque agora: vídeos para aprovar, a enquete no ar e as TVs.</p>
       <AgoraLive
         rid={r.id}
+        isOwner={isOwner}
         initial={initial}
         initialOk={agora !== null}
         aparecaOff={aparecaOff()}
