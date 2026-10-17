@@ -18,12 +18,15 @@ export const HEARTBEAT_MS = 60_000; // last_seen_at no máx. 1x por minuto por T
 export const HOUSE_FLUSH_MS = 10 * 60_000;
 const PLAY_MEMORY_MS = 60 * 60_000; // um "play" repetido dentro de 1 h conta uma vez
 // Teto de tempo por TV: o que ela já disse que tocou (clientes + institucionais) numa janela de
-// 10 min não passa do tempo de relógio desde o primeiro "tocou" aceito na janela + 30 s de folga.
+// 10 min, contando o clipe novo, não passa do tempo de relógio desde o primeiro "tocou" aceito na
+// janela + 30 s de folga.
 // Uma TV (ou um segredo vazado) não infla plays nem o uso do mês mais rápido do que o tempo passa.
 export const AIR_WINDOW_MS = 10 * 60_000;
 export const AIR_SLACK_S = 30;
 const CLIP_S = 6; // duração do vídeo do cliente quando o Mux ainda não informou (CLIP_MS)
 const BODY_DURATION_MAX_S = 3_600;
+// Institucional sem duração no banco (o Mux ainda não informou): a do corpo vale até 60 s.
+const HOUSE_BODY_MAX_S = 60;
 const DEFAULT_TZ = "America/Sao_Paulo";
 const HEX64 = /^[0-9a-f]{64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -166,7 +169,7 @@ function reserveAir(tvId: string, s: number, t: number): (() => void) | null {
   const list = (onAir.get(tvId) ?? []).filter((e) => e.at > t - AIR_WINDOW_MS && e.at <= t);
   const start = list.length ? list[0].at : t;
   const used = list.reduce((n, e) => n + e.s, 0);
-  if (used > (t - start) / 1000 + AIR_SLACK_S) {
+  if (used + s > (t - start) / 1000 + AIR_SLACK_S) {
     onAir.set(tvId, list);
     return null;
   }
@@ -239,9 +242,9 @@ async function housePlay(d: AparecaTvDeps, tv: TvIdentity, b: PlayBody, t: numbe
     (x) => x.id === b.video && x.restaurant_id === rid && x.active === true && x.status === "ready",
   );
   if (!h) return false;
-  // A duração do corpo, limitada à do banco quando o Mux já informou.
+  // A duração do corpo, limitada à do banco quando o Mux já informou; sem ela, a no máximo 60 s.
   const db = (h.duration_ms ?? 0) / 1000;
-  const s = db > 0 ? Math.min(b.duration_s ?? db, db) : (b.duration_s ?? 0);
+  const s = db > 0 ? Math.min(b.duration_s ?? db, db) : Math.min(b.duration_s ?? 0, HOUSE_BODY_MAX_S);
   if (!(s > 0)) return false;
   if (!reserveAir(tv.tvId, s, t)) return false;
 

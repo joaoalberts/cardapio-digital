@@ -374,16 +374,17 @@ describe("correção 1", () => {
     expect(s.tables.apareca_videos[0].plays).toBe(1);
   });
 
-  it("teto de tempo: 100 tocou em 1 s só aceitam até o relógio + 30 s", async () => {
+  it("teto de tempo: 100 tocou em 1 s só aceitam até o relógio + 30 s (o clipe novo entra na conta)", async () => {
     const s = await setup({ videos: [vid({ plays_target: 3 }) as unknown as Raw] });
     let ok = 0;
     for (let i = 0; i < 100; i++) {
       if ((await reportPlay(s.deps, tv1, { video: V1, play: P(i) })).ok) ok += 1;
       s.advance(10);
     }
-    // Clipes de 6 s: já no ar 0, 6, …, 30 s ≤ 0 s de relógio + 30 s de folga → 6 aceitos.
-    expect(ok).toBe(6);
-    expect(s.tables.apareca_videos[0].plays).toBe(6);
+    // Clipes de 6 s, relógio de ~1 s: no máximo 1 + 30 = 31 s no ar → 5 clipes (30 s), nunca 6 (36 s).
+    expect(ok * 6).toBeLessThanOrEqual(1 + 30);
+    expect(ok).toBe(5);
+    expect(s.tables.apareca_videos[0].plays).toBe(5);
     // Institucional também conta no mesmo teto da TV.
     expect(await reportPlay(s.deps, tv1, { video: H1, play: P(500), kind: "house" })).toEqual({ ok: false });
     // Outra TV tem o seu próprio teto.
@@ -393,11 +394,11 @@ describe("correção 1", () => {
     expect(await reportPlay(s.deps, tv1, { video: V1, play: P(502) })).toEqual({ ok: true });
   });
 
-  it("uso normal (um clipe depois do outro, por mais de 10 min) nunca bate no teto", async () => {
+  it("TV legítima alternando 200 exibições de 30 s e 6 s (mais de 10 min) nunca bate no teto", async () => {
     const s = await setup({ videos: [vid({ plays_target: 999 }) as unknown as Raw] });
     await identifyTv(s.deps, "forno", SECRET_A);
     for (let i = 0; i < 200; i++) {
-      const house = i % 4 === 0;
+      const house = i % 2 === 0;
       const r = await reportPlay(s.deps, tv1, house ? { video: H1, play: P(i), kind: "house" } : { video: V1, play: P(i) });
       expect(r).toEqual({ ok: true });
       s.advance(house ? 30_000 : 6_000);
@@ -407,8 +408,9 @@ describe("correção 1", () => {
   it("institucional: duration_s do corpo limitada à do banco; sem a do banco, vale a do corpo", async () => {
     const s = await setup({ houses: [house({ duration_ms: 30_000 })] });
     await identifyTv(s.deps, "forno", SECRET_A);
-    await reportPlay(s.deps, tv1, { video: H1, play: P(1), kind: "house", duration_s: 3_000 });
-    await reportPlay(s.deps, tv1, { video: H1, play: P(2), kind: "house", duration_s: 10 });
+    expect(await reportPlay(s.deps, tv1, { video: H1, play: P(1), kind: "house", duration_s: 3_000 })).toEqual({ ok: true });
+    s.advance(30_000);
+    expect(await reportPlay(s.deps, tv1, { video: H1, play: P(2), kind: "house", duration_s: 10 })).toEqual({ ok: true });
     s.advance(10 * 60_000);
     await flushHouseIfDue(s.deps, RID);
     expect(s.calls.inserts.map((i) => i.rows[0].counts)).toEqual([{ house_played_s: 40 }]);
@@ -418,6 +420,23 @@ describe("correção 1", () => {
     expect(await reportPlay(s2.deps, tv2, { video: H1, play: P(4), kind: "house", duration_s: 12 })).toEqual({ ok: true });
     for (const duration_s of [0, -1, "12", Infinity, 99_999]) {
       expect(await reportPlay(s2.deps, tv2, { video: H1, play: P(5), kind: "house", duration_s })).toEqual({ ok: false });
+    }
+  });
+});
+
+describe("correção 2", () => {
+  it("institucional sem duração no banco: duration_s do corpo vale no máximo 60 s", async () => {
+    for (const duration_ms of [null, 0]) {
+      resetTvMemory();
+      const s = await setup({ houses: [house({ duration_ms })] });
+      await identifyTv(s.deps, "forno", SECRET_A);
+      expect(await reportPlay(s.deps, tv1, { video: H1, play: P(1), kind: "house", duration_s: 10 })).toEqual({ ok: true });
+      s.advance(60_000);
+      // Cabem 10 + 60 ≤ 60 + 30: o corpo de 3.600 s conta como 60 s (com 3.600 seria recusado).
+      expect(await reportPlay(s.deps, tv1, { video: H1, play: P(2), kind: "house", duration_s: 3_600 })).toEqual({ ok: true });
+      s.advance(10 * 60_000);
+      await flushHouseIfDue(s.deps, RID);
+      expect(s.calls.inserts.map((i) => i.rows[0].counts)).toEqual([{ house_played_s: 70 }]);
     }
   });
 });
