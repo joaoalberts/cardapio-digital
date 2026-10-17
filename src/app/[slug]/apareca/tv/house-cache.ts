@@ -54,6 +54,16 @@ async function syncOnce(clips: HouseClip[], mp4: (id: string) => string): Promis
   }
 }
 
+/** Apaga os institucionais guardados (Apareça desligado ou sem programa há 10 min). Nunca lança. */
+export async function clearHouseCache(): Promise<void> {
+  const api = cacheApi();
+  queued = null;
+  if (!api) return;
+  try {
+    await api.delete(HOUSE_CACHE);
+  } catch {}
+}
+
 /**
  * Endereço para tocar um institucional: objectURL do MP4 guardado, ou a URL do Mux quando ainda
  * não está no cache (ou não há Cache API). Quem toca sabe a origem pelo prefixo "blob:" e revoga o

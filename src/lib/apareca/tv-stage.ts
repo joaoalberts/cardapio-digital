@@ -2,13 +2,23 @@
 // da programação, o que fazer em erro, o que tocar sem rede e o corpo do "tocou".
 // Sem DOM e sem rede: o componente (src/app/[slug]/apareca/tv/stage.tsx) só aplica.
 import { nextSlot, type ClientClip, type Cursor, type HouseClip, type Program } from "./schedule";
+import { nextDelay } from "./tv-layout";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MUX_ID = /^[A-Za-z0-9]{1,128}$/;
-const STREAM = "https://stream.mux.com";
+export const MUX_STREAM = "https://stream.mux.com";
+// Base dos vídeos: a que a rota manda (MUX_STREAM_BASE no servidor, para o Mux falso dos testes) ou a do Mux.
+const BASE = /^https?:\/\/[A-Za-z0-9.-]+(:\d{1,5})?(\/[A-Za-z0-9._~-]+)*$/;
 
-export const muxMp4 = (playback: string) => `${STREAM}/${playback}/highest.mp4`;
-export const muxHls = (playback: string) => `${STREAM}/${playback}.m3u8`;
+export const muxMp4 = (playback: string, base: string = MUX_STREAM) => `${base}/${playback}/highest.mp4`;
+export const muxHls = (playback: string, base: string = MUX_STREAM) => `${base}/${playback}.m3u8`;
+
+/** Base dos vídeos vinda da rota: só http(s) com host e caminho simples, sem barra no fim; senão a do Mux. */
+export function streamBase(x: unknown): string {
+  if (typeof x !== "string") return MUX_STREAM;
+  const b = x.replace(/\/+$/, "");
+  return BASE.test(b) ? b : MUX_STREAM;
+}
 
 /**
  * O palco só toca na tela sem enquete ("feat"). Com enquete aberta ("poll") a enquete toma a tela;
@@ -18,7 +28,7 @@ export function stageRuns(screen: "feat" | "poll" | "win" | "off"): boolean {
   return screen === "feat";
 }
 
-export type ProgramReply = { enabled: boolean; program: Program | null; logo: string | null };
+export type ProgramReply = { enabled: boolean; program: Program | null; logo: string | null; stream: string };
 
 const obj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
 const num = (x: unknown, d: number) => (typeof x === "number" && Number.isFinite(x) ? x : d);
@@ -44,7 +54,10 @@ function clientClip(x: unknown): ClientClip | null {
 export function parseProgramReply(j: unknown): ProgramReply | null {
   if (!obj(j) || typeof j.enabled !== "boolean") return null;
   const logo = typeof j.logo === "string" && /^https?:\/\//.test(j.logo) ? j.logo : null;
-  if (!j.enabled || j.program === null) return { enabled: j.enabled && j.program !== null, program: null, logo: j.enabled ? logo : null };
+  const stream = streamBase(j.stream);
+  if (!j.enabled || j.program === null) {
+    return { enabled: j.enabled && j.program !== null, program: null, logo: j.enabled ? logo : null, stream };
+  }
   const p = j.program;
   if (!obj(p) || !Array.isArray(p.house) || !Array.isArray(p.clients) || !obj(p.rule)) return null;
   const rule = {
@@ -54,7 +67,7 @@ export function parseProgramReply(j: unknown): ProgramReply | null {
   };
   const house = p.house.map(houseClip).filter((c): c is HouseClip => !!c);
   const clients = p.clients.map(clientClip).filter((c): c is ClientClip => !!c);
-  return { enabled: true, program: { house, clients, rule, plays: num(p.plays, 1) }, logo };
+  return { enabled: true, program: { house, clients, rule, plays: num(p.plays, 1) }, logo, stream };
 }
 
 /**
@@ -66,6 +79,20 @@ export function programAfter(prev: Program | null, r: { reply: ProgramReply } | 
   if ("reply" in r) return r.reply.enabled ? r.reply.program : null;
   if (r.status === 401 || r.status === 404) return null;
   return prev;
+}
+
+export const OFF_POLL_MS = 60_000; // Apareça desligado: a TV confere de novo a cada 1 min
+export const HOUSE_CACHE_DROP_MS = 10 * 60_000; // sem programa por 10 min: apaga os institucionais guardados
+
+/** Espera até a próxima consulta: com o Apareça desligado, 1 min; senão 5 s (10, 20, 30 s depois de erros). */
+export function pollDelay(r: { reply: ProgramReply } | { status: number }, failures: number): number {
+  if ("reply" in r && !r.reply.enabled) return Math.max(OFF_POLL_MS, nextDelay(failures));
+  return nextDelay(failures);
+}
+
+/** Hora de apagar o cache dos institucionais: sem programa (null ou desligado) há 10 min ou mais. */
+export function houseCacheDropDue(noProgramSince: number | null, now: number): boolean {
+  return noProgramSince !== null && now - noProgramSince >= HOUSE_CACHE_DROP_MS;
 }
 
 export type Pick = NonNullable<ReturnType<typeof nextSlot>>;

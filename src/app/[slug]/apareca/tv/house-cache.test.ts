@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HouseClip } from "@/lib/apareca/schedule";
-import { cacheHouse, HOUSE_CACHE, houseSrc } from "./house-cache";
+import { cacheHouse, clearHouseCache, HOUSE_CACHE, houseSrc } from "./house-cache";
 
 // Cache API falsa em memória (o vitest roda em node, sem caches).
 function fakeCaches() {
@@ -15,7 +15,7 @@ function fakeCaches() {
       put: async (url: string, r: Response) => void m.set(url, r),
     };
   };
-  return { stores, api: { open } };
+  return { stores, api: { open, delete: async (name: string) => stores.delete(name) } };
 }
 
 const mp4 = (id: string) => `https://stream.mux.com/${id}/highest.mp4`;
@@ -54,6 +54,20 @@ describe("house-cache", () => {
     await cacheHouse([clip("a")], mp4);
     expect(await houseSrc("a", mp4)).toMatch(/^blob:/);
     expect(await houseSrc("z", mp4)).toBe(mp4("z"));
+  });
+
+  it("clearHouseCache apaga tudo: o próximo houseSrc volta a ser a URL do Mux", async () => {
+    await cacheHouse([clip("a")], mp4);
+    await clearHouseCache();
+    expect(fc.stores.has(HOUSE_CACHE)).toBe(false);
+    expect(await houseSrc("a", mp4)).toBe(mp4("a"));
+  });
+
+  it("a base dos vídeos faz parte da chave: outra base baixa de novo e a antiga sai", async () => {
+    const other = (id: string) => `http://localhost:4010/${id}/highest.mp4`;
+    await cacheHouse([clip("a")], mp4);
+    await cacheHouse([clip("a")], other);
+    expect([...fc.stores.get(HOUSE_CACHE)!.keys()]).toEqual([other("a")]);
   });
 
   it("sem Cache API (TV por http://<IP>): a URL do Mux, sem erro", async () => {

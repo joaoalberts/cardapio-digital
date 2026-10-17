@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { Program } from "@/lib/apareca/schedule";
-import { LOGO_U, NAME_U, nextDelay, QR_U, stageLayout } from "@/lib/apareca/tv-layout";
-import { muxMp4, parseProgramReply, programAfter, type ProgramReply } from "@/lib/apareca/tv-stage";
-import { cacheHouse, houseSrc } from "./house-cache";
+import { LOGO_U, NAME_U, QR_U, stageLayout } from "@/lib/apareca/tv-layout";
+import {
+  houseCacheDropDue, MUX_STREAM, muxMp4, parseProgramReply, pollDelay, programAfter, type ProgramReply,
+} from "@/lib/apareca/tv-stage";
+import { cacheHouse, clearHouseCache, houseSrc } from "./house-cache";
 import { EMPTY_VIEW, StageEngine, StageSlot, type StageView } from "./player";
 
 // Palco do Apareça no telão (T14): os vídeos dos clientes aprovados e os institucionais da casa,
@@ -30,14 +32,15 @@ const readSecret = (slug: string) => {
   }
 };
 
-type ProgramState = { program: Program | null; logo: string | null; failures: number };
+type ProgramState = { program: Program | null; logo: string | null; failures: number; stream: string };
 
 function useProgram(slug: string): ProgramState {
-  const [st, setSt] = useState<ProgramState>({ program: null, logo: null, failures: 0 });
+  const [st, setSt] = useState<ProgramState>({ program: null, logo: null, failures: 0, stream: MUX_STREAM });
   useEffect(() => {
     let alive = true;
     let busy = false;
     let fails = 0;
+    let noProgramSince: number | null = Date.now();
     let timer: ReturnType<typeof setTimeout> | undefined;
     async function tick() {
       clearTimeout(timer);
@@ -65,12 +68,21 @@ function useProgram(slug: string): ProgramState {
       if (!alive) return;
       fails = "reply" in res ? 0 : fails + 1;
       const f = fails;
+      const r = res;
       setSt((s) => ({
-        program: programAfter(s.program, res),
-        logo: "reply" in res ? res.reply.logo : s.logo,
+        program: programAfter(s.program, r),
+        logo: "reply" in r ? r.reply.logo : s.logo,
         failures: f,
+        stream: "reply" in r ? r.reply.stream : s.stream,
       }));
-      timer = setTimeout(() => void tick(), nextDelay(fails));
+      // Sem programa (desligado, 401, 404) há 10 min: os institucionais guardados saem do aparelho.
+      const has = "reply" in r ? r.reply.enabled : r.status !== 401 && r.status !== 404 && noProgramSince === null;
+      if (has) noProgramSince = null;
+      else {
+        noProgramSince ??= Date.now();
+        if (houseCacheDropDue(noProgramSince, Date.now())) void clearHouseCache();
+      }
+      timer = setTimeout(() => void tick(), pollDelay(r, fails));
     }
     const onVisible = () => {
       if (document.visibilityState === "visible") void tick();
@@ -116,9 +128,13 @@ function useViewport() {
   return size;
 }
 
-/** Tela cheia no primeiro toque, clique ou tecla do controle (o navegador exige um gesto). */
-export function useFullscreenOnFirstTouch() {
+/**
+ * Tela cheia no primeiro toque, clique ou tecla do controle (o navegador exige um gesto). Só com o
+ * Apareça no ar (active): sem ele, o telão da Comunidade fica como era (o toque só liga o som).
+ */
+export function useFullscreenOnFirstTouch(active = true) {
   useEffect(() => {
+    if (!active) return;
     const evs = ["pointerup", "touchend", "keydown"] as const;
     const go = () => {
       const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
@@ -133,7 +149,7 @@ export function useFullscreenOnFirstTouch() {
     };
     evs.forEach((e) => window.addEventListener(e, go, { passive: true }));
     return () => evs.forEach((e) => window.removeEventListener(e, go));
-  }, []);
+  }, [active]);
 }
 
 type StageProps = {
@@ -146,7 +162,8 @@ type StageProps = {
 };
 
 export function AparecaStage({ slug, paused, plain, houseName, houseLogo, qrSvg }: StageProps) {
-  const { program, logo, failures } = useProgram(slug);
+  const { program, logo, failures, stream } = useProgram(slug);
+  useFullscreenOnFirstTouch(program !== null);
   const online = useOnline();
   const offline = !online || failures >= OFFLINE_AFTER;
   const [view, setView] = useState<StageView>(EMPTY_VIEW);
@@ -154,7 +171,7 @@ export function AparecaStage({ slug, paused, plain, houseName, houseLogo, qrSvg 
     () =>
       new StageEngine({
         render: setView,
-        houseSrc: (playback) => houseSrc(playback, muxMp4),
+        houseSrc: (playback, base) => houseSrc(playback, (id) => muxMp4(id, base)),
         report: (body) => {
           // Sem rede: descarta (não junta "tocou" para mandar em rajada depois).
           const secret = readSecret(slug);
@@ -175,14 +192,16 @@ export function AparecaStage({ slug, paused, plain, houseName, houseLogo, qrSvg 
     return () => engine.stop();
   }, [engine]);
   useEffect(() => engine.setOffline(offline), [engine, offline]);
+  useEffect(() => engine.setStream(stream), [engine, stream]);
   useEffect(() => engine.setProgram(program), [engine, program]);
   useEffect(() => engine.setPaused(paused), [engine, paused]);
 
   // Institucionais no cache local: a cada lista nova (não a cada consulta de 5 s).
-  const houseKey = program?.house.map((h) => h.playback).join(",") ?? null;
+  // A base entra na chave: as chaves do cache são as URLs completas.
+  const houseKey = program ? `${stream}|${program.house.map((h) => h.playback).join(",")}` : null;
   useEffect(() => {
     if (houseKey === null || !program) return;
-    void cacheHouse(program.house, muxMp4);
+    void cacheHouse(program.house, (id) => muxMp4(id, stream));
     // program entra pela houseKey: só a lista de institucionais importa aqui.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [houseKey]);

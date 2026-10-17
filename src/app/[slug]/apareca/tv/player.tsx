@@ -4,7 +4,7 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import { tvBgSize } from "@/lib/comunidade/client-logic";
 import type { ClientClip, Cursor, HouseClip, Program } from "@/lib/apareca/schedule";
-import { clipInProgram, muxHls, muxMp4, pickPlayable, playBody, uuid4, type Pick } from "@/lib/apareca/tv-stage";
+import { clipInProgram, MUX_STREAM, muxHls, muxMp4, pickPlayable, playBody, uuid4, type Pick } from "@/lib/apareca/tv-stage";
 import { nextDelay } from "@/lib/apareca/tv-layout";
 import { mute, useHls } from "@/lib/menu/use-hls";
 
@@ -45,7 +45,7 @@ type Slot = SlotView & {
 export type EngineDeps = {
   render: (v: StageView) => void;
   report: (body: Record<string, string | number>) => void;
-  houseSrc: (playback: string) => Promise<string>;
+  houseSrc: (playback: string, base: string) => Promise<string>;
 };
 
 const newPlay = () => uuid4(crypto.getRandomValues(new Uint8Array(16)));
@@ -60,6 +60,7 @@ export class StageEngine {
   private on = false;
   private paused = true;
   private offline = false;
+  private stream = MUX_STREAM;
   private running = false;
   private fails = 0;
   private seq = 0;
@@ -168,6 +169,11 @@ export class StageEngine {
     this.offline = offline;
   }
 
+  /** Base dos vídeos que a rota mandou (vale para as próximas cargas). */
+  setStream(base: string) {
+    this.stream = base;
+  }
+
   // ---------- Motor ----------
 
   private emit() {
@@ -207,7 +213,7 @@ export class StageEngine {
     const key = ++this.seq;
     this.loadSeq[i] = key;
     this.drop(i);
-    const src = pick.kind === "house" ? await this.d.houseSrc(pick.clip.playback) : muxMp4(pick.clip.playback);
+    const src = pick.kind === "house" ? await this.d.houseSrc(pick.clip.playback, this.stream) : muxMp4(pick.clip.playback, this.stream);
     // Outra carga (ou um reset) passou na frente durante o await do cache.
     if (!this.running || this.loadSeq[i] !== key) {
       if (isBlob(src)) URL.revokeObjectURL(src);
@@ -332,7 +338,7 @@ export class StageEngine {
     if (!s.triedAlt && !this.offline && (s.kind === "client" || isBlob(s.src))) {
       s.triedAlt = true;
       const old = s.src;
-      s.src = s.kind === "client" ? muxHls(s.clip.playback) : muxMp4(s.clip.playback);
+      s.src = s.kind === "client" ? muxHls(s.clip.playback, this.stream) : muxMp4(s.clip.playback, this.stream);
       s.fromCache = false;
       s.phase = "loading";
       if (isBlob(old)) setTimeout(() => URL.revokeObjectURL(old), 2_000);
@@ -503,10 +509,10 @@ export function StageSlot({ i, view, front, shown, active, plain, clipStyle, eng
             </span>
           )}
           <aside className="apt-qr">
-            <div className="tl-plate" role="img" aria-label="QR para aparecer na TV" dangerouslySetInnerHTML={{ __html: qrSvg }} />
+            <div className="tl-plate" role="img" aria-label="QR do cardápio" dangerouslySetInnerHTML={{ __html: qrSvg }} />
             <p className="apt-qcap">
               <b className="fd">Quer aparecer aqui?</b>
-              <span>Escaneie!</span>
+              <span>Leia o QR da sua mesa</span>
             </p>
           </aside>
         </>

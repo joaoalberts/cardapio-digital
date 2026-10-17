@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Program } from "./schedule";
 import {
-  clipInProgram, muxHls, muxMp4, parseProgramReply, pickPlayable, playBody, programAfter, stageRuns, uuid4,
+  clipInProgram, houseCacheDropDue, muxHls, muxMp4, parseProgramReply, pickPlayable, playBody, pollDelay, programAfter,
+  stageRuns, streamBase, uuid4, type ProgramReply,
 } from "./tv-stage";
 
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -33,7 +34,9 @@ describe("parseProgramReply", () => {
     expect(r?.logo).toBe("https://x/logo.png");
   });
   it("desligado: programa null", () => {
-    expect(parseProgramReply({ enabled: false, program: null, logo: null, qr: "" })).toEqual({ enabled: false, program: null, logo: null });
+    expect(parseProgramReply({ enabled: false, program: null, logo: null, qr: "" })).toEqual({
+      enabled: false, program: null, logo: null, stream: "https://stream.mux.com",
+    });
   });
   it("forma torta vira null (erro), nunca um programa pela metade", () => {
     expect(parseProgramReply(null)).toBeNull();
@@ -53,11 +56,51 @@ describe("parseProgramReply", () => {
   });
 });
 
+describe("base dos vídeos (stream)", () => {
+  it("a da rota vale quando é http(s) simples; a barra do fim sai", () => {
+    expect(parseProgramReply({ enabled: true, program: prog(), logo: null, stream: "http://localhost:4010/" })?.stream).toBe(
+      "http://localhost:4010",
+    );
+    expect(streamBase("https://mux-falso.test/stream")).toBe("https://mux-falso.test/stream");
+  });
+  it("ausente ou torta: a do Mux (nunca javascript:, aspas ou query)", () => {
+    for (const bad of [undefined, null, 42, "", "javascript:alert(1)", "//evil.com", "https://x.com/a?b=1", 'https://x.com/"><svg', "ftp://x.com"]) {
+      expect(streamBase(bad)).toBe("https://stream.mux.com");
+    }
+    expect(parseProgramReply({ enabled: true, program: prog(), logo: null })?.stream).toBe("https://stream.mux.com");
+  });
+  it("muxMp4 e muxHls usam a base recebida", () => {
+    expect(muxMp4("abc", "http://localhost:4010")).toBe("http://localhost:4010/abc/highest.mp4");
+    expect(muxHls("abc", "http://localhost:4010")).toBe("http://localhost:4010/abc.m3u8");
+  });
+});
+
+describe("pollDelay", () => {
+  const off: ProgramReply = { enabled: false, program: null, logo: null, stream: "https://stream.mux.com" };
+  const on: ProgramReply = { enabled: true, program: prog(), logo: null, stream: "https://stream.mux.com" };
+  it("Apareça desligado: confere de novo só depois de 1 min", () => {
+    expect(pollDelay({ reply: off }, 0)).toBeGreaterThanOrEqual(60_000);
+  });
+  it("ligado: 5 s; erro: o nextDelay (10, 20, 30 s)", () => {
+    expect(pollDelay({ reply: on }, 0)).toBe(5_000);
+    expect(pollDelay({ status: 503 }, 1)).toBe(10_000);
+    expect(pollDelay({ status: 0 }, 9)).toBe(30_000);
+  });
+});
+
+describe("houseCacheDropDue", () => {
+  it("apaga o cache só depois de 10 min sem programa", () => {
+    expect(houseCacheDropDue(null, 1e9)).toBe(false);
+    expect(houseCacheDropDue(1_000, 1_000 + 9 * 60_000)).toBe(false);
+    expect(houseCacheDropDue(1_000, 1_000 + 10 * 60_000)).toBe(true);
+  });
+});
+
 describe("programAfter", () => {
   const p = prog();
   it("resposta boa troca o programa; desligado zera", () => {
-    expect(programAfter(null, { reply: { enabled: true, program: p, logo: null } })).toBe(p);
-    expect(programAfter(p, { reply: { enabled: false, program: null, logo: null } })).toBeNull();
+    expect(programAfter(null, { reply: { enabled: true, program: p, logo: null, stream: "https://stream.mux.com" } })).toBe(p);
+    expect(programAfter(p, { reply: { enabled: false, program: null, logo: null, stream: "https://stream.mux.com" } })).toBeNull();
   });
   it("erro de rede ou 503 continua com o último programa", () => {
     expect(programAfter(p, { status: 0 })).toBe(p);

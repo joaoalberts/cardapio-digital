@@ -17,11 +17,14 @@ import { isValidSlug } from "@/lib/slug";
 // também o sinal de vida (gravado no máx. 1x por minuto, depois da resposta).
 // Feature fora do ar (featureState não "on") → { enabled: false, program: null }. A pausa do teto
 // do Mux só para os envios: o que já foi aprovado continua tocando.
-// Resposta: { enabled, program, logo, qr }; qr é o SVG de /<slug>?ref=telao, o mesmo do telão.
+// Resposta: { enabled, program, logo, qr, stream }; qr é o SVG de /<slug>?ref=telao, o mesmo do telão;
+// stream é a base dos vídeos (https://stream.mux.com, ou MUX_STREAM_BASE). Fora do ar, sem sinal de vida.
 const deps: AparecaTvDeps = { db, getHead: getAparecaHead, off: aparecaOff };
 const store: StoreDeps = { db, mux: { deleteAsset: deleteMuxAsset }, defer: (fn) => after(fn) };
 const NO_STORE = { "cache-control": "no-store" };
 const MAX_BODY = 2_000;
+// Base dos vídeos para a TV (o Mux falso da verificação ponta a ponta troca por MUX_STREAM_BASE).
+const STREAM = process.env.MUX_STREAM_BASE ?? "https://stream.mux.com";
 
 // QR gerado uma vez por instância para cada endereço (as mesmas opções do telão).
 const qrs = new Map<string, Promise<string>>();
@@ -53,24 +56,24 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       const code = tv.status === 401 ? "unauthorized" : "not_found";
       return NextResponse.json({ ok: false, code }, { status: tv.status, headers: NO_STORE });
     }
-    // Depois da resposta, melhor esforço: o sinal de vida e a soma de institucionais parada há 10 min.
-    after(async () => {
-      await heartbeat(deps, tv).catch(() => {});
-      await flushHouseIfDue(deps, tv.restaurantId);
-    });
-
     const head = await getAparecaHead(slug);
     // O mesmo host pelo qual a TV abriu, como no telão.
     const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
     const proto = request.headers.get("x-forwarded-proto") ?? (/^(localhost|127\.0\.0\.1)(:|$)/.test(host) ? "http" : "https");
     const qr = await qrSvg(qrLink(proto, host, slug, "telao"));
 
+    // Recurso fora do ar: nada muda para ninguém, nem o sinal de vida nem o tally (spec).
     if (!head || !tvFeatureOn(deps, head)) {
-      return NextResponse.json({ enabled: false, program: null, logo: null, qr }, { headers: NO_STORE });
+      return NextResponse.json({ enabled: false, program: null, logo: null, qr, stream: STREAM }, { headers: NO_STORE });
     }
+    // Depois da resposta, melhor esforço: o sinal de vida e a soma de institucionais parada há 10 min.
+    after(async () => {
+      await heartbeat(deps, tv).catch(() => {});
+      await flushHouseIfDue(deps, tv.restaurantId);
+    });
     const [snap, house] = await Promise.all([readSnapshot(store, head.id), getHouseVideos(head.id)]);
     const program = programFor({ cfg: head.config, tvZone: tv.zone, videos: snap.videos, house });
-    return NextResponse.json({ enabled: true, program, logo: mediaUrl(head.logo_path), qr }, { headers: NO_STORE });
+    return NextResponse.json({ enabled: true, program, logo: mediaUrl(head.logo_path), qr, stream: STREAM }, { headers: NO_STORE });
   } catch {
     return NextResponse.json({ ok: false, code: "error" }, { status: 503, headers: NO_STORE });
   }

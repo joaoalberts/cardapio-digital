@@ -15,7 +15,7 @@ import type { OptionId, PublicPoll, PublicState } from "@/lib/comunidade/types";
 import { thumbSrc } from "@/lib/menu/media";
 import type { MenuItem, PublicMenu } from "@/lib/menu/types";
 import { stageRuns } from "@/lib/apareca/tv-stage";
-import { AparecaStage, useFullscreenOnFirstTouch } from "../apareca/tv/stage";
+import { AparecaStage } from "../apareca/tv/stage";
 import { priceText, useClock } from "../comunidade/parts";
 import "../apareca/tv/stage.css";
 
@@ -34,7 +34,7 @@ import "../apareca/tv/stage.css";
 // - Modo simples (.tl-plain, sem animação): ?simples=1, o interruptor do painel, ou sozinho se
 //   a TV passar de 24 ms por quadro nos primeiros 2 s.
 // - Wake lock pedido de novo ao voltar a aba; recarrega sozinha a cada 3 h sem enquete
-//   aberta; som só depois de um toque; tela cheia no primeiro toque.
+//   aberta; som só depois de um toque (com o Apareça no ar, o primeiro toque também põe em tela cheia).
 // - Apareça na TV (AparecaStage): camada por cima do pôster sem enquete; sem programa, some.
 
 const PAIR_POLL_MS = 5_000;
@@ -415,7 +415,6 @@ function LiveTelao({ slug, lang, house, qrSvg, qrLink, menu }: { slug: string; l
   const { data, failures, gone } = useTvData(slug, pair.phase === "live");
   const slow = useSlowTv(pair.phase === "live");
   useWakeLock();
-  useFullscreenOnFirstTouch();
   const nudged = useNudged();
 
   const state = data?.state ?? null;
