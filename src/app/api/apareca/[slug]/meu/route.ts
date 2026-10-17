@@ -6,8 +6,9 @@ import { isValidSlug } from "@/lib/slug";
 
 // "Meu vídeo": { id, device } → estado, posição, tempo estimado e link de download. Só responde
 // a quem manda o device dono da linha; outro device ou id inexistente dão o mesmo 404.
-// O vencido responde "gone" e é apagado depois da resposta (after()).
-const STATUS = { invalid: 400, not_found: 404 } as const;
+// O vencido responde "gone" e é apagado depois da resposta (after()). Mais de 600 leituras por hora
+// do mesmo IP no restaurante (somando "baixar" e "baixou"): 429, sem ler a fila nem o banco.
+const STATUS = { invalid: 400, not_found: 404, too_many: 429 } as const;
 const NO_STORE = { "cache-control": "no-store" };
 const MAX_BODY = 2_000;
 

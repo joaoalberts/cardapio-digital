@@ -37,6 +37,8 @@ describe("parseConfig", () => {
     expect(parseConfig({ mode: "hibrido" }).mode).toBe("hibrido");
     expect(parseConfig({ hours: { from: "25:00" } }).hours).toBeNull();
     expect(parseConfig({ hours: { from: "19:00", to: "02:00" } }).hours).toEqual({ from: "19:00", to: "02:00" });
+    // Minor 1: início igual ao fim não é janela; vale o horário de funcionamento.
+    expect(parseConfig({ hours: { from: "19:00", to: "19:00" } }).hours).toBeNull();
   });
   it("descarta zonas ruins e mapas com uuid inválido", () => {
     const c = parseConfig({

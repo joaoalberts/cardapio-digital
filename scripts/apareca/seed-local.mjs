@@ -7,7 +7,7 @@
 //   node --env-file=.env.local scripts/apareca/seed-local.mjs --desfazer volta ao que era
 //
 // Opções: --slug=X (padrão depotmedieval-copia), --mesa=CODIGO (padrão E74B9X),
-//         --exibicoes=N (1 a 3; padrão 2, para o celular ver "Olhe para a TV agora!" entre as duas).
+//         --exibicoes=N (1 a 3; padrão 1, o mesmo do painel; o celular vê "Olhe para a TV agora!" nos 20 s da 1ª exibição).
 //
 // O estado de antes (interruptores, apareca_config e os Ids que já existiam nas tabelas do
 // Apareça e das TVs) fica em .local-blob/apareca-seed-estado.json (fora do git), junto com os
@@ -55,7 +55,7 @@ const sha256 = (s) => createHash("sha256").update(s, "utf8").digest("hex");
  * Linhas do seed (puro: sem rede nem disco).
  * @param {{ rid: string; tableId: string; now: Date; plays?: number; houseMs: number; secrets: { bar: string; salao: string }; config?: unknown }} i
  */
-export function buildSeed({ rid, tableId, now, plays = 2, houseMs, secrets, config }) {
+export function buildSeed({ rid, tableId, now, plays = 1, houseMs, secrets, config }) {
   if (!Number.isInteger(plays) || plays < 1 || plays > 3) throw new Error("exibições de 1 a 3");
   const t = now.getTime();
   const base = config && typeof config === "object" && !Array.isArray(config) ? config : {};
@@ -128,7 +128,7 @@ export function undoPlan({ before, current }) {
 
 function args(argv) {
   const val = (k, d) => argv.find((x) => x.startsWith(`--${k}=`))?.split("=")[1] ?? d;
-  const plays = Number(val("exibicoes", "2"));
+  const plays = Number(val("exibicoes", "1"));
   if (!Number.isInteger(plays) || plays < 1 || plays > 3) throw new Error("--exibicoes precisa ser 1, 2 ou 3.");
   return { undo: argv.includes("--desfazer"), slug: val("slug", "depotmedieval-copia"), mesa: val("mesa", "E74B9X"), plays };
 }

@@ -60,9 +60,11 @@ function parseMap(raw: unknown): Record<string, string> {
 // Nunca lança: qualquer coisa vira config válida, com as faixas corrigidas.
 export function parseConfig(raw: unknown): AparecaConfig {
   const r = isObj(raw) ? raw : {};
+  // Início igual ao fim não é janela (inWindow trataria como aberto 24 h): vale como "sem horário
+  // próprio", e o envio segue o horário de funcionamento. O painel recusa salvar assim.
   const hours =
     isObj(r.hours) && typeof r.hours.from === "string" && typeof r.hours.to === "string" &&
-    HHMM.test(r.hours.from) && HHMM.test(r.hours.to)
+    HHMM.test(r.hours.from) && HHMM.test(r.hours.to) && r.hours.from !== r.hours.to
       ? { from: r.hours.from, to: r.hours.to }
       : null;
   return {

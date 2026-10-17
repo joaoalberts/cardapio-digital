@@ -25,6 +25,9 @@ const h = vi.hoisted(() => {
     removeIds: vi.fn(async (t: string, ids: number[]) => {
       store[t] = (store[t] ?? []).filter((r) => !ids.includes(r.Id as number));
     }),
+    updateRows: vi.fn(async (t: string, rows: Row[]) => {
+      for (const p of rows) Object.assign((store[t] ?? []).find((x) => x.Id === p.Id) ?? {}, p);
+    }),
   };
   return { store, db };
 });
@@ -113,6 +116,8 @@ describe("runAparecaSweep", () => {
 
     expect(r).toEqual({ deleted: 2, failed: 1 });
     expect(h.store.apareca_videos.map((v) => v.Id)).toEqual([ruim.Id]);
+    // LGPD (A2): a que ficou perde o dado pessoal e guarda o asset para a próxima tentativa.
+    expect(h.store.apareca_videos[0]).toMatchObject({ device_id: "", name: null, table_id: null, zone_id: null, mux_asset_id: "ruim" });
   });
 
   it("tabela vazia ou só com vídeos no prazo: nada a apagar", async () => {

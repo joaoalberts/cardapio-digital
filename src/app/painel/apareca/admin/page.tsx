@@ -121,6 +121,12 @@ async function Admin() {
                     <dt>Minutos no Mux no mês</dt>
                     <dd>{min(r.mux_min_month)}</dd>
                   </div>
+                  <div>
+                    <dt>Exclusões pendentes</dt>
+                    <dd title="Vídeos vencidos que o Mux ainda não deixou apagar. Já estão sem nome, aparelho e mesa; a próxima leitura ou o cron tentam de novo.">
+                      {r.pending_deletes}
+                    </dd>
+                  </div>
                 </dl>
               </li>
             ))}

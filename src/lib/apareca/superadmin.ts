@@ -1,6 +1,6 @@
 import { parseConfig } from "./config";
 import { parseDbDate } from "./reports";
-import { isExpired } from "./retention";
+import { isExpired, isStuckUpload } from "./retention";
 
 // Super admin do Apareça (T17): o João, dono do sistema, libera o recurso e a IA por restaurante.
 // A lista vem de SUPERADMIN_EMAILS, lida só no servidor (página e actions de /painel/apareca/admin).
@@ -15,9 +15,10 @@ export function superAdminList(env: string | undefined): Set<string> {
   );
 }
 
-// since (SUPERADMIN_SINCE, ISO, opcional): o cadastro não confirma e-mail, então quem criasse a conta
-// de um e-mail da lista que ainda não tem conta viraria super admin. Com since definido, só vale a
-// conta criada ANTES dessa data. Data da conta ausente ou ilegível, ou since ilegível = não (fecha).
+// since (SUPERADMIN_SINCE, ISO, OBRIGATÓRIO): o cadastro não confirma e-mail, então quem criasse a
+// conta de um e-mail da lista que ainda não tem conta viraria super admin. Só vale a conta criada
+// ANTES dessa data. Falha fechada (decisão do controlador na revisão final, A5): since vazio ou
+// ilegível, ou data da conta ausente ou ilegível (conta antiga vinda do Supabase sem created_at) = não.
 export function isSuperAdmin(
   email: string | null | undefined,
   env: string | undefined,
@@ -26,7 +27,7 @@ export function isSuperAdmin(
   const e = typeof email === "string" ? email.trim().toLowerCase() : "";
   if (e === "" || !superAdminList(env).has(e)) return false;
   const since = opts.since?.trim();
-  if (!since) return true;
+  if (!since) return false;
   const limit = parseDbDate(since);
   const created = parseDbDate(opts.createdAt);
   return Number.isFinite(limit) && Number.isFinite(created) && created < limit;
@@ -59,6 +60,9 @@ export type AdminRow = {
   id: string; name: string; slug: string; allowed: boolean; ai_allowed: boolean; enabled: boolean;
   stored_now: number; // vídeos com asset no Mux agora (clientes não vencidos + institucionais)
   mux_min_month: number; // minutos codificados no mês (clientes, já apagados e vivos) + institucionais ativos
+  // Vídeos vencidos (ou envios presos) ainda no banco: o Mux não deixou apagar o asset. A linha já
+  // está sem dado pessoal (purge anonimiza) e a próxima leitura ou o cron tentam de novo.
+  pending_deletes: number;
 };
 
 const DEFAULT_TZ = "America/Sao_Paulo";
@@ -87,7 +91,7 @@ export function adminRows(i: { month: string; now: Date; restaurants: Raw[]; vid
     rows.set(id, {
       id, slug, name: str(r.name) ?? slug, tz: str(r.timezone) ?? DEFAULT_TZ,
       allowed: r.apareca_allowed === true, ai_allowed: r.apareca_ai_allowed === true, enabled: r.apareca_enabled === true,
-      stored_now: 0, mux_min_month: 0, encoded_s: 0, house_min: 0,
+      stored_now: 0, mux_min_month: 0, pending_deletes: 0, encoded_s: 0, house_min: 0,
     });
   }
   for (const t of i.tallies) {
@@ -100,6 +104,8 @@ export function adminRows(i: { month: string; now: Date; restaurants: Raw[]; vid
     if (!r) continue;
     const expired = isExpired({ expires_at: String(v.expires_at ?? "") }, i.now);
     if (str(v.mux_asset_id) && !expired && !GONE.has(String(v.status))) r.stored_now += 1;
+    const stuck = isStuckUpload({ status: String(v.status) as never, created_at: String(v.created_at ?? "") }, i.now);
+    if (expired || stuck) r.pending_deletes += 1;
     const dur = num(v.duration_ms) / 1000;
     if (dur && localMonth(r.tz, v.created_at) === i.month) r.encoded_s += dur;
   }
@@ -112,7 +118,7 @@ export function adminRows(i: { month: string; now: Date; restaurants: Raw[]; vid
   return [...rows.values()]
     .map((r): AdminRow => ({
       id: r.id, name: r.name, slug: r.slug, allowed: r.allowed, ai_allowed: r.ai_allowed, enabled: r.enabled,
-      stored_now: r.stored_now, mux_min_month: r.encoded_s / 60 + r.house_min,
+      stored_now: r.stored_now, mux_min_month: r.encoded_s / 60 + r.house_min, pending_deletes: r.pending_deletes,
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 }

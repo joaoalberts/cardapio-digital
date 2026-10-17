@@ -508,10 +508,17 @@ async function passos(browser, cfg, ctx) {
     const ids = [v1.id, v2.id];
     const asset1 = [...mux.state.assets.values()].find((a) => a.passthrough?.endsWith(`:${v1.id}`));
     const tallyBefore = (await db.list("apareca_tally", { restaurant_id: st.rid })).length;
-    for (const c of [tvBar.ctx, tvSalao.ctx]) await c.close(); // a 1ª leitura depois do salto é a do celular
+    // A8: nada consulta o servidor enquanto o relógio pula. Sem isto, a consulta do celular a cada 8 s
+    // podia cair no servidor novo antes do reload, receber "gone" e limpar o localStorage: o reload
+    // então abria o formulário em vez de "Este vídeo não está mais disponível". As TVs, o painel e o
+    // segundo celular fecham; o primeiro sai para about:blank (o localStorage fica no contexto) e
+    // volta depois do salto, de modo que a 1ª leitura depois do salto é a dele.
+    for (const c of [tvBar.ctx, tvSalao.ctx, two.ctx, pnl.ctx]) await c.close();
+    const phoneUrl = one.page.url();
+    await one.page.goto("about:blank");
     await ctx.server.stop();
     ctx.server = await startServer(cfg, (RETENTION_H + 1) * 3_600_000);
-    await one.page.reload({ waitUntil: "domcontentloaded" });
+    await one.page.goto(phoneUrl, { waitUntil: "domcontentloaded" });
     const goneText = await one.page.getByText("Este vídeo não está mais disponível").waitFor({ state: "visible", timeout: 30_000 }).then(() => true, () => false);
     await shot(one.page, "15-celular-vencido");
     const purged = await waitFor(async () => {

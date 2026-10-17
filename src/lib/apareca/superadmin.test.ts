@@ -21,12 +21,14 @@ vi.mock("@/lib/apareca/store", () => ({
 const actions = await import("@/app/painel/apareca/admin/actions");
 
 const RID = "00000000-0000-4000-8000-000000000001";
-const ADMIN = { id: "u1", email: "Admin@Exemplo.com" };
+const ADMIN = { id: "u1", email: "Admin@Exemplo.com", created_at: "2026-10-01 09:00:00+00:00" };
+const SINCE = "2026-10-20T00:00:00Z";
+const OLD = { createdAt: "2026-10-01T10:00:00Z", since: SINCE }; // conta criada antes do limite
 const OWNER = { id: "u2", email: "dono@exemplo.com" };
 
 beforeEach(() => {
   process.env.SUPERADMIN_EMAILS = " admin@exemplo.com , outro@exemplo.com";
-  delete process.env.SUPERADMIN_SINCE;
+  process.env.SUPERADMIN_SINCE = SINCE;
   h.user = ADMIN;
   h.row = { Id: 7, id: RID, slug: "Forno", apareca_allowed: true, apareca_enabled: true, apareca_ai_allowed: true, apareca_config: { mode: "automatico" } };
   h.first.mockImplementation(async (_t, w) => (h.row && w.uid === h.row.id ? h.row : null));
@@ -36,29 +38,29 @@ beforeEach(() => {
 
 describe("isSuperAdmin", () => {
   it("lista com vírgulas, espaços e maiúsculas", () => {
-    expect(isSuperAdmin("Joao@X.com", " joao@x.com , outro@y.com")).toBe(true);
-    expect(isSuperAdmin("outro@y.com", " joao@x.com , outro@y.com")).toBe(true);
+    expect(isSuperAdmin("Joao@X.com", " joao@x.com , outro@y.com", OLD)).toBe(true);
+    expect(isSuperAdmin("outro@y.com", " joao@x.com , outro@y.com", OLD)).toBe(true);
     expect(superAdminList(" A@b.com,, c@d.com ")).toEqual(new Set(["a@b.com", "c@d.com"]));
   });
   it("vazio ou ausente = ninguém", () => {
-    expect(isSuperAdmin("a@b.com", "")).toBe(false);
-    expect(isSuperAdmin("a@b.com", " , ")).toBe(false);
-    expect(isSuperAdmin("a@b.com", undefined)).toBe(false);
+    expect(isSuperAdmin("a@b.com", "", OLD)).toBe(false);
+    expect(isSuperAdmin("a@b.com", " , ", OLD)).toBe(false);
+    expect(isSuperAdmin("a@b.com", undefined, OLD)).toBe(false);
     expect(superAdminList(undefined).size).toBe(0);
   });
   it("sem e-mail = não", () => {
-    expect(isSuperAdmin(null, "joao@x.com")).toBe(false);
-    expect(isSuperAdmin(undefined, "joao@x.com")).toBe(false);
-    expect(isSuperAdmin("", "joao@x.com")).toBe(false);
-    expect(isSuperAdmin("   ", " , joao@x.com")).toBe(false);
+    expect(isSuperAdmin(null, "joao@x.com", OLD)).toBe(false);
+    expect(isSuperAdmin(undefined, "joao@x.com", OLD)).toBe(false);
+    expect(isSuperAdmin("", "joao@x.com", OLD)).toBe(false);
+    expect(isSuperAdmin("   ", " , joao@x.com", OLD)).toBe(false);
   });
   it("e-mail parecido não vale", () => {
-    expect(isSuperAdmin("joao@x.com.br", "joao@x.com")).toBe(false);
-    expect(isSuperAdmin("xjoao@x.com", "joao@x.com")).toBe(false);
+    expect(isSuperAdmin("joao@x.com.br", "joao@x.com", OLD)).toBe(false);
+    expect(isSuperAdmin("xjoao@x.com", "joao@x.com", OLD)).toBe(false);
   });
 });
 
-describe("SUPERADMIN_SINCE (cadastro não confirma e-mail)", () => {
+describe("SUPERADMIN_SINCE obrigatório (cadastro não confirma e-mail)", () => {
   const L = "joao@x.com";
   const since = "2026-10-20T00:00:00Z";
   it("e-mail na lista, mas conta criada depois de SUPERADMIN_SINCE → não é super admin", () => {
@@ -74,9 +76,15 @@ describe("SUPERADMIN_SINCE (cadastro não confirma e-mail)", () => {
     expect(isSuperAdmin("joao@x.com", L, { createdAt: "ontem", since })).toBe(false);
     expect(isSuperAdmin("joao@x.com", L, { createdAt: "2026-10-01T10:00:00Z", since: "amanhã" })).toBe(false);
   });
-  it("sem SUPERADMIN_SINCE (ou vazio), só a lista conta", () => {
-    expect(isSuperAdmin("joao@x.com", L, { createdAt: "2030-01-01T00:00:00Z" })).toBe(true);
-    expect(isSuperAdmin("joao@x.com", L, { createdAt: null, since: "  " })).toBe(true);
+  it("A5: sem SUPERADMIN_SINCE (ou vazio), ninguém é super admin (falha fechada)", () => {
+    expect(isSuperAdmin("joao@x.com", L, { createdAt: "2026-10-01T10:00:00Z" })).toBe(false);
+    expect(isSuperAdmin("joao@x.com", L, { createdAt: "2026-10-01T10:00:00Z", since: "  " })).toBe(false);
+    expect(isSuperAdmin("joao@x.com", L)).toBe(false);
+    expect(isSuperAdminUser({ email: "joao@x.com", created_at: "2026-10-01T00:00:00Z" }, { SUPERADMIN_EMAILS: L })).toBe(false);
+  });
+  it("conta antiga vinda do Supabase, sem created_at, não vira super admin", () => {
+    expect(isSuperAdminUser({ email: "joao@x.com" }, { SUPERADMIN_EMAILS: L, SUPERADMIN_SINCE: since })).toBe(false);
+    expect(isSuperAdminUser({ email: "joao@x.com", created_at: "" }, { SUPERADMIN_EMAILS: L, SUPERADMIN_SINCE: since })).toBe(false);
   });
   it("isSuperAdminUser lê as duas variáveis", () => {
     const env = { SUPERADMIN_EMAILS: L, SUPERADMIN_SINCE: since };
@@ -111,6 +119,13 @@ describe("actions do super admin", () => {
     expect((await actions.setAiAllowed(RID, true)).error).toBeTruthy();
     expect(h.updateRows).not.toHaveBeenCalled();
     expect(h.updateTag).not.toHaveBeenCalled();
+  });
+
+  it("A5: sem SUPERADMIN_SINCE na Vercel → erro e nada gravado, mesmo para o e-mail da lista", async () => {
+    delete process.env.SUPERADMIN_SINCE;
+    expect((await actions.setAllowed(RID, true)).error).toBeTruthy();
+    expect((await actions.setAiAllowed(RID, false)).error).toBeTruthy();
+    expect(h.updateRows).not.toHaveBeenCalled();
   });
 
   it("sem sessão ou sem lista → erro e nada gravado", async () => {
@@ -178,6 +193,28 @@ describe("adminRows", () => {
   const vid = (o: Record<string, unknown>) => ({
     restaurant_id: A, status: "approved", mux_asset_id: "as", duration_ms: 6_000,
     created_at: "2026-10-16T14:00:00Z", expires_at: "2026-10-16T20:00:00Z", ...o,
+  });
+
+  it("A2: exclusões pendentes por restaurante = vencidos e envios presos ainda no banco", () => {
+    const rows = adminRows({
+      month: "2026-10",
+      now,
+      restaurants: [
+        { id: A, name: "Adega", slug: "adega" },
+        { id: B, name: "Bistrô", slug: "bistro" },
+      ],
+      videos: [
+        vid({ expires_at: "2026-10-16T14:30:00Z", device_id: "" }), // vencido, o Mux não apagou
+        vid({ expires_at: "2026-10-16T14:59:59Z", status: "rejected" }),
+        vid({ status: "uploading", mux_asset_id: null, created_at: "2026-10-16T13:00:00Z" }), // envio preso há 2 h
+        vid({}), // no prazo
+        vid({ status: "uploading", mux_asset_id: null, created_at: "2026-10-16T14:30:00Z" }), // envio recente
+        vid({ restaurant_id: B }),
+      ],
+      tallies: [],
+      houses: [],
+    });
+    expect(rows.map((r) => [r.slug, r.pending_deletes])).toEqual([["adega", 3], ["bistro", 0]]);
   });
 
   it("vídeos guardados agora e minutos no Mux no mês, por restaurante", () => {

@@ -41,7 +41,7 @@ describe("buildSeed", () => {
     ]);
     expect(cfg.table_zones).toEqual({ [TABLE]: SEED_IDS.zoneBar });
     expect(cfg.tv_zones).toEqual({ [SEED_IDS.tvBar]: SEED_IDS.zoneBar, [SEED_IDS.tvSalao]: SEED_IDS.zoneSalao });
-    expect(cfg).toMatchObject({ mode: "manual", plays: 2, retention_h: 6, device_per_hour: 2, hours: null });
+    expect(cfg).toMatchObject({ mode: "manual", plays: 1, retention_h: 6, device_per_hour: 2, hours: null }); // padrão 1, como o painel (A1)
     expect(cfg.rule).toEqual({ kind: "intercalar", house_every: 1, clients_max: 3 });
   });
 
@@ -73,7 +73,7 @@ describe("buildSeed", () => {
     expect(new Set(ids).size).toBe(ids.length);
     const kept = buildSeed({ rid: RID, tableId: TABLE, now: NOW, houseMs: 1, secrets: SECRETS, config: { futuro: 1, mode: "automatico" } });
     expect(kept.restaurant.apareca_config).toMatchObject({ futuro: 1, mode: "manual" });
-    expect(buildSeed({ rid: RID, tableId: TABLE, now: NOW, houseMs: 1, secrets: SECRETS, plays: 1 }).restaurant.apareca_config.plays).toBe(1);
+    expect(buildSeed({ rid: RID, tableId: TABLE, now: NOW, houseMs: 1, secrets: SECRETS, plays: 2 }).restaurant.apareca_config.plays).toBe(2);
     expect(() => buildSeed({ rid: RID, tableId: TABLE, now: NOW, houseMs: 1, secrets: SECRETS, plays: 4 })).toThrow();
   });
 });

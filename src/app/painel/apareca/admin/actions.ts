@@ -6,8 +6,8 @@ import * as db from "@/lib/db/nocodb";
 import { aiAllowedPatch, allowedPatch, isSuperAdminUser } from "@/lib/apareca/superadmin";
 import { aparecaTags } from "@/lib/apareca/store";
 
-// Super admin do Apareça: só quem está em SUPERADMIN_EMAILS (e, com SUPERADMIN_SINCE, com conta
-// criada antes dessa data; variáveis do servidor) grava.
+// Super admin do Apareça: só quem está em SUPERADMIN_EMAILS E tem conta criada antes de
+// SUPERADMIN_SINCE (obrigatória; variáveis do servidor) grava.
 // Toda action confere de novo aqui, sem confiar na página: dono comum recebe erro e nada é gravado.
 // Depois de gravar, limpa a cabeça do restaurante no cache do Next (por slug e por id).
 

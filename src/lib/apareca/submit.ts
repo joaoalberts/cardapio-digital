@@ -32,7 +32,8 @@ export type MyStatus = {
 export type SubmitDb = StoreDb & Pick<typeof nocodb, "insertOne" | "updateRows">;
 // Limitadores em memória (por instância). device(max): um por valor de device_per_hour.
 // ipGlobal: opcional (padrão: o compartilhado do processo), soma o IP em todos os restaurantes.
-export type SubmitLimits = { ip: Limiter; device: (max: number) => Limiter; download: Limiter; ipGlobal?: Limiter };
+// reads: opcional (padrão: o compartilhado), "meu", "baixar" e "baixou" por IP e restaurante.
+export type SubmitLimits = { ip: Limiter; device: (max: number) => Limiter; download: Limiter; ipGlobal?: Limiter; reads?: Limiter };
 export type SubmitDeps = {
   db: SubmitDb;
   store: Pick<StoreDeps, "mux" | "now" | "defer">;
@@ -67,6 +68,9 @@ const IP_PER_HOUR = 60;
 // cheias (decisão do controlador na correção 2 da T7).
 const IP_PER_HOUR_GLOBAL = 120;
 const DOWNLOADS_PER_HOUR = 5; // minha escolha: o contador de downloads não infla com toques repetidos
+// "meu", "baixar" e "baixou" somados, por IP e restaurante (decisão do controlador na revisão final):
+// o celular consulta o "meu" a cada 8 s (450/h). Acima disso, 429 antes de ler a fila ou o banco.
+export const READS_PER_HOUR = 600;
 const CONSENT_SKEW_MS = 10 * 60_000;
 const MUX_CHECK_MS = 5_000; // Mux consultado no máximo 1 vez a cada 5 s por vídeo
 const MEMO_MAX = 5_000;
@@ -79,6 +83,14 @@ const later = (d: SubmitDeps, fn: () => Promise<void>) =>
   d.store.defer ? d.store.defer(fn) : void fn().catch(() => {});
 
 const globalIpLimiter = () => sharedLimiter("apareca.envio.ip-global", { max: IP_PER_HOUR_GLOBAL, windowMs: HOUR_MS });
+const readsLimiter = () => sharedLimiter("apareca.leitura.ip", { max: READS_PER_HOUR, windowMs: HOUR_MS });
+
+// Limite por IP das leituras do cliente. A cabeça vem do cache do Next (getHead); a conferência
+// roda antes de qualquer leitura da fila ou de apareca_videos.
+function readAllowed(d: SubmitDeps, head: AparecaHead): boolean {
+  const lim = d.limits?.reads ?? readsLimiter();
+  return lim.hit(`${d.ip ?? "anon"}|${head.id}`);
+}
 
 export function defaultLimits(): SubmitLimits {
   return {
@@ -86,6 +98,7 @@ export function defaultLimits(): SubmitLimits {
     ipGlobal: globalIpLimiter(),
     device: (max) => sharedLimiter(`apareca.envio.device.${max}`, { max, windowMs: HOUR_MS }),
     download: sharedLimiter("apareca.baixou", { max: DOWNLOADS_PER_HOUR, windowMs: HOUR_MS }),
+    reads: readsLimiter(),
   };
 }
 
@@ -365,13 +378,27 @@ async function waitFor(d: SubmitDeps, head: AparecaHead, v: VideoRow, videos: Vi
   return { position, eta_ms };
 }
 
+// "Olhe para a TV agora!": de 0 a ON_TV_MS depois da primeira exibição (o clipe tem 6 s; a folga
+// cobre a consulta do celular a cada 8 s). Data ilegível ou no futuro: fora da janela.
+export const ON_TV_MS = 20_000;
+export function onTvNow(firstShownAt: string | null, now: Date): boolean {
+  if (!firstShownAt) return false;
+  const t = Date.parse(firstShownAt.trim().replace(" ", "T"));
+  if (!Number.isFinite(t)) return false;
+  const age = now.getTime() - t;
+  return age >= 0 && age <= ON_TV_MS;
+}
+
 const downloadPath = (slug: string, id: string) => `/api/apareca/${slug}/baixar?id=${id}`;
 
-export async function myStatus(d: SubmitDeps, slug: string, body: unknown): Promise<MyStatus | { error: "invalid" | "not_found" }> {
+export async function myStatus(
+  d: SubmitDeps, slug: string, body: unknown,
+): Promise<MyStatus | { error: "invalid" | "not_found" | "too_many" }> {
   const q = parseOwner(body);
   if (!q) return { error: "invalid" };
   const head = await d.getHead(slug);
   if (!head) return { error: "not_found" };
+  if (!readAllowed(d, head)) return { error: "too_many" };
   const now = clock(d);
   const found = await findOwned(d, head, q.id, q.device, now);
   if (!found) return { error: "not_found" };
@@ -389,8 +416,12 @@ export async function myStatus(d: SubmitDeps, slug: string, body: unknown): Prom
       return { state: "review", ...(await waitFor(d, head, v, found.videos, now)), first_shown_at: null, download: null };
     case "approved": {
       const download = v.mux_playback_id && (await mp4Ready(d, v, now)) ? downloadPath(head.slug, v.id) : null;
+      // A TV avisa o "tocou" no INÍCIO do clipe e já sobe plays: com plays_target 1, plays >= alvo
+      // vale desde o primeiro quadro. Por isso "on_tv" é uma janela a partir de first_shown_at.
+      if (onTvNow(v.first_shown_at, now)) {
+        return { state: "on_tv", position: null, eta_ms: null, first_shown_at: v.first_shown_at, download };
+      }
       if (v.plays >= v.plays_target) return { state: "shown", position: null, eta_ms: null, first_shown_at: v.first_shown_at, download };
-      if (v.first_shown_at) return { state: "on_tv", position: null, eta_ms: null, first_shown_at: v.first_shown_at, download };
       return { state: "queue", ...(await waitFor(d, head, v, found.videos, now)), first_shown_at: null, download };
     }
     default:
@@ -401,23 +432,27 @@ export async function myStatus(d: SubmitDeps, slug: string, body: unknown): Prom
 // ---------- Download ----------
 
 // Endereço do MP4 para o 302 de "baixar": só do dono, aprovado, vivo e com o MP4 pronto.
-export async function downloadTarget(d: SubmitDeps, slug: string, id: string, device: string): Promise<string | null> {
+// "too_many": passou do limite de leituras por IP (a rota responde 429).
+export async function downloadTarget(d: SubmitDeps, slug: string, id: string, device: string): Promise<string | null | "too_many"> {
   const q = parseOwner({ id, device });
   if (!q) return null;
   const head = await d.getHead(slug);
   if (!head) return null;
+  if (!readAllowed(d, head)) return "too_many";
   const now = clock(d);
   const found = await findOwned(d, head, q.id, q.device, now);
   if (!found?.alive || found.row.status !== "approved" || !found.row.mux_playback_id) return null;
   return (await mp4Ready(d, found.row, now)) ? mp4Url(found.row.mux_playback_id) : null;
 }
 
-// Conta um download (o celular avisa depois de baixar). Silencioso em qualquer recusa.
-export async function countDownload(d: SubmitDeps, slug: string, body: unknown): Promise<void> {
+// Conta um download (o celular avisa depois de baixar). Silencioso em qualquer recusa, menos o
+// limite de leituras por IP ("too_many", a rota responde 429).
+export async function countDownload(d: SubmitDeps, slug: string, body: unknown): Promise<void | "too_many"> {
   const q = parseOwner(body);
   if (!q) return;
   const head = await d.getHead(slug);
   if (!head) return;
+  if (!readAllowed(d, head)) return "too_many";
   const found = await findOwned(d, head, q.id, q.device, clock(d));
   if (!found?.alive || found.row.status !== "approved") return;
   if (!(d.limits ?? defaultLimits()).download.hit(q.id)) return;

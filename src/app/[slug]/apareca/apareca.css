@@ -114,7 +114,7 @@ html:has(.apa) body {
   --line: rgba(247, 239, 230, 0.12);
   --fg: #f7efe6;
   --muted: rgba(247, 239, 230, 0.66);
-  --faint: rgba(247, 239, 230, 0.45);
+  --faint: rgba(247, 239, 230, 0.58); /* ≥ 5,0:1 sobre --bg, --surface e --surface-2 (WCAG AA 4,5:1) */
   --accent: #e8b04b;
   --ink: #1b1714;
   --danger: #ff8a7a;

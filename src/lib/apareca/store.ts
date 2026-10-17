@@ -24,7 +24,7 @@ const USAGE_MS = 60_000;
 const RECENT_MS = 30_000;
 const DEFAULT_TZ = "America/Sao_Paulo";
 
-export type StoreDb = Pick<typeof nocodb, "list" | "first" | "insert" | "removeIds">;
+export type StoreDb = Pick<typeof nocodb, "list" | "first" | "insert" | "removeIds" | "updateRows">;
 // Sem vencidos; ai_review parado além do prazo da IA aparece como pending (resolveStuck), só na
 // leitura: a linha no banco continua ai_review e o veredito atrasado só grava sobre ai_review.
 export type Snapshot = { at: number; videos: VideoRow[] };
@@ -167,7 +167,7 @@ export async function purge(d: StoreDeps, rows: VideoRow[]): Promise<{ deleted: 
   if (!candidates.length) return { deleted: 0, failed: 0 };
 
   const ok: VideoRow[] = [];
-  let failed = 0;
+  const stuck: VideoRow[] = [];
   await Promise.all(
     candidates.map(async (v) => {
       try {
@@ -175,10 +175,12 @@ export async function purge(d: StoreDeps, rows: VideoRow[]): Promise<{ deleted: 
         else if (v.mux_upload_id) await (d.mux.releaseUpload ?? releaseMuxUpload)(v.mux_upload_id);
         ok.push(v);
       } catch {
-        failed += 1;
+        stuck.push(v);
       }
     }),
   );
+  const failed = stuck.length;
+  await anonymize(d.db, stuck);
   if (!ok.length) return { deleted: 0, failed };
 
   ok.sort((a, b) => a.Id - b.Id);
@@ -189,6 +191,24 @@ export async function purge(d: StoreDeps, rows: VideoRow[]): Promise<{ deleted: 
   for (const v of ok) recentlyGone.set(v.id, t + RECENT_MS);
   for (const [id, until] of recentlyGone) if (until <= t) recentlyGone.delete(id);
   return { deleted: ok.length, failed };
+}
+
+// LGPD: vencido que o Mux não deixou apagar (Mux desligado, 401, 5xx; o 404 já conta como apagado)
+// não pode guardar dado pessoal além do prazo. A linha fica, sem nome, aparelho, mesa e zona, mas
+// com mux_asset_id/mux_upload_id: continua vencida, então a próxima leitura ou o cron tentam apagar
+// o asset de novo, e o super admin a vê como "exclusão pendente". Melhor esforço: se a gravação
+// falhar, a próxima tentativa anonimiza de novo.
+const ANON = { name: null, device_id: "", table_id: null, zone_id: null } as const;
+const isAnon = (v: VideoRow) => !v.name && !v.device_id && !v.table_id && !v.zone_id;
+
+async function anonymize(db: StoreDb, rows: VideoRow[]): Promise<void> {
+  const todo = rows.filter((v) => !isAnon(v)).sort((a, b) => a.Id - b.Id);
+  if (!todo.length) return;
+  try {
+    await db.updateRows("apareca_videos", todo.map((v) => ({ Id: v.Id, ...ANON })));
+  } catch (e) {
+    console.warn("apareca: anonimizar vencido que o Mux não apagou", String(e).slice(0, 200));
+  }
 }
 
 // ---------- Uso do mês (teto do Mux) ----------

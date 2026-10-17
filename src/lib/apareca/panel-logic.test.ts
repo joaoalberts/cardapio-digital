@@ -2,7 +2,7 @@
 // decisão da equipe (aprovar, reprovar, remover), que confere o restaurante, só grava a partir dos
 // estados permitidos, prevalece sobre a IA e apaga o asset do Mux ao reprovar ou remover.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { VideoRow } from "./types";
+import type { AparecaConfig, VideoRow } from "./types";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ cacheLife: vi.fn(), cacheTag: vi.fn(), updateTag: vi.fn() }));
@@ -95,11 +95,12 @@ vi.mock("@/lib/apareca/store", () => ({
 
 import { updateTag } from "next/cache";
 import {
-  approveVideo, deleteHouse, moveHouse, rejectVideo, removeFromTv, saveConfig, saveZones, setAparecaEnabled, setHouseActive,
+  approveVideo, deleteHouse, listQueue, moveHouse, rejectVideo, removeFromTv, saveConfig, saveZones, setAparecaEnabled, setHouseActive,
   startHouseUpload, syncHouseVideos,
 } from "@/app/painel/apareca/actions";
+import { monthUsage, readSnapshot } from "@/lib/apareca/store";
 import {
-  allowedModes, HOUSE_MAX_BYTES, HOUSE_MAX_S, NOT_ALLOWED,
+  allowedModes, applyConfigPatch, HOUSE_MAX_BYTES, HOUSE_MAX_S, NOT_ALLOWED, teamDecide,
   alertPattern, alertStep, hasNew, latestOnly, newestOf, NOTICE_MS, noticeOn, noticeText, queueItems, TEAM_ERRORS, type Notice, type QueueItem,
 } from "./panel-logic";
 
@@ -656,5 +657,53 @@ describe("institucionais", () => {
     mux.fail = true;
     expect((await deleteHouse(RID, H1)).error).toBeTruthy();
     expect(fake.removed).toEqual([]);
+  });
+});
+
+describe("revisão final", () => {
+  it("A4 (panel-logic, 2ª camada): o banco devolve vídeo de outro restaurante mesmo com o where → recusa, nada gravado", async () => {
+    const other = video({ restaurant_id: OTHER });
+    const updateRows = vi.fn(async () => {});
+    const deleteAsset = vi.fn(async () => {});
+    // Banco "quebrado": ignora o where e devolve a linha da outra casa.
+    const db = { first: vi.fn(async () => ({ ...other }) as never), updateRows };
+    for (const action of ["approve", "reject", "remove"] as const) {
+      expect(await teamDecide({ db, deleteAsset }, RID, VID, action)).toEqual({ error: TEAM_ERRORS.gone });
+    }
+    expect(updateRows).not.toHaveBeenCalled();
+    expect(deleteAsset).not.toHaveBeenCalled();
+  });
+
+  describe("A7: faixa do teto na fila do painel", () => {
+    const zero = { encoded_s: 0, stored_min_month: 0, played_s: 0, mp4_s: 0, house_min: 0 };
+    beforeEach(() => {
+      vi.mocked(readSnapshot).mockResolvedValue({ at: 0, videos: [] });
+    });
+    it("erro ao ler o uso do mês → paused (coerente com o envio do cliente)", async () => {
+      vi.mocked(monthUsage).mockRejectedValueOnce(new Error("nocodb 500"));
+      expect((await listQueue(RID)).warn).toBe("paused");
+    });
+    it("uso lido e baixo → ok", async () => {
+      vi.mocked(monthUsage).mockResolvedValueOnce(zero);
+      expect((await listQueue(RID)).warn).toBe("ok");
+    });
+  });
+
+  describe("Minor 1: horário com início igual ao fim", () => {
+    it("applyConfigPatch recusa com mensagem clara", () => {
+      const cur: AparecaConfig = { mode: "manual", rule: { kind: "intercalar", house_every: 1, clients_max: 3 }, plays: 1,
+        device_per_hour: 2, hours: null, retention_h: 6, zones: [], table_zones: {}, tv_zones: {} };
+      expect(applyConfigPatch(cur, { hours: { from: "19:00", to: "19:00" } }, ["manual"])).toEqual({
+        error: "O horário precisa ter início e fim diferentes.",
+      });
+      expect(applyConfigPatch(cur, { hours: { from: "19:00", to: "02:00" } }, ["manual"])).toMatchObject({
+        cfg: { hours: { from: "19:00", to: "02:00" } },
+      });
+    });
+    it("saveConfig com from === to → erro e nada gravado", async () => {
+      fake.tables = { restaurants: [restaurant()] };
+      expect(await saveConfig(RID, { hours: { from: "20:00", to: "20:00" } })).toEqual({ error: "O horário precisa ter início e fim diferentes." });
+      expect(restWrites()).toEqual([]);
+    });
   });
 });

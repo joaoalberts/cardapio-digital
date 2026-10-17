@@ -5,7 +5,8 @@ import { routeDeps } from "@/lib/apareca/submit-server";
 import { isValidSlug } from "@/lib/slug";
 
 // O celular avisa que baixou: { id, device }. Conta 1 download (só do dono de vídeo aprovado,
-// até 5 por hora por vídeo). Responde 204 sempre que o corpo for lido, para não revelar nada.
+// até 5 por hora por vídeo). Responde 204 sempre que o corpo for lido, para não revelar nada; a única
+// exceção é o limite de leituras por IP (429), que não diz nada sobre o vídeo.
 const NO_STORE = { "cache-control": "no-store" };
 const MAX_BODY = 2_000;
 
@@ -17,7 +18,8 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   const read = await readBodyCapped(request, MAX_BODY);
   if (!read.ok) return NextResponse.json({ ok: false, code: "invalid" }, { status: read.status, headers: NO_STORE });
   try {
-    await countDownload(routeDeps(request), slug, parseJson(read.text));
+    const r = await countDownload(routeDeps(request), slug, parseJson(read.text));
+    if (r === "too_many") return NextResponse.json({ ok: false, code: "too_many" }, { status: 429, headers: NO_STORE });
   } catch {
     // contador é melhor esforço
   }

@@ -12,7 +12,7 @@ vi.mock("@/lib/db/nocodb", () => ({ list: vi.fn(), first: vi.fn(), insert: vi.fn
 import { purgePlan } from "./retention";
 import { forgetSnapshot } from "./store";
 import {
-  countDownload, downloadTarget, myStatus, publicHead, startSubmission, type SubmitDeps, type SubmitLimits,
+  countDownload, downloadTarget, myStatus, publicHead, READS_PER_HOUR, startSubmission, type SubmitDeps, type SubmitLimits,
 } from "./submit";
 
 const SLUG = "casa-da-ana";
@@ -85,6 +85,7 @@ function limits(): SubmitLimits {
     },
     download: createLimiter({ max: 5, windowMs: HOUR, now: clock }),
     ipGlobal: createLimiter({ max: 120, windowMs: HOUR, now: clock }), // igual ao IP_PER_HOUR_GLOBAL
+    reads: createLimiter({ max: READS_PER_HOUR, windowMs: HOUR, now: clock }),
   };
 }
 
@@ -537,15 +538,50 @@ describe("myStatus", () => {
     expect((r as { eta_ms: number }).eta_ms).toBeGreaterThan(0);
   });
 
-  it("approved → queue; com first_shown_at → on_tv; plays >= plays_target → shown", async () => {
+  it("approved sem exibição → queue com a posição", async () => {
     const q = video({ status: "approved", mux_asset_id: "a1", mux_playback_id: "p1" });
-    const tv = video({ status: "approved", mux_asset_id: "a2", mux_playback_id: "p2", first_shown_at: "2026-10-16T21:59:00.000Z" });
-    const done = video({ status: "approved", mux_asset_id: "a3", mux_playback_id: "p3", first_shown_at: "2026-10-16T21:59:00.000Z", plays: 1, plays_target: 1 });
-    tables.apareca_videos = [q, tv, done];
+    tables.apareca_videos = [q];
     const { d } = mk();
-    expect(await myStatus(d, SLUG, ask(q))).toMatchObject({ state: "queue", position: 1 });
-    expect(await myStatus(d, SLUG, ask(tv))).toMatchObject({ state: "on_tv", first_shown_at: "2026-10-16T21:59:00.000Z" });
-    expect(await myStatus(d, SLUG, ask(done))).toMatchObject({ state: "shown", position: null, eta_ms: null });
+    expect(await myStatus(d, SLUG, ask(q))).toMatchObject({ state: "queue", position: 1, first_shown_at: null });
+  });
+
+  // A1: o "tocou" sobe plays no INÍCIO do clipe; com alvo 1, plays >= alvo já no primeiro quadro.
+  // "on_tv" é a janela de 0 a 20 s desde first_shown_at; fora dela, shown (alvo cumprido) ou queue.
+  describe("A1: janela do \"Olhe para a TV agora!\"", () => {
+    const ago = (ms: number) => new Date(T0.getTime() - ms).toISOString();
+    const nocoAgo = (ms: number) => ago(ms).replace("T", " ").replace(/\.\d+Z$/, "+00:00"); // formato do NocoDB
+    it("alvo 1, exibido há 3 s → on_tv (também no formato do NocoDB)", async () => {
+      const a = video({ status: "approved", mux_asset_id: "a1", mux_playback_id: "p1", plays: 1, plays_target: 1, first_shown_at: ago(3_000) });
+      const b = video({ status: "approved", mux_asset_id: "a2", mux_playback_id: "p2", plays: 1, plays_target: 1, first_shown_at: nocoAgo(3_000), device_id: DEV2 });
+      tables.apareca_videos = [a, b];
+      const { d } = mk();
+      expect(await myStatus(d, SLUG, ask(a))).toMatchObject({ state: "on_tv", position: null, first_shown_at: ago(3_000) });
+      expect(await myStatus(d, SLUG, { id: b.id, device: DEV2 })).toMatchObject({ state: "on_tv" });
+    });
+    it("alvo 1, exibido há 60 s → shown", async () => {
+      const v = video({ status: "approved", mux_asset_id: "a1", mux_playback_id: "p1", plays: 1, plays_target: 1, first_shown_at: ago(60_000) });
+      tables.apareca_videos = [v];
+      const { d } = mk();
+      expect(await myStatus(d, SLUG, ask(v))).toMatchObject({ state: "shown", position: null, eta_ms: null, first_shown_at: ago(60_000) });
+    });
+    it("alvo 2, com 1 exibição há 60 s → queue (vai passar de novo)", async () => {
+      const v = video({ status: "approved", mux_asset_id: "a1", mux_playback_id: "p1", plays: 1, plays_target: 2, first_shown_at: ago(60_000) });
+      tables.apareca_videos = [v];
+      const { d } = mk();
+      expect(await myStatus(d, SLUG, ask(v))).toMatchObject({ state: "queue", position: 1 });
+    });
+    it("bordas: 20 s ainda on_tv, 21 s fora; data no futuro ou ilegível fora", async () => {
+      const at20 = video({ status: "approved", plays: 1, plays_target: 1, first_shown_at: ago(20_000) });
+      const at21 = video({ status: "approved", plays: 1, plays_target: 1, first_shown_at: ago(21_000) });
+      const fut = video({ status: "approved", plays: 1, plays_target: 1, first_shown_at: ago(-5_000) });
+      const bad = video({ status: "approved", plays: 1, plays_target: 1, first_shown_at: "ontem" });
+      tables.apareca_videos = [at20, at21, fut, bad];
+      const { d } = mk();
+      expect(await myStatus(d, SLUG, ask(at20))).toMatchObject({ state: "on_tv" });
+      expect(await myStatus(d, SLUG, ask(at21))).toMatchObject({ state: "shown" });
+      expect(await myStatus(d, SLUG, ask(fut))).toMatchObject({ state: "shown" });
+      expect(await myStatus(d, SLUG, ask(bad))).toMatchObject({ state: "shown" });
+    });
   });
 
   it("download só com o MP4 pronto e vídeo aprovado e vivo", async () => {
@@ -642,6 +678,47 @@ describe("downloadTarget e countDownload", () => {
 
 // ---------------------------------------------------------------- publicHead
 
+describe("limite por IP em meu, baixar e baixou", () => {
+  it(`até ${READS_PER_HOUR}/h por IP e restaurante; acima, too_many sem tocar no banco`, async () => {
+    const v = video({ status: "approved", mux_asset_id: "aD", mux_playback_id: "pbD" });
+    tables.apareca_videos = [v];
+    const { d, assetInfo } = mk();
+    assetInfo.mockResolvedValue({ status: "ready", assetId: "aD", playbackId: "pbD", durationS: 6, mp4: true });
+    for (let i = 0; i < READS_PER_HOUR - 2; i++) {
+      expect(await myStatus(d, SLUG, ask(v))).toMatchObject({ state: "queue" });
+    }
+    expect(await downloadTarget(d, SLUG, v.id, DEV)).toMatch(/highest\.mp4$/);
+    expect(await countDownload(d, SLUG, ask(v))).toBeUndefined();
+    // Passou do limite: as três recusam sem ler a fila nem o banco.
+    db.list.mockClear();
+    db.first.mockClear();
+    db.updateRows.mockClear();
+    forgetSnapshot(RID);
+    expect(await myStatus(d, SLUG, ask(v))).toEqual({ error: "too_many" });
+    expect(await downloadTarget(d, SLUG, v.id, DEV)).toBe("too_many");
+    expect(await countDownload(d, SLUG, ask(v))).toBe("too_many");
+    expect(db.list).not.toHaveBeenCalled();
+    expect(db.first).not.toHaveBeenCalled();
+    expect(db.updateRows).not.toHaveBeenCalled();
+    // Outro IP no mesmo restaurante, ou o mesmo IP em outra casa, não é afetado.
+    expect(await myStatus({ ...d, ip: "5.6.7.8" }, SLUG, ask(v))).toMatchObject({ state: "queue" });
+    // Uma hora depois, volta.
+    now = new Date(T0.getTime() + HOUR + 1);
+    expect(await myStatus(d, SLUG, ask(v))).not.toEqual({ error: "too_many" });
+  });
+  it("chave por restaurante: o mesmo IP em outra casa tem a própria conta", async () => {
+    const lim = createLimiter({ max: 1, windowMs: HOUR, now: () => now.getTime() });
+    const other = mkHead({}, { id: OTHER_RID, slug: "outra" });
+    const v = video({ status: "approved" });
+    tables.apareca_videos = [v];
+    const { d } = mk();
+    const d2: SubmitDeps = { ...d, limits: { ...d.limits!, reads: lim }, getHead: async (s) => (s === SLUG ? head : s === "outra" ? other : null) };
+    expect(await myStatus(d2, SLUG, ask(v))).toMatchObject({ state: "queue" });
+    expect(await myStatus(d2, SLUG, ask(v))).toEqual({ error: "too_many" });
+    expect(await myStatus(d2, "outra", ask(v))).toEqual({ error: "not_found" }); // passou do limite? não: é de outra casa
+  });
+});
+
 describe("publicHead", () => {
   it("ligado e aberto", async () => {
     const { d } = mk();
@@ -662,5 +739,28 @@ describe("publicHead", () => {
     expect(await publicHead(mk().d, SLUG)).toEqual({ enabled: true, open: false, why: "closed" });
     head = mkHead();
     expect(await publicHead(mk({ monthUsd: async () => 14 }).d, SLUG)).toEqual({ enabled: true, open: false, why: "paused" });
+  });
+});
+
+describe("revisão final: A4 (mutações sobreviventes)", () => {
+  it("2ª camada da mesa: o banco devolve mesa de outro restaurante mesmo com o where → table, sem envio", async () => {
+    const other = tables.dining_tables.find((t) => t.restaurant_id === OTHER_RID)!;
+    // Banco "quebrado": ignora o where e devolve a mesa da outra casa com o código pedido.
+    const first = vi.fn(async (t: string, w: Row) => (t === "dining_tables" ? { ...other, code: w.code } : db.first(t, w)));
+    const { d, createUpload } = mk({ db: { ...db, first } as unknown as SubmitDeps["db"] });
+    expect(await startSubmission(d, SLUG, body())).toEqual({ ok: false, code: "table" });
+    expect(createUpload).not.toHaveBeenCalled();
+    expect(videos()).toHaveLength(0);
+  });
+
+  it("erro ao somar o uso do mês → envios PAUSADOS (falha fechada), no envio e no convite", async () => {
+    const boom = async () => {
+      throw new Error("nocodb 500");
+    };
+    const { d, createUpload } = mk({ monthUsd: boom });
+    expect(await startSubmission(d, SLUG, body())).toEqual({ ok: false, code: "paused" });
+    expect(createUpload).not.toHaveBeenCalled();
+    expect(videos()).toHaveLength(0);
+    expect(await publicHead(d, SLUG)).toEqual({ enabled: true, open: false, why: "paused" });
   });
 });

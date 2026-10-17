@@ -4,7 +4,7 @@ import { deleteMuxAsset } from "@/lib/apareca/mux-video";
 import { aparecaOff } from "@/lib/apareca/off";
 import { programFor } from "@/lib/apareca/schedule";
 import { getAparecaHead, getHouseVideos, readSnapshot, type StoreDeps } from "@/lib/apareca/store";
-import { flushHouseIfDue, heartbeat, identifyTv, tvFeatureOn, type AparecaTvDeps } from "@/lib/apareca/tv";
+import { flushHouseIfDue, heartbeat, programGate, type AparecaTvDeps } from "@/lib/apareca/tv";
 import { readBodyCapped } from "@/lib/comunidade/http";
 import { QR_ECC, qrLink } from "@/lib/comunidade/qr";
 import * as db from "@/lib/db/nocodb";
@@ -13,7 +13,8 @@ import { isValidSlug } from "@/lib/slug";
 
 // Programação do Apareça para uma TV pareada pela Comunidade. POST com o segredo no cabeçalho
 // x-telao (nunca em cookie nem na URL); só vale no restaurante do slug. 401: segredo que não é
-// de uma TV pareada deste restaurante (ou revogada); 404: slug sem restaurante. Cada consulta é
+// de uma TV pareada deste restaurante (ou revogada), só conferido com o Apareça no ar (programGate);
+// 404: slug sem restaurante. Cada consulta é
 // também o sinal de vida (gravado no máx. 1x por minuto, depois da resposta).
 // Feature fora do ar (featureState não "on") → { enabled: false, program: null }. A pausa do teto
 // do Mux só para os envios: o que já foi aprovado continua tocando.
@@ -51,21 +52,22 @@ export async function POST(request: NextRequest, { params }: Ctx) {
   const read = await readBodyCapped(request, MAX_BODY);
   if (!read.ok) return NextResponse.json({ ok: false, code: "invalid" }, { status: read.status, headers: NO_STORE });
   try {
-    const tv = await identifyTv(deps, slug, request.headers.get("x-telao"));
-    if ("status" in tv) {
-      const code = tv.status === 401 ? "unauthorized" : "not_found";
-      return NextResponse.json({ ok: false, code }, { status: tv.status, headers: NO_STORE });
+    // Portão antes da identidade (A3): com o recurso fora do ar, nem community_tvs é lida.
+    const gate = await programGate(deps, slug, request.headers.get("x-telao"));
+    if ("status" in gate) {
+      const code = gate.status === 401 ? "unauthorized" : "not_found";
+      return NextResponse.json({ ok: false, code }, { status: gate.status, headers: NO_STORE });
     }
-    const head = await getAparecaHead(slug);
     // O mesmo host pelo qual a TV abriu, como no telão.
     const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
     const proto = request.headers.get("x-forwarded-proto") ?? (/^(localhost|127\.0\.0\.1)(:|$)/.test(host) ? "http" : "https");
     const qr = await qrSvg(qrLink(proto, host, slug, "telao"));
 
     // Recurso fora do ar: nada muda para ninguém, nem o sinal de vida nem o tally (spec).
-    if (!head || !tvFeatureOn(deps, head)) {
+    if (!gate.enabled) {
       return NextResponse.json({ enabled: false, program: null, logo: null, qr, stream: STREAM }, { headers: NO_STORE });
     }
+    const { tv, head } = gate;
     // Depois da resposta, melhor esforço: o sinal de vida e a soma de institucionais parada há 10 min.
     after(async () => {
       await heartbeat(deps, tv).catch(() => {});

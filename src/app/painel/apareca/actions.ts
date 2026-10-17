@@ -67,7 +67,9 @@ async function gate(): Promise<QueueResult["warn"]> {
     const usd = estimateUsd(await monthUsage(storeDeps(), monthOf(new Date())));
     return uploadGate(usd, tetoUsd(process.env.APARECA_TETO_USD));
   } catch {
-    return "ok"; // sem leitura do uso, sem faixa; o envio do cliente confere o teto de novo
+    // Coerente com o envio (submit.ts, isPaused): sem leitura do uso, os envios ficam pausados,
+    // então o painel mostra a faixa de pausa (A7).
+    return "paused";
   }
 }
 

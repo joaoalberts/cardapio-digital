@@ -30,7 +30,8 @@
   }
   & .app-note-x {
     flex: none;
-    min-height: 40px;
+    min-height: 44px; /* área de toque mínima */
+    min-width: 44px;
     padding: 0 12px;
     border-radius: 6px;
     text-decoration: underline;

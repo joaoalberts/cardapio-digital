@@ -33,6 +33,13 @@ const h = vi.hoisted(() => {
       log.push(`removeIds:${t}:${ids.join(",")}`);
       store[t] = (store[t] ?? []).filter((r) => !ids.includes(r.Id as number));
     }),
+    updateRows: vi.fn(async (t: string, rows: Row[]) => {
+      log.push(`updateRows:${t}:${rows.map((r) => r.Id).join(",")}`);
+      for (const p of rows) {
+        const r = (store[t] ?? []).find((x) => x.Id === p.Id);
+        if (r) Object.assign(r, p);
+      }
+    }),
   };
   return { store, log, db };
 });
@@ -265,6 +272,59 @@ describe("purge", () => {
     expect(r).toEqual({ deleted: 1, failed: 1 });
     expect(h.store.apareca_videos.map((x) => x.id)).toEqual([a.id]);
     expect(h.store.apareca_tally[0].counts).toMatchObject({ sent: 1 });
+  });
+
+  // A2 (LGPD): o Mux não deixou apagar (500, 401, desligado; o 404 já conta como apagado).
+  it("Mux com 500: a linha fica sem nome, aparelho, mesa e zona, com o asset, e é tentada de novo", async () => {
+    const a = expired({ name: "@ana", device_id: "11111111-1111-4111-8111-111111111111", table_id: "mesa-1", zone_id: "zona-1" });
+    h.store.apareca_videos = [a];
+    let fail = true;
+    const { d, deleteAsset, runDeferred } = deps({
+      deleteAsset: async () => {
+        if (fail) throw new Error("mux 500");
+      },
+    });
+    expect(await S.purge(d, [a])).toEqual({ deleted: 0, failed: 1 });
+    const row = h.store.apareca_videos[0];
+    expect(row).toMatchObject({ Id: a.Id, name: null, device_id: "", table_id: null, zone_id: null, mux_asset_id: a.mux_asset_id });
+    expect(h.db.insert).not.toHaveBeenCalled(); // fora do tally até apagar de verdade
+    // Segunda falha: já anônima, não grava de novo.
+    expect(await S.purge(d, [{ ...(row as unknown as VideoRow) }])).toEqual({ deleted: 0, failed: 1 });
+    expect(h.db.updateRows).toHaveBeenCalledTimes(1);
+    // Continua elegível: a próxima leitura manda para o purge, e com o Mux de volta a linha sai.
+    fail = false;
+    S.forgetSnapshot(RID);
+    expect((await S.readSnapshot(d, RID)).videos).toEqual([]);
+    await runDeferred();
+    expect(deleteAsset).toHaveBeenLastCalledWith(a.mux_asset_id);
+    expect(h.store.apareca_videos).toHaveLength(0);
+    expect(h.store.apareca_tally).toHaveLength(1);
+  });
+
+  it("envio parado cujo upload o Mux não confirmou também é anonimizado", async () => {
+    const a = video({ status: "uploading", mux_asset_id: null, name: "Bia", created_at: "2026-10-16T13:00:00.000Z" });
+    h.store.apareca_videos = [a];
+    const { d } = deps({
+      releaseUpload: async () => {
+        throw new Error("mux desligado");
+      },
+    });
+    expect(await S.purge(d, [a])).toEqual({ deleted: 0, failed: 1 });
+    expect(h.store.apareca_videos[0]).toMatchObject({ name: null, device_id: "", mux_upload_id: a.mux_upload_id });
+  });
+
+  it("anonimizar falhou: não derruba o purge das outras linhas", async () => {
+    const a = expired({ name: "Ana" });
+    const b = expired();
+    h.store.apareca_videos = [a, b];
+    h.db.updateRows.mockRejectedValueOnce(new Error("nocodb 500"));
+    const { d } = deps({
+      deleteAsset: async (id) => {
+        if (id === a.mux_asset_id) throw new Error("mux 500");
+      },
+    });
+    expect(await S.purge(d, [a, b])).toEqual({ deleted: 1, failed: 1 });
+    expect(h.store.apareca_videos.map((x) => x.id)).toEqual([a.id]);
   });
 
   it("envio parado sem asset: libera o upload no Mux antes de remover a linha", async () => {

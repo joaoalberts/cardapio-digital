@@ -105,6 +105,20 @@ export async function identifyTv(
   return { tvId: hit.tvId, restaurantId: head.id, zone: zoneOf(head.config, "tv", hit.tvId) };
 }
 
+// Portão da rota "programa" (A3): a cabeça (em cache) e o Apareça no ar são conferidos ANTES de
+// identificar a TV. Recurso desligado: { enabled: false } sem ler community_tvs (com ele desligado,
+// a TV do telão não gasta chamada ao banco). 404: slug sem restaurante; 401: TV não pareada.
+export async function programGate(
+  d: AparecaTvDeps, slug: string, secret: string | null,
+): Promise<{ status: 401 | 404 } | { enabled: false } | { enabled: true; tv: TvIdentity; head: AparecaHead }> {
+  const head = await d.getHead(slug);
+  if (!head) return { status: 404 };
+  if (!tvFeatureOn(d, head)) return { enabled: false };
+  const tv = await identifyTv(d, slug, secret);
+  if ("status" in tv) return tv;
+  return { enabled: true, tv, head };
+}
+
 // ---------- Sinal de vida ----------
 
 // Grava last_seen_at (o mesmo "visto há" do painel da Comunidade) no máximo 1x a cada 60 s por TV.

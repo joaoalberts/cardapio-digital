@@ -3,7 +3,7 @@ import { sha256Hex } from "@/lib/comunidade/tv";
 import { DEFAULT_CONFIG } from "./config";
 import { programFor } from "./schedule";
 import {
-  flushHouseIfDue, forgetTv, heartbeat, identifyTv, playFromTv, reportPlay, resetTvMemory,
+  flushHouseIfDue, forgetTv, heartbeat, identifyTv, playFromTv, programGate, reportPlay, resetTvMemory,
   type AparecaTvDeps, type TvAppDb, type TvIdentity,
 } from "./tv";
 import type { AparecaConfig, AparecaHead, HouseVideoRow, VideoRow } from "./types";
@@ -464,5 +464,53 @@ describe("correção 3", () => {
     s.advance(10 * 60_000);
     await flushHouseIfDue(s.deps, RID);
     expect(s.calls.inserts.map((i) => i.rows[0].counts)).toEqual([{ house_played_s: 60 }]);
+  });
+});
+
+describe("revisão final", () => {
+  // Lista as tabelas lidas pelo banco falso.
+  function spy(deps: AparecaTvDeps) {
+    const read: string[] = [];
+    const inner = deps.db;
+    deps.db = { ...inner, list: async <T,>(t: Parameters<TvAppDb["list"]>[0], w: Parameters<TvAppDb["list"]>[1]) => {
+      read.push(t);
+      return inner.list<T>(t, w);
+    } };
+    return read;
+  }
+
+  it("A3: recurso desligado → { enabled: false } sem nenhuma leitura de community_tvs", async () => {
+    for (const head of [headOf({ enabled: false }), headOf({ allowed: false }), headOf({ community_enabled: false })]) {
+      resetTvMemory();
+      const s = await setup({ head });
+      const read = spy(s.deps);
+      expect(await programGate(s.deps, "forno", SECRET_A)).toEqual({ enabled: false });
+      expect(await programGate(s.deps, "forno", SECRET_C)).toEqual({ enabled: false }); // nem confere o segredo
+      expect(read).toEqual([]);
+    }
+    const s = await setup();
+    s.deps.off = () => true;
+    const read = spy(s.deps);
+    expect(await programGate(s.deps, "forno", SECRET_A)).toEqual({ enabled: false });
+    expect(read).toEqual([]);
+  });
+
+  it("A3: no ar → identifica (lê community_tvs); 401 para segredo errado; 404 sem restaurante", async () => {
+    const s = await setup();
+    const read = spy(s.deps);
+    expect(await programGate(s.deps, "forno", SECRET_A)).toEqual({ enabled: true, tv: tv1, head: headOf() });
+    expect(read).toContain("community_tvs");
+    expect(await programGate(s.deps, "forno", SECRET_C)).toEqual({ status: 401 });
+    expect(await programGate(s.deps, "outra", SECRET_A)).toEqual({ status: 404 });
+  });
+
+  it("A4 (tv.ts, 2ª camada): o banco devolve vídeo de outro restaurante mesmo com o where → recusa, nada gravado", async () => {
+    const s = await setup({ videos: [vid({ restaurant_id: OTHER_RID }) as unknown as Raw] });
+    // Banco "quebrado": ignora o where e devolve tudo.
+    const inner = s.deps.db;
+    s.deps.db = { ...inner, list: async <T,>(t: Parameters<TvAppDb["list"]>[0]) => inner.list<T>(t, {}) };
+    expect(await reportPlay(s.deps, tv1, { video: V1, play: P(1) })).toEqual({ ok: false });
+    expect(s.calls.writes).toEqual([]);
+    expect(s.tables.apareca_videos[0].plays).toBe(0);
   });
 });
