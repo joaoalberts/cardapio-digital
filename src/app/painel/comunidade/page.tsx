@@ -167,7 +167,7 @@ async function Comunidade() {
   };
 
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/comunidade" title="Comunidade" lead="Enquetes e fotos de pratos para quem está no salão.">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path), aparecaAllowed: r.apareca_allowed === true }} active="/painel/comunidade" title="Comunidade" lead="Enquetes e fotos de pratos para quem está no salão.">
       <ComunidadeEditor data={data} />
     </PanelShell>
   );

@@ -4,7 +4,7 @@ import * as db from "@/lib/db/nocodb";
 import { muxPending } from "@/lib/media-store";
 import { ShellMenu, TopButton, VideoSync } from "./shell-menu";
 import { ownerMenuHref } from "./menu-link";
-import { pendingCount } from "./apareca/actions";
+import { pendingCount } from "@/lib/painel/pending-count";
 import { BOTTOM_NAV, MAIS_GROUPS, NAV_GROUPS, type NavItem } from "@/lib/painel/nav";
 
 // Fonte do painel (a mesma família leve do DGuests); só o painel baixa.
@@ -35,7 +35,8 @@ export async function PanelShell({
   lead,
   children,
 }: {
-  restaurant: { id: string; name: string; slug: string; logo: string | null };
+  // aparecaAllowed: a liberação do Apareça (apareca_allowed); sem ela o selo do Agora fica em 0 sem ler a fila.
+  restaurant: { id: string; name: string; slug: string; logo: string | null; aparecaAllowed?: boolean };
   active: PanelHref;
   title: string;
   lead?: string; // a linha "para que serve", sob o título (opcional: Produtos especiais ainda não tem)
@@ -45,11 +46,11 @@ export async function PanelShell({
   // painel confere até ficarem prontos.
   type Pending = { status: string | null; mux_mp4: string | null; mux_upload_id: string | null };
   const count = (await db.list<Pending>("media", { restaurant_id: restaurant.id })).filter(muxPending).length;
-  // "Abrir cardápio" com "Pedir" e carrinho; pending = vídeos esperando aprovação (0 sem o Apareça ou em erro).
+  // "Abrir cardápio" com "Pedir" e carrinho; pending = vídeos esperando aprovação (0 sem a liberação do Apareça ou em erro).
   const [newOrders, menuHref, pending] = await Promise.all([
     db.count("orders", { restaurant_id: restaurant.id, status: "new" }).catch(() => 0),
     ownerMenuHref(restaurant.id, restaurant.slug),
-    pendingCount(restaurant.id),
+    pendingCount(restaurant.id, restaurant.aparecaAllowed === true),
   ]);
   const badge = (href: string) => (href === "/painel/pedidos" ? newOrders : href === "/painel/agora" ? pending : 0);
   const avatar = (
@@ -86,7 +87,7 @@ export async function PanelShell({
       <div className="ap-main">
         <header className="ap-top">
           <h1>{title}</h1>
-          {/* No celular a barra lateral some: o avatar (Editar Perfil, Ver cardápio, Suporte, Sair) vem para o topo. */}
+          {/* No celular a barra lateral some: o avatar (Perfil, Ver cardápio, Suporte, Sair) vem para o topo. */}
           <div className="ap-top-rest">
             <ShellMenu name={restaurant.name} menuHref={menuHref} avatar={avatar} />
           </div>

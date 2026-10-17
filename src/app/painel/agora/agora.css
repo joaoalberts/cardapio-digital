@@ -1,9 +1,24 @@
 /* Painel: tela "Agora". Reaproveita a fila do Apareça (.app-fila: faixas, aviso sonoro, vídeos) e as peças da
    Comunidade (.cp: Nova enquete, foto de prato, Confirm); aqui só o que é da tela. Contraste AA: cinza #666666 no
-   branco (5,7:1) e no fundo do painel (5,1:1), dourado escuro #7a5218 no branco (7,1:1), verde #2f6b1f no branco
-   (6,4:1). Toque mínimo de 44 px. Cabe em 375 px sem rolagem lateral. Nada anima aqui além do que já vem da fila. */
+   branco (5,7:1) e no fundo do painel (5,1:1), dourado escuro #7a5218 no branco (6,9:1), verde #2f6b1f no branco
+   (6,4:1), texto #1a1a1a no dourado (5,8:1). Toque mínimo de 44 px. Cabe em 375 px sem rolagem lateral. Nada anima aqui além do que já vem da fila. */
 .ap .ag {
   max-width: 820px;
+
+  /* Contraste AA só nesta tela (a Comunidade fica como está). "&.cp" sobe a especificidade acima de .ap .cp e
+     .ap .btn.primary, que valem para a Comunidade; o .danger ("Sim, encerrar") continua vermelho. */
+  &.cp {
+    --pmuted: #666666;
+  }
+  &.cp .btn.cp-new {
+    color: #1a1a1a;
+  }
+  &.cp .cp-link:not(.danger) {
+    color: #7a5218;
+  }
+  &.cp .cp-pairok {
+    color: #2f6b1f;
+  }
 
   & > .ap-card,
   & > .ag-empty,

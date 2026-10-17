@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { signOut } from "./actions";
 import { syncVideos } from "./cardapio/actions";
 
-// Restaurante no topo da barra lateral: tocou, abre Editar Perfil, Suporte e Sair.
+// Restaurante no topo da barra lateral: tocou, abre Perfil, Suporte e Sair.
 export function ShellMenu({ name, menuHref, avatar }: { name: string; menuHref: string; avatar: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
@@ -20,7 +20,7 @@ export function ShellMenu({ name, menuHref, avatar }: { name: string; menuHref: 
       </button>
       {open && (
         <div className="ap-rest-menu">
-          <Link href="/painel/perfil">Editar Perfil</Link>
+          <Link href="/painel/perfil">Perfil</Link>
           <a href={menuHref} target="_blank" rel="noreferrer">
             Ver cardápio
           </a>

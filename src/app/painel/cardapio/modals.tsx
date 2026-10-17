@@ -132,7 +132,7 @@ function Translations({
     return (
       <p className="md-note">
         O cardápio está só em português. Para mostrar outros idiomas, ligue-os em{" "}
-        <Link href="/painel/perfil">Editar Perfil</Link>.
+        <Link href="/painel/perfil">Perfil</Link>.
       </p>
     );
   }

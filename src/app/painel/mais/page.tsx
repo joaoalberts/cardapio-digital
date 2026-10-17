@@ -30,7 +30,7 @@ async function Mais() {
   const menuHref = await ownerMenuHref(r.id, r.slug); // o mesmo "Abrir cardápio" do menu, com "Pedir" e carrinho
   const last = MAIS_GROUPS.length - 1;
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/mais" title="Mais">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path), aparecaAllowed: r.apareca_allowed === true }} active="/painel/mais" title="Mais">
       {MAIS_GROUPS.map((g, i) => (
         <section key={g.title} className="mx-group" aria-labelledby={`mx-${i}`}>
           <h2 id={`mx-${i}`}>{g.title}</h2>

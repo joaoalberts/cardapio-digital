@@ -66,7 +66,7 @@ async function Agora() {
   });
 
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/agora" title="Agora" lead="O que precisa de você neste momento.">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path), aparecaAllowed: r.apareca_allowed === true }} active="/painel/agora" title="Agora" lead="O que precisa de você neste momento.">
       <AgoraLive
         rid={r.id}
         isOwner={isOwner}

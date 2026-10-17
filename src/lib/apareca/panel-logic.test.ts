@@ -93,7 +93,11 @@ vi.mock("@/lib/apareca/store", () => ({
   monthUsage: vi.fn(),
 }));
 
+// A tela Agora tem o próprio memo de 5 s: toda decisão da equipe tem de esquecê-lo também.
+vi.mock("@/lib/painel/agora-memo", () => ({ forgetAgora: vi.fn() }));
+
 import { updateTag } from "next/cache";
+import { forgetAgora } from "@/lib/painel/agora-memo";
 import {
   approveVideo, deleteHouse, listQueue, moveHouse, rejectVideo, removeFromTv, saveConfig, saveZones, setAparecaEnabled, setHouseActive, setTvZone,
   startHouseUpload, syncHouseVideos,
@@ -139,6 +143,7 @@ beforeEach(() => {
   mux.info = {};
   store.forgot = [];
   vi.mocked(updateTag).mockClear();
+  vi.mocked(forgetAgora).mockClear();
 });
 
 describe("hasNew", () => {
@@ -311,6 +316,19 @@ describe("decisão da equipe (actions)", () => {
     fake.rows = [video({ status: "approved" })];
     expect((await rejectVideo(RID, VID)).error).toBeTruthy();
     expect(fake.updates).toEqual([]);
+  });
+  it("aprovar, reprovar e remover esquecem o memo da tela Agora (forgetAgora)", async () => {
+    fake.rows = [video()];
+    expect(await approveVideo(RID, VID)).toEqual({});
+    expect(vi.mocked(forgetAgora).mock.calls).toEqual([[RID]]);
+    vi.mocked(forgetAgora).mockClear();
+    fake.rows = [video()];
+    expect(await rejectVideo(RID, VID)).toEqual({});
+    expect(vi.mocked(forgetAgora).mock.calls).toEqual([[RID]]);
+    vi.mocked(forgetAgora).mockClear();
+    fake.rows = [video({ status: "approved", decided_by: "equipe" })];
+    expect(await removeFromTv(RID, VID)).toEqual({});
+    expect(vi.mocked(forgetAgora).mock.calls).toEqual([[RID]]);
   });
   it("reprovar grava rejected e depois apaga o asset no Mux", async () => {
     fake.rows = [video()];

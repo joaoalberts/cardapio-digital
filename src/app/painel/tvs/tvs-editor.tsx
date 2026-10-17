@@ -59,7 +59,6 @@ export function TvsEditor({ data }: { data: TvsData }) {
 
   return (
     <div className="cp tvs">
-      <p className="tvs-lead">Aqui você liga a TV do salão e escolhe o que cada uma mostra.</p>
       {data.off && (
         <p className="cp-off" role="status">
           A Comunidade está desligada no sistema todo agora. Dá para ver as TVs, mas não dá para conectar uma nova até ela voltar.

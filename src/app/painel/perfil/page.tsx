@@ -56,7 +56,7 @@ async function Perfil() {
   const cover = banners[0];
   const logo = mediaUrl(r.logo_path);
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo }} active="/painel/perfil" title="Perfil" lead="Nome, endereço, horário e Instagram da casa.">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo, aparecaAllowed: r.apareca_allowed === true }} active="/painel/perfil" title="Perfil" lead="Nome, endereço, horário e Instagram da casa.">
       <ProfileForm
         data={{
           id: r.id,

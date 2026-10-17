@@ -120,7 +120,7 @@ export type ProfileInput = {
   banner?: MediaInput | null;
 };
 
-// "Salvar Edição" do Editar Perfil: tudo de uma vez.
+// "Salvar Edição" do Perfil: tudo de uma vez.
 export async function saveProfile(restaurantId: string, input: ProfileInput): Promise<{ error?: string }> {
   const name = String(input.name ?? "").trim().slice(0, 80);
   if (!name) return { error: "Informe o nome do restaurante." };

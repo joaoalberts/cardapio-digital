@@ -209,8 +209,9 @@ export function AgoraLive({
         </div>
       )}
 
-      {/* 2. Montar a casa (lido uma vez, no servidor) */}
-      {setup}
+      {/* 2. Montar a casa (lido uma vez, no servidor). Com vídeo para aprovar, ela desce para depois dos vídeos
+          (Ruling 13). As duas posições são casas fixas da lista: o PendingVideos não muda de lugar nem remonta. */}
+      {!pending && setup}
 
       {/* 3. Vídeos para aprovar, com o aviso sonoro */}
       {aparecaAllowed && !queueOk && (
@@ -231,6 +232,7 @@ export function AgoraLive({
           onReject={commitReject}
         />
       )}
+      {pending && setup}
 
       {!pending && !onTv && !showPoll && (
         <p className="ag-empty">{aparecaAllowed ? "Tudo em dia. Quando um cliente enviar um vídeo, ele aparece aqui." : "Tudo em dia."}</p>

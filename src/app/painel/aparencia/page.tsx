@@ -32,7 +32,7 @@ async function Aparencia() {
   const sampleText = menu?.categories[0]?.name ?? "Entradas";
 
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo }} active="/painel/aparencia" title="Aparência" lead="Cores, fonte e capa do cardápio.">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo, aparecaAllowed: r.apareca_allowed === true }} active="/painel/aparencia" title="Aparência" lead="Cores, fonte e capa do cardápio.">
       <section className="ap-card">
         <div className="ap-card-head">
           <svg className="icon" viewBox="0 0 24 24" aria-hidden>
@@ -41,8 +41,8 @@ async function Aparencia() {
           <h2>Fonte do cardápio</h2>
         </div>
         <p className="ap-lead">
-          Escolha a fonte dos nomes dos pratos e das categorias. A logo e o banner ficam em Editar
-          Perfil e não mudam com a fonte. A prévia ao lado é o seu cardápio de verdade: toque nela
+          Escolha a fonte dos nomes dos pratos e das categorias. A logo e o banner ficam em Perfil
+          e não mudam com a fonte. A prévia ao lado é o seu cardápio de verdade: toque nela
           para navegar.
         </p>
         <FontPicker

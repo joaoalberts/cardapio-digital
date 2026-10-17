@@ -1,6 +1,7 @@
 /* Painel: tela TVs. Reaproveita as peças da Comunidade (.cp: campos, interruptor, Confirm) e o editor de
    zonas do Apareça (.app-setup); aqui só o que é da tela. Contraste AA: cinza #666666 no branco (5,7:1)
-   e no fundo do painel (5,1:1), texto #1a1a1a no dourado (5,8:1), verde #2f6b1f no branco (6,4:1).
+   e no fundo do painel (5,1:1), texto #1a1a1a no dourado (5,8:1), verde #2f6b1f no branco (6,4:1) e no
+   cinza #f1f2f4 (5,7:1), dourado escuro #7a5218 no branco (6,9:1).
    Toque mínimo de 44 px. Nada anima aqui. Cabe em 375 px sem rolagem lateral. */
 .ap .cp.tvs {
   --pmuted: #666666;
@@ -9,12 +10,6 @@
   & .ap-card + .ap-card,
   & .tvs-more {
     margin-top: 18px;
-  }
-  & .tvs-lead {
-    margin: 0 0 18px;
-    color: #666666;
-    font-size: 15px;
-    line-height: 1.45;
   }
 
   /* Ligar uma TV nova */
@@ -112,6 +107,16 @@
   }
   & .cp-link {
     min-height: 44px;
+  }
+  /* "Desconectar" e "Não" (o .danger, "Sim", continua vermelho) e a confirmação de TV ligada. */
+  & .cp-link:not(.danger) {
+    color: #7a5218;
+  }
+  & .cp-pairok {
+    color: #2f6b1f;
+  }
+  & .btn.cp-new {
+    color: #1a1a1a;
   }
 
   /* Modo simples: o interruptor ganha borda transparente para a área de toque passar de 44 px. */

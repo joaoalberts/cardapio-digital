@@ -76,7 +76,7 @@ async function Apareca() {
     .map(toHouseItem);
 
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/apareca" title="Apareça na TV" lead="Aqui ficam os ajustes do Apareça. No dia a dia, use a tela Agora.">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path), aparecaAllowed: r.apareca_allowed === true }} active="/painel/apareca" title="Apareça na TV" lead="Aqui ficam os ajustes do Apareça. No dia a dia, use a tela Agora.">
       <Abas
         abas={ABAS}
         note={

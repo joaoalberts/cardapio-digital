@@ -25,7 +25,7 @@ async function Suporte() {
   // Número do suporte (só dígitos, com DDI), configurado na Vercel; sem ele, só o formulário.
   const whatsapp = (process.env.SUPPORT_WHATSAPP ?? "").replace(/\D/g, "") || null;
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/suporte" title="Suporte" lead="Fale com a gente.">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path), aparecaAllowed: r.apareca_allowed === true }} active="/painel/suporte" title="Suporte" lead="Fale com a gente.">
       <section className="ap-card">
         <div className="ap-card-head">
           <svg className="icon" viewBox="0 0 24 24" aria-hidden>

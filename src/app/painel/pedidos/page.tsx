@@ -27,7 +27,7 @@ async function Pedidos() {
   const open = await listOpenOrders({ db: db as unknown as OrdersDb }, r.id).catch(() => []);
   const initial = open.map(({ id, status, table_label, lines, created_at, total_cents }) => ({ id, status, table_label, lines, created_at, total_cents }));
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/pedidos" title="Pedidos" lead="Pedidos que chegaram das mesas. Toque para mudar o andamento.">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path), aparecaAllowed: r.apareca_allowed === true }} active="/painel/pedidos" title="Pedidos" lead="Pedidos que chegaram das mesas. Toque para mudar o andamento.">
       <KitchenBoard restaurantId={r.id} initial={initial} enabled={!!r.orders_enabled} />
     </PanelShell>
   );

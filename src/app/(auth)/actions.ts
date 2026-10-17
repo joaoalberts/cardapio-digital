@@ -86,7 +86,7 @@ export async function updatePassword(_prev: FormState, formData: FormData): Prom
   redirect("/painel");
 }
 
-// Painel > Editar Perfil: troca a senha conferindo a atual. Continua logado.
+// Painel > Perfil: troca a senha conferindo a atual. Continua logado.
 export async function changePassword(_prev: FormState, formData: FormData): Promise<FormState> {
   const current = String(formData.get("current") ?? "");
   const password = String(formData.get("password") ?? "");

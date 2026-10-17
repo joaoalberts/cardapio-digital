@@ -27,7 +27,7 @@ async function Mesas() {
   const rows = await db.list<{ id: string; label: string; code: string }>("dining_tables", { restaurant_id: r.id });
   const data = rows.map(({ id, label, code }) => ({ id, label, code }));
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/mesas" title="Mesas e QR" lead="As mesas da casa e o QR de cada uma para imprimir.">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path), aparecaAllowed: r.apareca_allowed === true }} active="/painel/mesas" title="Mesas e QR" lead="As mesas da casa e o QR de cada uma para imprimir.">
       <section className="ap-card">
         <div className="ap-card-head">
           <h2>Mesas e QR Code</h2>

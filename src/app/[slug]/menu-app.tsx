@@ -892,7 +892,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   const { restaurant } = menu;
   const languages = restaurant.languages.length ? restaurant.languages : ["pt-BR"];
   const flagCode = LANG_FLAG[lang] ?? "xx";
-  // Banner enviado em Editar Perfil (foto ou vídeo); sem ele, a capa antiga ou o 1º prato.
+  // Banner enviado em Perfil (foto ou vídeo); sem ele, a capa antiga ou o 1º prato.
   const banner = restaurant.cover;
   const coverVideo = banner ? (banner.kind === "video" ? videoSrc(banner, "card") : null) : mediaUrl(restaurant.cover_video_path);
   const coverImage = banner
@@ -1246,7 +1246,7 @@ function CategoryCard({
 const hasInfo = (r: PublicMenu["restaurant"]) =>
   !!(r.description || r.address || r.phone || r.instagram || r.facebook || r.wifi_name || r.payment_methods?.length);
 
-// Informações do restaurante (Editar Perfil): endereço, contato, redes, Wi-Fi e pagamento.
+// Informações do restaurante (Perfil): endereço, contato, redes, Wi-Fi e pagamento.
 function InfoSheet({
   restaurant: r,
   lang,

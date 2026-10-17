@@ -81,18 +81,6 @@ export async function listQueue(rid: string): Promise<QueueResult> {
   return { items, newest: newestOf(items), warn };
 }
 
-// Número de vídeos esperando aprovação (o botão Agora do menu): do mesmo retrato com memo da fila, então
-// navegar pelo painel não gasta leitura quando ele está quente. Em erro, 0: o número nunca trava a página.
-export async function pendingCount(rid: string): Promise<number> {
-  try {
-    if (!(await allowed(rid))) return 0;
-    const snap = await readSnapshot(storeDeps(), rid);
-    return snap.videos.filter((v) => v.restaurant_id === rid && v.status === "pending").length;
-  } catch {
-    return 0;
-  }
-}
-
 async function decide(rid: string, id: string, action: TeamAction): Promise<Result> {
   if (!okId(id) || !(await allowed(rid))) return { error: DENIED };
   try {
