@@ -10,10 +10,11 @@ import { mediaUrl } from "@/lib/menu/media";
 import { muxEnabled } from "@/lib/mux";
 import { currentRestaurant } from "../current";
 import { PanelShell } from "../shell";
-import { listQueue, type QueueResult } from "./actions";
+import { listQueue, loadReport, type QueueResult } from "./actions";
 import { ConfigEditor } from "./config-editor";
 import { Fila } from "./fila";
 import { Institucionais, type HouseItem } from "./institucionais";
+import { Relatorios } from "./relatorios";
 import { Zonas } from "./zonas";
 import "../panel.css";
 import "./apareca.css";
@@ -51,8 +52,9 @@ async function Apareca() {
   const { restaurant, isOwner } = await currentRestaurant();
   const r = restaurant as typeof restaurant & { logo_path: string | null; community_enabled?: unknown } & Raw;
   const mine = { restaurant_id: r.id };
-  const [initial, houseRows, tableRows, tvRows] = await Promise.all([
+  const [initial, report, houseRows, tableRows, tvRows] = await Promise.all([
     listQueue(r.id).catch(() => null),
+    loadReport(r.id, 7).catch(() => null),
     db.list<HouseVideoRow>("apareca_house_videos", mine).catch(() => [] as HouseVideoRow[]),
     db.list<Raw>("dining_tables", mine).catch(() => [] as Raw[]),
     db.list<Raw>("community_tvs", mine).catch(() => [] as Raw[]),
@@ -91,6 +93,7 @@ async function Apareca() {
         />
         <Institucionais rid={r.id} items={house} muxOn={muxEnabled()} />
         <Zonas rid={r.id} zones={cfg.zones} tableZones={cfg.table_zones} tvZones={cfg.tv_zones} tables={tables} tvs={tvs} />
+        <Relatorios rid={r.id} initial={report} />
       </div>
     </PanelShell>
   );

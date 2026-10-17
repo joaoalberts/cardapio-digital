@@ -660,3 +660,168 @@
     transition: none;
   }
 }
+
+/* Relatórios (T16): barras em CSS, sem biblioteca. Texto #1a1a1a e #666 (≥ 5,1:1); as barras levam o número
+   escrito ao lado, então não dependem só da cor. Cabe em 390 px sem rolagem lateral. */
+.ap .app-setup .app-rep {
+  grid-column: 1 / -1;
+  --app-ok: #3f7a1c;
+  --app-no: #b42828;
+  --app-rest: #8f8f8f;
+
+  & .app-rep-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 14px;
+  }
+  & .app-rep-tabs button {
+    flex: 1;
+    min-height: 44px;
+    border-radius: 6px;
+    border: 1.5px solid var(--gold-dark);
+    background: #fff;
+    color: var(--app-ink);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  & .app-rep-tabs button[aria-pressed="true"] {
+    background: var(--gold);
+    border-color: var(--gold);
+  }
+  & .app-rep-body {
+    transition: opacity 0.15s;
+  }
+  & .app-rep-body[data-loading] {
+    opacity: 0.55;
+  }
+  & .app-rep-tiles {
+    list-style: none;
+    margin: 0 0 18px;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+  }
+  & .app-rep-tiles li {
+    display: grid;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    min-width: 0;
+  }
+  & .app-rep-tiles b {
+    font-size: 22px;
+    color: var(--app-ink);
+  }
+  & .app-rep-tiles span {
+    font-size: 13px;
+    color: var(--app-muted);
+  }
+  & .app-rep-legend {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin: 0 0 8px;
+    padding: 0;
+    font-size: 13px;
+    color: var(--app-muted);
+  }
+  & .app-rep-legend i,
+  & .app-rep-track i {
+    display: inline-block;
+    height: 100%;
+  }
+  & .app-rep-legend i {
+    width: 10px;
+    height: 10px;
+    margin-right: 5px;
+    border-radius: 2px;
+  }
+  & .ok {
+    background: var(--app-ok);
+  }
+  & .no {
+    background: var(--app-no);
+  }
+  & .rest {
+    background: var(--app-rest);
+  }
+  & .app-rep-days {
+    list-style: none;
+    margin: 0 0 18px;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+  & .app-rep-days li {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) 32px;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+  }
+  & .app-rep-date {
+    color: var(--app-muted);
+  }
+  & .app-rep-track {
+    display: flex;
+    height: 14px;
+    border-radius: 3px;
+    overflow: hidden;
+    background: #f0f0f0;
+  }
+  & .app-rep-num {
+    min-width: 28px;
+    color: var(--app-ink);
+    font-weight: 600;
+    text-align: right;
+  }
+  & .app-rep-dl {
+    grid-column: 2 / 4;
+    margin-top: -4px;
+    color: var(--app-muted);
+    font-size: 12px;
+  }
+  & .app-rep-hours {
+    list-style: none;
+    margin: 0 0 14px;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(24, minmax(0, 1fr));
+    gap: 2px;
+  }
+  & .app-rep-hours li {
+    display: grid;
+    grid-template-rows: 90px 16px;
+  }
+  & .app-rep-col {
+    display: flex;
+    align-items: flex-end;
+    background: #f5f5f5;
+    border-radius: 2px 2px 0 0;
+  }
+  & .app-rep-col i {
+    display: block;
+    width: 100%;
+    min-height: 0;
+    background: var(--gold-dark);
+    border-radius: 2px 2px 0 0;
+  }
+  & .app-rep-h {
+    font-size: 11px;
+    color: var(--app-muted);
+    text-align: center;
+  }
+  & .app-rep-house {
+    color: var(--app-ink);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ap .app-setup .app-rep .app-rep-body {
+    transition: none;
+  }
+}

@@ -13,8 +13,9 @@ import {
   allowedModes, applyConfigPatch, cleanZones, HOUSE_LIST_MAX, HOUSE_TITLE_MAX, houseSyncPlan, newestOf, NOT_ALLOWED, queueItems,
   reorderHouse, teamDecide, type ConfigPatch, type QueueItem, type TeamAction,
 } from "@/lib/apareca/panel-logic";
+import { aparecaReport, type AparecaReport } from "@/lib/apareca/reports";
 import { aparecaTags, forgetSnapshot, monthUsage, readAparecaHeadFresh, readSnapshot, type StoreDeps } from "@/lib/apareca/store";
-import type { AparecaConfig, HouseVideoRow, Zone } from "@/lib/apareca/types";
+import type { AparecaConfig, AparecaTallyRow, HouseVideoRow, Zone } from "@/lib/apareca/types";
 
 // Painel "Apareça na TV": fila de moderação, configurações, zonas e institucionais. Toda ação confere se quem chamou é membro do
 // restaurante e toda busca filtra pelo restaurante, então um id de outra casa nunca é achado.
@@ -284,4 +285,28 @@ export async function deleteHouse(rid: string, id: string): Promise<Result> {
   }
   refresh(r);
   return {};
+}
+
+// Relatórios: o que já virou apareca_tally (vídeos apagados) mais os vídeos vivos. Confere o membro e lê só
+// as linhas deste restaurante. O dia e a hora seguem o fuso dele.
+export type ReportResult = AparecaReport & { range: 7 | 30; timezone: string };
+const DEFAULT_TZ = "America/Sao_Paulo";
+
+export async function loadReport(rid: string, days: 7 | 30): Promise<ReportResult> {
+  if (!(await allowed(rid))) throw new Error(DENIED);
+  const range: 7 | 30 = days === 30 ? 30 : 7;
+  const [head, tallies, snap] = await Promise.all([
+    readAparecaHeadFresh(rid),
+    db.list<AparecaTallyRow>("apareca_tally", { restaurant_id: rid }),
+    readSnapshot(storeDeps(), rid),
+  ]);
+  const timezone = head?.timezone || DEFAULT_TZ;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const from = new Date(Date.parse(`${today}T00:00:00Z`) - (range - 1) * 86_400_000).toISOString().slice(0, 10);
+  const report = aparecaReport({
+    tallies: tallies.filter((t) => t.restaurant_id === rid),
+    live: snap.videos.filter((v) => v.restaurant_id === rid),
+    from, to: today, timezone,
+  });
+  return { ...report, range, timezone };
 }
