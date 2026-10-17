@@ -68,7 +68,7 @@ export function ItemSheet({ item, focusNote, edit, draft, qty: startQty }: { ite
   return (
     <>
       <div className="g-title">
-        <h2 id="o-item-title" className="fd" tabIndex={-1} data-autofocus>{item.name}</h2>
+        <h2 id="o-item-title" className="o-dish" tabIndex={-1} data-autofocus>{item.name}</h2>
         {shown != null && <span className="g-price">{money(editHalfPrice ?? shown, L)}</span>}
       </div>
       <div className="g-rows">

@@ -407,3 +407,5 @@
 .cm .o-total strong.o-fix { font-size: 18px; }
 /* "Seu pedido" 10 px para dentro, alinhado com o "Total" (pedido do João, 17/10). */
 .cm .g-title.cart .g-ttl { padding-left: 10px; }
+/* Nome do prato na folha do pedido: fonte do sistema (Karla) em negrito, fixa, sem seguir o tema (pedido do João, 17/10). */
+.cm .o-dish { font-family: var(--f-karla), system-ui, sans-serif; font-weight: 700; font-variation-settings: normal; text-transform: none; letter-spacing: -0.02em; }
