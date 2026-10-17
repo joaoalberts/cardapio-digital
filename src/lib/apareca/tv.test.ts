@@ -3,7 +3,8 @@ import { sha256Hex } from "@/lib/comunidade/tv";
 import { DEFAULT_CONFIG } from "./config";
 import { programFor } from "./schedule";
 import {
-  heartbeat, identifyTv, reportPlay, resetTvMemory, type AparecaTvDeps, type TvAppDb, type TvIdentity,
+  flushHouseIfDue, forgetTv, heartbeat, identifyTv, playFromTv, reportPlay, resetTvMemory,
+  type AparecaTvDeps, type TvAppDb, type TvIdentity,
 } from "./tv";
 import type { AparecaConfig, AparecaHead, HouseVideoRow, VideoRow } from "./types";
 
@@ -12,6 +13,7 @@ const OTHER_RID = "22222222-2222-4222-8222-222222222222";
 const TV1 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
 const TV2 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2";
 const ZONE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1";
+const ZONE2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2";
 const V1 = "cccccccc-cccc-4ccc-8ccc-ccccccccccc1";
 const H1 = "dddddddd-dddd-4ddd-8ddd-ddddddddddd1";
 const P = (n: number) => `eeeeeeee-eeee-4eee-8eee-${String(n).padStart(12, "0")}`;
@@ -138,14 +140,14 @@ describe("identifyTv", () => {
     const s = await setup();
     expect(await identifyTv(s.deps, "outro", SECRET_A)).toEqual({ status: 404 });
   });
-  it("a segunda identificação em 5 min não chama o banco; depois de 5 min, chama", async () => {
+  it("a segunda identificação em 60 s não chama o banco; depois de 60 s, chama", async () => {
     const s = await setup();
     await identifyTv(s.deps, "forno", SECRET_A);
     const before = s.calls.list;
-    s.advance(4 * 60_000);
+    s.advance(59_000);
     expect(await identifyTv(s.deps, "forno", SECRET_A)).toEqual(tv1);
     expect(s.calls.list).toBe(before);
-    s.advance(61_000);
+    s.advance(1_000);
     await identifyTv(s.deps, "forno", SECRET_A);
     expect(s.calls.list).toBe(before + 1);
   });
@@ -156,6 +158,23 @@ describe("identifyTv", () => {
     await identifyTv(s.deps, "forno", SECRET_A);
     head = headOf({ config: cfg({ tv_zones: {} }) });
     expect(await identifyTv(s.deps, "forno", SECRET_A)).toEqual({ tvId: TV1, restaurantId: RID, zone: null });
+  });
+  it("revogada nesta instância (forgetTv no revokeTv) → 401 na próxima chamada", async () => {
+    const s = await setup();
+    expect(await identifyTv(s.deps, "forno", SECRET_A)).toEqual(tv1);
+    s.tables.community_tvs[0].revoked = true;
+    forgetTv(TV1);
+    expect(await identifyTv(s.deps, "forno", SECRET_A)).toEqual({ status: 401 });
+    expect(await identifyTv(s.deps, "forno", SECRET_B)).toEqual({ ...tv2, zone: null }); // as outras TVs seguem
+  });
+  it("revogada por outra instância → 401 em até 60 s", async () => {
+    const s = await setup();
+    await identifyTv(s.deps, "forno", SECRET_A);
+    s.tables.community_tvs[0].revoked = true; // o painel rodou em outra instância: sem forgetTv aqui
+    s.advance(30_000);
+    expect(await identifyTv(s.deps, "forno", SECRET_A)).toEqual(tv1);
+    s.advance(30_000);
+    expect(await identifyTv(s.deps, "forno", SECRET_A)).toEqual({ status: 401 });
   });
   it("não guarda 401: TV pareada depois responde na hora", async () => {
     const s = await setup({ tvs: [await tvRow(1, TV1, SECRET_D, { paired_at: null })] });
@@ -276,7 +295,7 @@ describe("reportPlay: institucional soma no uso do mês", () => {
     await reportPlay(s.deps, tv1, { video: H1, play: P(3), kind: "house" });
     expect(s.calls.inserts).toEqual([{
       t: "apareca_tally",
-      rows: [{ restaurant_id: RID, day: "2026-10-16", month: "2026-10", counts: { played_s: 90 }, hours: Array(24).fill(0) }],
+      rows: [{ restaurant_id: RID, day: "2026-10-16", month: "2026-10", counts: { house_played_s: 90 }, hours: Array(24).fill(0) }],
     }]);
     expect(s.tables.apareca_videos[0].plays).toBe(0); // institucional não mexe nos vídeos de clientes
   });
@@ -284,6 +303,121 @@ describe("reportPlay: institucional soma no uso do mês", () => {
     for (const houses of [[], [house({ active: false })], [house({ restaurant_id: OTHER_RID })]]) {
       const s = await setup({ houses });
       expect(await reportPlay(s.deps, tv1, { video: H1, play: P(1), kind: "house" })).toEqual({ ok: false });
+    }
+  });
+});
+
+describe("correção 1", () => {
+  const house3 = (s: Awaited<ReturnType<typeof setup>>, n: number) =>
+    reportPlay(s.deps, tv1, { video: H1, play: P(n), kind: "house" });
+
+  it("falha ao gravar o tally não conta o clipe duas vezes", async () => {
+    const s = await setup();
+    await identifyTv(s.deps, "forno", SECRET_A);
+    await house3(s, 1);
+    s.advance(10 * 60_000);
+    const real = s.deps.db.insert;
+    s.deps.db.insert = async () => { throw new Error("nocodb"); };
+    expect(await house3(s, 2)).toEqual({ ok: true }); // somado na memória, gravação fica para depois
+    expect(await house3(s, 2)).toEqual({ ok: true }); // a TV tenta de novo: não soma outra vez
+    s.deps.db.insert = real;
+    s.advance(60_000);
+    await house3(s, 3);
+    expect(s.calls.inserts.map((i) => i.rows[0].counts)).toEqual([{ house_played_s: 90 }]);
+  });
+
+  it("flushHouseIfDue grava o pendente com 10 min ou mais, e só ele", async () => {
+    const s = await setup();
+    await identifyTv(s.deps, "forno", SECRET_A);
+    await house3(s, 1);
+    s.advance(9 * 60_000);
+    await flushHouseIfDue(s.deps, RID);
+    expect(s.calls.inserts).toEqual([]);
+    s.advance(60_000);
+    await flushHouseIfDue(s.deps, RID);
+    expect(s.calls.inserts.map((i) => i.rows[0].counts)).toEqual([{ house_played_s: 30 }]);
+    await flushHouseIfDue(s.deps, RID);
+    expect(s.calls.inserts).toHaveLength(1);
+  });
+
+  it("vídeo de outra zona → {ok:false} sem gravar; zona apagada vale sem zona", async () => {
+    const head = headOf({ config: cfg({ zones: [{ id: ZONE, name: "Bar" }, { id: ZONE2, name: "Salão" }] }) });
+    const s = await setup({ head, videos: [vid({ zone_id: ZONE2 }) as unknown as Raw] });
+    const tv = await identifyTv(s.deps, "forno", SECRET_A);
+    expect(tv).toEqual(tv1);
+    expect(await reportPlay(s.deps, tv1, { video: V1, play: P(1) })).toEqual({ ok: false });
+    expect(s.calls.writes).toEqual([]);
+    // TV sem zona aceita; vídeo de zona apagada também.
+    expect(await reportPlay(s.deps, { ...tv2, zone: null }, { video: V1, play: P(2) })).toEqual({ ok: true });
+    s.tables.apareca_videos[0].zone_id = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    expect(await reportPlay(s.deps, tv1, { video: V1, play: P(3) })).toEqual({ ok: true });
+  });
+
+  it("tocou com o Apareça fora do ar não grava nada", async () => {
+    for (const head of [headOf({ enabled: false }), headOf({ allowed: false }), headOf({ community_enabled: false })]) {
+      resetTvMemory();
+      const s = await setup({ head });
+      const r = await playFromTv(s.deps, "forno", SECRET_A, { video: V1, play: P(1) });
+      expect(r).toEqual({ status: 404, body: { ok: false, enabled: false } });
+      expect(s.calls.writes).toEqual([]);
+    }
+    const s = await setup();
+    s.deps.off = () => true;
+    expect((await playFromTv(s.deps, "forno", SECRET_A, { video: V1, play: P(1) })).status).toBe(404);
+    expect(s.calls.writes).toEqual([]);
+  });
+
+  it("tocou no ar: identifica e soma; segredo errado → 401", async () => {
+    const s = await setup();
+    expect(await playFromTv(s.deps, "forno", SECRET_C, { video: V1, play: P(1) })).toMatchObject({ status: 401 });
+    expect(await playFromTv(s.deps, "forno", SECRET_A, { video: V1, play: P(1) })).toEqual({ status: 200, body: { ok: true } });
+    expect(s.tables.apareca_videos[0].plays).toBe(1);
+  });
+
+  it("teto de tempo: 100 tocou em 1 s só aceitam até o relógio + 30 s", async () => {
+    const s = await setup({ videos: [vid({ plays_target: 3 }) as unknown as Raw] });
+    let ok = 0;
+    for (let i = 0; i < 100; i++) {
+      if ((await reportPlay(s.deps, tv1, { video: V1, play: P(i) })).ok) ok += 1;
+      s.advance(10);
+    }
+    // Clipes de 6 s: já no ar 0, 6, …, 30 s ≤ 0 s de relógio + 30 s de folga → 6 aceitos.
+    expect(ok).toBe(6);
+    expect(s.tables.apareca_videos[0].plays).toBe(6);
+    // Institucional também conta no mesmo teto da TV.
+    expect(await reportPlay(s.deps, tv1, { video: H1, play: P(500), kind: "house" })).toEqual({ ok: false });
+    // Outra TV tem o seu próprio teto.
+    expect(await reportPlay(s.deps, tv2, { video: V1, play: P(501) })).toEqual({ ok: true });
+    // O tempo passa e a TV volta a ser aceita.
+    s.advance(60_000);
+    expect(await reportPlay(s.deps, tv1, { video: V1, play: P(502) })).toEqual({ ok: true });
+  });
+
+  it("uso normal (um clipe depois do outro, por mais de 10 min) nunca bate no teto", async () => {
+    const s = await setup({ videos: [vid({ plays_target: 999 }) as unknown as Raw] });
+    await identifyTv(s.deps, "forno", SECRET_A);
+    for (let i = 0; i < 200; i++) {
+      const house = i % 4 === 0;
+      const r = await reportPlay(s.deps, tv1, house ? { video: H1, play: P(i), kind: "house" } : { video: V1, play: P(i) });
+      expect(r).toEqual({ ok: true });
+      s.advance(house ? 30_000 : 6_000);
+    }
+  });
+
+  it("institucional: duration_s do corpo limitada à do banco; sem a do banco, vale a do corpo", async () => {
+    const s = await setup({ houses: [house({ duration_ms: 30_000 })] });
+    await identifyTv(s.deps, "forno", SECRET_A);
+    await reportPlay(s.deps, tv1, { video: H1, play: P(1), kind: "house", duration_s: 3_000 });
+    await reportPlay(s.deps, tv1, { video: H1, play: P(2), kind: "house", duration_s: 10 });
+    s.advance(10 * 60_000);
+    await flushHouseIfDue(s.deps, RID);
+    expect(s.calls.inserts.map((i) => i.rows[0].counts)).toEqual([{ house_played_s: 40 }]);
+
+    const s2 = await setup({ houses: [house({ duration_ms: null })] });
+    expect(await reportPlay(s2.deps, tv2, { video: H1, play: P(3), kind: "house" })).toEqual({ ok: false });
+    expect(await reportPlay(s2.deps, tv2, { video: H1, play: P(4), kind: "house", duration_s: 12 })).toEqual({ ok: true });
+    for (const duration_s of [0, -1, "12", Infinity, 99_999]) {
+      expect(await reportPlay(s2.deps, tv2, { video: H1, play: P(5), kind: "house", duration_s })).toEqual({ ok: false });
     }
   });
 });

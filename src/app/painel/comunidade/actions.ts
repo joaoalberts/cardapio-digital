@@ -2,6 +2,7 @@
 
 import { updateTag } from "next/cache";
 import { aparecaTags } from "@/lib/apareca/store";
+import { forgetTv } from "@/lib/apareca/tv";
 import { isMember, isOwner } from "@/lib/auth";
 import * as db from "@/lib/db/nocodb";
 import { pollPhase } from "@/lib/comunidade/clock";
@@ -245,6 +246,7 @@ export async function revokeTv(restaurantId: string, id: string): Promise<Result
   try {
     const n = await db.update("community_tvs", { uid: id, restaurant_id: r.id }, { revoked: true, pair_code: null });
     if (!n) return { error: FAIL };
+    forgetTv(id); // o Apareça na TV desta instância para de reconhecer a TV na hora (as outras, em até 60 s)
   } catch {
     return { error: FAIL };
   }

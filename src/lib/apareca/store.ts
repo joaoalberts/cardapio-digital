@@ -212,11 +212,13 @@ async function computeUsage(db: StoreDb, month: string): Promise<MonthUsage> {
   let encoded_s = 0;
   let played_s = 0;
   let mp4_s = 0;
+  let house_s = 0;
   for (const t of tallies) {
     const c = t.counts ?? {};
     encoded_s += num(c.encoded_s);
     played_s += num(c.played_s);
     mp4_s += num(c.mp4_s);
+    house_s += num(c.house_played_s);
     // Download do MP4 também é entrega; o tally não guarda a duração de cada vídeo, então usa a média do grupo.
     const sent = num(c.sent);
     if (sent) played_s += num(c.downloads) * (num(c.encoded_s) / sent);
@@ -241,9 +243,9 @@ async function computeUsage(db: StoreDb, month: string): Promise<MonthUsage> {
     stored_min_month: houseStoredMin + encoded_s / 60,
     played_s,
     mp4_s,
-    // Minutos dos institucionais exibidos: o "tocou" da TV (T13, tv.ts) grava a duração em linhas de
-    // apareca_tally como played_s (mesmo preço de entrega), já somadas acima. Aqui fica 0 para não contar duas vezes.
-    house_min: 0,
+    // Minutos dos institucionais exibidos: o "tocou" da TV (T13, tv.ts) grava counts.house_played_s em
+    // linhas próprias de apareca_tally. played_s fica só com os vídeos de clientes.
+    house_min: house_s / 60,
   };
 }
 

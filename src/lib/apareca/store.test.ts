@@ -354,6 +354,25 @@ describe("monthUsage", () => {
     expect(h.db.list).toHaveBeenCalledWith("apareca_tally", { month: "2026-10" });
   });
 
+  it("institucionais exibidos (house_played_s do tally) vão para house_min, nunca para played_s", async () => {
+    h.store.apareca_house_videos = [];
+    h.store.apareca_videos = [];
+    h.store.apareca_tally = [
+      tally({ counts: { encoded_s: 60, played_s: 120, mp4_s: 60, sent: 10, downloads: 0 } }),
+      tally({ counts: { house_played_s: 1_800 } }), // linha gravada pelo "tocou" da TV
+      tally({ restaurant_id: RID2, counts: { house_played_s: 600 } }),
+      tally({ day: "2026-09-30", month: "2026-09", counts: { house_played_s: 99_999 } }),
+    ];
+    const { d } = deps();
+    const u = await S.monthUsage(d, "2026-10");
+    expect(u.played_s).toBe(120);
+    expect(u.house_min).toBeCloseTo((1_800 + 600) / 60, 6);
+    // O teto conta os dois: entrega = 2 min de clientes + 40 min de institucionais.
+    const { estimateUsd } = await import("./cost");
+    const free = { ...(await import("./cost")).MUX_PRICES, delivery_free_min: 0 };
+    expect(estimateUsd(u, free)).toBeCloseTo(estimateUsd({ ...u, house_min: 0 }, free) + 40 * free.delivery_per_min, 9);
+  });
+
   it("guarda o resultado por 60 s", async () => {
     let now = T0;
     const { d } = deps({ now: () => now });

@@ -25,6 +25,8 @@ export type HouseVideoRow = {
 export type TallyCounts = {
   sent: number; approved: number; rejected: number; ai_rejected: number; removed: number;
   shown: number; downloads: number; encoded_s: number; played_s: number; mp4_s: number;
+  // Segundos de institucionais exibidos (o "tocou" da TV, T13). Só nas linhas gravadas pela TV.
+  house_played_s?: number;
 };
 export type AparecaTallyRow = {
   id: string; restaurant_id: string; day: string; month: string; counts: Partial<TallyCounts>; hours: number[];
