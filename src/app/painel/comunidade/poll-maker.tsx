@@ -25,7 +25,14 @@ export function NewPoll({ data, onCreated }: { data: PollMakerData; onCreated?: 
 
   return (
     <>
-      <button className="btn primary cp-new" aria-expanded={models} onClick={() => setModels((v) => !v)}>
+      <button
+        className="btn primary cp-new"
+        aria-expanded={models}
+        onClick={() => {
+          setDone(false); // o "Enquete criada." da anterior sai quando a pessoa começa outra
+          setModels((v) => !v);
+        }}
+      >
         <Icon d={ICONS.plus} />
         Nova enquete
       </button>
@@ -33,7 +40,13 @@ export function NewPoll({ data, onCreated }: { data: PollMakerData; onCreated?: 
         <div className="cp-models">
           <span>Comece de um modelo</span>
           {TEMPLATES.map((t) => (
-            <button key={t} onClick={() => setForm(t)}>
+            <button
+              key={t}
+              onClick={() => {
+                setDone(false);
+                setForm(t);
+              }}
+            >
               <em aria-hidden>{TPL[t].emoji}</em>
               <span>
                 <b>{TPL[t].name}</b>

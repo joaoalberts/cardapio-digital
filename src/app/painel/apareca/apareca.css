@@ -1,4 +1,4 @@
-/* Painel: fila do Apareça na TV. Pensado para o celular da equipe: vídeo 9:16 e dois botões
+/* Painel: fila do Apareça na TV (hoje na tela Agora). Pensado para o celular da equipe: vídeo 9:16 e dois botões
    grandes por vídeo. Segue o visual do painel (cartões brancos, botões dourados). Classes app-
    escopadas em .ap .app-fila. Anima só transform e opacity. */
 .ap .app-fila {
@@ -682,18 +682,6 @@
   outline: 2px solid var(--gold-dark);
   outline-offset: -2px;
 }
-.ap .app-tab .app-count {
-  display: inline-grid;
-  place-items: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--gold);
-  color: #1a1a1a;
-  font-size: 13px;
-  font-weight: 700;
-}
 
 /* Linha logo abaixo das abas: o que mudou de lugar. Texto #666 e link dourado escuro #7a5218 no fundo
    do painel (5,1:1 e 6,1:1); o link tem 44 px de altura para o dedo. */
@@ -710,22 +698,6 @@
     color: #7a5218;
     font-weight: 600;
     text-decoration: underline;
-  }
-}
-
-/* Fila: "Para aprovar" e "Na TV agora" lado a lado no computador, um embaixo do outro no celular. */
-.ap .app-fila .app-cols {
-  display: grid;
-  gap: 18px;
-  align-items: start;
-
-  & .ap-card + .ap-card {
-    margin-top: 0;
-  }
-}
-@media (min-width: 1000px) {
-  .ap .app-fila .app-cols {
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   }
 }
 

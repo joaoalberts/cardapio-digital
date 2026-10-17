@@ -16,6 +16,7 @@ import {
 import { aparecaReport, type AparecaReport } from "@/lib/apareca/reports";
 import { aparecaTags, forgetSnapshot, monthUsage, readAparecaHeadFresh, readSnapshot, type StoreDeps } from "@/lib/apareca/store";
 import type { AparecaConfig, AparecaTallyRow, HouseVideoRow, Zone } from "@/lib/apareca/types";
+import { forgetAgora } from "@/lib/painel/agora-memo";
 
 // Painel "Apareça na TV": fila de moderação, configurações, zonas e institucionais. Toda ação confere se quem chamou é membro do
 // restaurante e toda busca filtra pelo restaurante, então um id de outra casa nunca é achado.
@@ -80,10 +81,27 @@ export async function listQueue(rid: string): Promise<QueueResult> {
   return { items, newest: newestOf(items), warn };
 }
 
+// Número de vídeos esperando aprovação (o botão Agora do menu): do mesmo retrato com memo da fila, então
+// navegar pelo painel não gasta leitura quando ele está quente. Em erro, 0: o número nunca trava a página.
+export async function pendingCount(rid: string): Promise<number> {
+  try {
+    if (!(await allowed(rid))) return 0;
+    const snap = await readSnapshot(storeDeps(), rid);
+    return snap.videos.filter((v) => v.restaurant_id === rid && v.status === "pending").length;
+  } catch {
+    return 0;
+  }
+}
+
 async function decide(rid: string, id: string, action: TeamAction): Promise<Result> {
   if (!okId(id) || !(await allowed(rid))) return { error: DENIED };
   try {
-    return await teamDecide({ db, deleteAsset: deleteMuxAsset, forget: forgetSnapshot }, rid, id, action);
+    // A tela Agora tem o próprio memo de 5 s por cima do retrato: esquece os dois.
+    const forget = (r: string) => {
+      forgetSnapshot(r);
+      forgetAgora(r);
+    };
+    return await teamDecide({ db, deleteAsset: deleteMuxAsset, forget }, rid, id, action);
   } catch {
     return { error: "Não foi possível salvar. Tente de novo." };
   }

@@ -20,8 +20,8 @@ const NAV = [
   { href: "/painel/suporte", label: "Suporte", icon: "M4 6h16v12H4zM4 7l8 6 8-6" },
 ] as const;
 
-// "/painel/tvs" ainda não está no menu (a Tarefa 5 refaz o menu); a tela já usa o shell.
-export type PanelHref = (typeof NAV)[number]["href"] | "/painel/tvs";
+// "/painel/tvs" e "/painel/agora" ainda não estão no menu (a Tarefa 5 refaz o menu); as telas já usam o shell.
+export type PanelHref = (typeof NAV)[number]["href"] | "/painel/tvs" | "/painel/agora";
 
 export async function PanelShell({
   restaurant,

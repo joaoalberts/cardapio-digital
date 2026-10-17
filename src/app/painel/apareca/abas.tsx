@@ -1,14 +1,11 @@
 "use client";
 
-import { Children, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
+import { Children, useRef, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
 
-// Abas do painel do Apareça: a Fila (o que a equipe usa de noite) vem primeiro e o resto fica
-// guardado nas outras. Todas continuam montadas (só escondidas) para a Fila seguir consultando e
-// avisando com som mesmo com outra aba aberta. A aba escolhida fica no endereço (#casa, #zonas…)
-// para sobreviver a um recarregar; um # desconhecido (o antigo #zonas) cai na primeira. O número da
-// Fila chega pelo evento PENDING_EVENT. A nota (opcional) fica logo abaixo das abas, visível em todas.
-
-export const PENDING_EVENT = "apareca:pendentes";
+// Abas do painel do Apareça (Vídeos da casa, Ajustes, Números). Todas continuam montadas (só escondidas)
+// para não perder o que se digitou ao trocar de aba. A aba escolhida fica no endereço (#ajustes…) para
+// sobreviver a um recarregar; um # desconhecido (os antigos #fila e #zonas) cai na primeira. A nota
+// (opcional) fica logo abaixo das abas, visível em todas.
 
 export type Aba = { id: string; label: string };
 
@@ -18,17 +15,10 @@ const onHash = (cb: () => void) => {
 };
 const readHash = () => window.location.hash.slice(1);
 
-export function Abas({ abas, pending, note, children }: { abas: Aba[]; pending: number; note?: ReactNode; children: ReactNode }) {
+export function Abas({ abas, note, children }: { abas: Aba[]; note?: ReactNode; children: ReactNode }) {
   const hash = useSyncExternalStore(onHash, readHash, () => "");
   const active = abas.some((a) => a.id === hash) ? hash : abas[0].id;
-  const [count, setCount] = useState(pending);
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
-
-  useEffect(() => {
-    const onCount = (e: Event) => setCount((e as CustomEvent<number>).detail);
-    window.addEventListener(PENDING_EVENT, onCount);
-    return () => window.removeEventListener(PENDING_EVENT, onCount);
-  }, []);
 
   // replace: trocar de aba não enche o "voltar" do navegador.
   const pick = (id: string) => window.location.replace(`#${id === abas[0].id ? "" : id}`);
@@ -64,11 +54,6 @@ export function Abas({ abas, pending, note, children }: { abas: Aba[]; pending: 
             onKeyDown={(e) => onKey(e, i)}
           >
             {a.label}
-            {i === 0 && count > 0 && (
-              <span className="app-count" aria-label={`${count} para aprovar`}>
-                {count}
-              </span>
-            )}
           </button>
         ))}
       </div>

@@ -14,9 +14,8 @@ import { muxEnabled } from "@/lib/mux";
 import { currentRestaurant } from "../current";
 import { PanelShell } from "../shell";
 import { Abas } from "./abas";
-import { listQueue, loadReport, type QueueResult } from "./actions";
+import { loadReport } from "./actions";
 import { ConfigEditor } from "./config-editor";
-import { Fila } from "./fila";
 import { Institucionais, type HouseItem } from "./institucionais";
 import { Relatorios } from "./relatorios";
 import "../panel.css";
@@ -34,16 +33,14 @@ export default function AparecaPage() {
   );
 }
 
-// A ordem segue o uso: a Fila de noite, os vídeos da casa de vez em quando, os ajustes quase nunca
-// e os números quando o dono quer olhar. As zonas e as TVs foram para a tela TVs.
+// A ordem segue o uso: os vídeos da casa de vez em quando, os ajustes quase nunca e os números quando o
+// dono quer olhar. A Fila foi para a tela Agora; as zonas e as TVs, para a tela TVs.
 const ABAS = [
-  { id: "fila", label: "Fila" },
   { id: "casa", label: "Vídeos da casa" },
   { id: "ajustes", label: "Ajustes" },
   { id: "numeros", label: "Números" },
 ];
 
-const EMPTY: QueueResult = { items: [], newest: null, warn: "ok" };
 type Raw = Record<string, unknown>;
 
 function toHouseItem(h: HouseVideoRow): HouseItem {
@@ -61,10 +58,9 @@ function toHouseItem(h: HouseVideoRow): HouseItem {
 
 async function Apareca() {
   const { restaurant, isOwner } = await currentRestaurant();
-  const r = restaurant as typeof restaurant & { logo_path: string | null; community_enabled?: unknown } & Raw;
+  const r = restaurant as typeof restaurant & { logo_path: string | null } & Raw;
   const mine = { restaurant_id: r.id };
-  const [initial, report, houseRows, user] = await Promise.all([
-    listQueue(r.id).catch(() => null),
+  const [report, houseRows, user] = await Promise.all([
     loadReport(r.id, 7).catch(() => null),
     db.list<HouseVideoRow>("apareca_house_videos", mine).catch(() => [] as HouseVideoRow[]),
     currentUser().catch(() => null),
@@ -83,14 +79,17 @@ async function Apareca() {
     <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/apareca" title="Apareça na TV">
       <Abas
         abas={ABAS}
-        pending={(initial ?? EMPTY).items.filter((i) => i.status === "pending").length}
         note={
-          <p className="app-moved">
-            As TVs ficam em <Link href="/painel/tvs">Mais › TVs</Link>
-          </p>
+          <>
+            <p className="app-moved">
+              Os vídeos para aprovar ficam em <Link href="/painel/agora">Agora</Link>
+            </p>
+            <p className="app-moved">
+              As TVs ficam em <Link href="/painel/tvs">Mais › TVs</Link>
+            </p>
+          </>
         }
       >
-        <Fila rid={r.id} initial={initial ?? EMPTY} initialOk={initial !== null} communityOn={r.community_enabled === true} />
         <div className="app-setup">
           <Institucionais rid={r.id} items={house} muxOn={muxEnabled()} />
         </div>

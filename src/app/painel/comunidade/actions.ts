@@ -10,6 +10,7 @@ import { communityTags, getCommunityHead } from "@/lib/comunidade/server";
 import { confirmPair } from "@/lib/comunidade/tv";
 import type { PollRow } from "@/lib/comunidade/types";
 import { toContent } from "@/lib/comunidade/votes";
+import { forgetAgora } from "@/lib/painel/agora-memo";
 import { getPublicMenu } from "@/lib/menu/data";
 import { ownsFile, removeFiles } from "@/lib/storage";
 import { inCommunityFolder, pollOverlap, validatePoll, type PollInput } from "./validate";
@@ -39,6 +40,7 @@ async function mine(restaurantId: string, owner = false): Promise<Rest | null> {
 function refresh(r: Rest) {
   updateTag(communityTags.rid(r.id));
   updateTag(communityTags.slug(r.slug));
+  forgetAgora(r.id); // enquete e TVs da tela Agora (memo de 5 s desta instância)
 }
 
 // Pratos que estão no cardápio agora (sem os produtos especiais, que ficam escondidos).
