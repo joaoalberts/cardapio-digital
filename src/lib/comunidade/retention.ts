@@ -1,7 +1,7 @@
 // Retenção diária da Comunidade (cron em /api/cron/comunidade, 06h em São Paulo).
 // - votos: 1 dia só, renova toda manhã (Decisão do João, 16/10). Sai todo voto criado antes
 //   do início do dia da Comunidade atual (day_start no fuso do restaurante, padrão 05:00);
-//   com day_start depois das 06h, o cron da manhã corta em "agora" (voteCutoff).
+//   se na hora do cron o dia ainda não virou no fuso dele, o corte é a própria rodada (voteCutoff).
 //   Antes, o resultado final da enquete encerrada vai para community_polls.result, que o
 //   estado público e o story passam a usar. Voto de enquete ainda aberta fica até ela encerrar;
 // - tally (funil) com mais de 90 dias;
@@ -50,9 +50,9 @@ export type RetentionPlan = {
   tvs: string[];
 };
 
-// Corte dos votos de cada restaurante (voteCutoff: a virada do dia atual ou, de manhã com
-// day_start depois das 06h, agora); sem relógio conhecido (restaurante apagado), 05:00 em
-// São Paulo.
+// Corte dos votos de cada restaurante (voteCutoff, na última rodada agendada do cron: a
+// virada do dia ou, se ainda não virou, a rodada); sem relógio conhecido (restaurante
+// apagado), 05:00 em São Paulo.
 function dayStartOf(clocks: RestaurantClock[], now: Date): (rid: string) => number {
   const memo = new Map<string, number>();
   const byId = new Map(clocks.map((c) => [c.id, c]));

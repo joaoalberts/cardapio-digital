@@ -134,12 +134,12 @@ export function publicPoll(p: PollRow, votes: VoteRow[], now: Date): PublicPoll 
   };
 }
 
-// Enquete encerrada, sem result e que começou antes do corte do cron (voteCutoff: a virada
-// do dia atual da Comunidade, ou agora de manhã com day_start depois das 06h):
-// a retenção da manhã apaga os votos dela criados antes da virada logo depois de gravar o
+// Enquete encerrada, sem result e que começou antes do corte da última rodada do cron
+// (voteCutoff): a retenção apaga os votos dela criados antes do corte logo depois de gravar o
 // result, e a agenda em cache (de cada instância) pode seguir sem ele. Contar os votos que
 // sobraram daria um resultado errado ("Deu C 100%"), então quem mostra a enquete lê a linha
-// direto do banco. Enquete que começou hoje ainda tem todos os votos: segue o cache.
+// direto do banco. Enquete que começou depois da última rodada ainda tem todos os votos:
+// segue o cache.
 export function needsFreshResult(p: PollRow, head: CommunityHead, now: Date): boolean {
   if (p.result || pollPhase(p, now) !== "closed") return false;
   return ms(p.starts_at) < voteCutoff(now, head.timezone, head.day_start).getTime();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLOSED_POLL_LINGER_MS, DAY_START_DEFAULT, communityDay, currentPoll, dayBounds, nextPoll, pollPhase, voteCutoff } from "./clock";
+import { CLOSED_POLL_LINGER_MS, DAY_START_DEFAULT, communityDay, currentPoll, dayBounds, nextPoll, lastCron, pollPhase, voteCutoff } from "./clock";
 import type { PollRow } from "./types";
 
 const TZ = "America/Sao_Paulo";
@@ -179,21 +179,30 @@ describe("nextPoll", () => {
 describe("voteCutoff: até onde o cron apaga os votos", () => {
   const SP = "America/Sao_Paulo";
   const at = (s: string) => new Date(s);
-  it("day_start antes da manhã: a virada do dia atual", () => {
-    // 06:00 em São Paulo; virada às 05:00 (08:00Z)
-    expect(voteCutoff(at("2026-10-16T09:00:00Z"), SP, "05:00").toISOString()).toBe("2026-10-16T08:00:00.000Z");
-    expect(voteCutoff(at("2026-10-16T09:00:00Z"), SP, "06:00").toISOString()).toBe("2026-10-16T09:00:00.000Z");
+  const cut = (now: string, tz: string, ds: string) => voteCutoff(at(now), tz, ds).toISOString();
+  it("lastCron: a última rodada das 06h de São Paulo (09:00Z)", () => {
+    expect(lastCron(at("2026-10-16T09:00:00Z")).toISOString()).toBe("2026-10-16T09:00:00.000Z");
+    expect(lastCron(at("2026-10-16T08:59:59Z")).toISOString()).toBe("2026-10-15T09:00:00.000Z");
+    expect(lastCron(at("2026-10-17T02:00:00Z")).toISOString()).toBe("2026-10-16T09:00:00.000Z");
   });
-  it("day_start depois das 06h, de manhã: o dia não virou, mas a noite acabou (corta agora)", () => {
-    expect(voteCutoff(at("2026-10-16T09:00:00Z"), SP, "07:00").toISOString()).toBe("2026-10-16T09:00:00.000Z");
-    expect(voteCutoff(at("2026-10-16T09:00:00Z"), SP, "12:00").toISOString()).toBe("2026-10-16T09:00:00.000Z");
+  it("dia já virado na hora do cron: a virada", () => {
+    expect(cut("2026-10-16T09:00:00Z", SP, "05:00")).toBe("2026-10-16T08:00:00.000Z");
+    expect(cut("2026-10-16T09:00:00Z", SP, "06:00")).toBe("2026-10-16T09:00:00.000Z");
+    // Lisboa: o cron é às 10h de lá, o dia virou às 05h (04:00Z)
+    expect(cut("2026-10-16T09:00:00Z", "Europe/Lisbon", "05:00")).toBe("2026-10-16T04:00:00.000Z");
   });
-  it("de madrugada (antes das 06h), a noite ainda corre: só a virada do dia atual", () => {
-    // 03:00 em São Paulo, virada às 05:00: o dia começou ontem às 05:00 (08:00Z do dia 15)
-    expect(voteCutoff(at("2026-10-16T06:00:00Z"), SP, "05:00").toISOString()).toBe("2026-10-15T08:00:00.000Z");
-    expect(voteCutoff(at("2026-10-16T06:00:00Z"), SP, "07:00").toISOString()).toBe("2026-10-15T10:00:00.000Z");
+  it("day_start depois da hora do cron no fuso: o corte é a rodada (a noite acabou)", () => {
+    expect(cut("2026-10-16T09:00:00Z", SP, "07:00")).toBe("2026-10-16T09:00:00.000Z");
+    expect(cut("2026-10-16T09:00:00Z", SP, "12:00")).toBe("2026-10-16T09:00:00.000Z");
+    // fusos a oeste: Manaus (cron às 05h de lá) e Rio Branco (04h de lá)
+    expect(cut("2026-10-16T09:00:00Z", "America/Manaus", "07:00")).toBe("2026-10-16T09:00:00.000Z");
+    expect(cut("2026-10-16T09:00:00Z", "America/Rio_Branco", "05:00")).toBe("2026-10-16T09:00:00.000Z");
   });
-  it("depois da virada, a virada de hoje", () => {
-    expect(voteCutoff(at("2026-10-16T12:00:00Z"), SP, "07:00").toISOString()).toBe("2026-10-16T10:00:00.000Z");
+  it("entre rodadas, vale o corte da última (não o de agora)", () => {
+    // 03:00 em São Paulo: a última rodada foi ontem às 06h
+    expect(cut("2026-10-16T06:00:00Z", SP, "05:00")).toBe("2026-10-15T08:00:00.000Z");
+    expect(cut("2026-10-16T06:00:00Z", SP, "07:00")).toBe("2026-10-15T09:00:00.000Z");
+    // 15:00 com day_start 12:00: ainda o corte da rodada das 06h
+    expect(cut("2026-10-16T18:00:00Z", SP, "12:00")).toBe("2026-10-16T09:00:00.000Z");
   });
 });

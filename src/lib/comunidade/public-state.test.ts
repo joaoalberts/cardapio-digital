@@ -407,6 +407,16 @@ describe("needsFreshResult: enquete encerrada que o cron já pode ter limpado", 
   it("day_start 07:00: o cron das 06h já apagou os votos da noite, lê a linha", () => {
     expect(needsFreshResult(night, { ...HEAD, day_start: "07:00" }, at)).toBe(true);
   });
+  it("enquete da manhã com day_start depois dela: começou depois da rodada do cron, segue o cache", () => {
+    // day_start 12:00, enquete das 10:00 às 10:30 em São Paulo; o cron das 06h não a tocou
+    const morning = poll({ starts_at: "2026-10-16T13:00:00Z", ends_at: "2026-10-16T13:30:00Z" });
+    const head = { ...HEAD, day_start: "12:00" };
+    expect(needsFreshResult(morning, head, new Date("2026-10-16T14:00:00Z"))).toBe(false);
+    expect(needsFreshResult(morning, head, new Date("2026-10-16T18:00:00Z"))).toBe(false);
+    // depois da rodada do dia seguinte, os votos podem ter saído: lê a linha
+    expect(needsFreshResult(morning, head, new Date("2026-10-17T09:30:00Z"))).toBe(true);
+  });
+
   it("com result gravado, ou ainda aberta, segue o cache", () => {
     expect(needsFreshResult({ ...night, result: { a: 100, b: 0, c: 0, has_votes: true, winner: "a" } }, HEAD, at)).toBe(false);
     expect(needsFreshResult(poll({ starts_at: "2026-10-16T09:00:00Z", ends_at: "2026-10-16T10:00:00Z" }), HEAD, at)).toBe(false);
