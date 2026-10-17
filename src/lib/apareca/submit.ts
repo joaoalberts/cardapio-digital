@@ -2,6 +2,7 @@ import "server-only";
 import { sharedLimiter, type Limiter } from "@/lib/comunidade/limiter";
 import type { PollRow, TvRow } from "@/lib/comunidade/types";
 import type * as nocodb from "@/lib/db/nocodb";
+import { serverNow } from "./clock";
 import { featureState } from "./config";
 import { tetoUsd, uploadGate } from "./cost";
 import { onAssetReady } from "./moderation";
@@ -72,7 +73,7 @@ const MEMO_MAX = 5_000;
 
 type Raw = Record<string, unknown>;
 const isObj = (v: unknown): v is Raw => typeof v === "object" && v !== null && !Array.isArray(v);
-const clock = (d: Pick<SubmitDeps, "now">) => (d.now ?? (() => new Date()))();
+const clock = (d: Pick<SubmitDeps, "now">) => (d.now ?? serverNow)();
 const storeDeps = (d: SubmitDeps): StoreDeps => ({ db: d.db, mux: d.store.mux, now: d.store.now ?? d.now, defer: d.store.defer });
 const later = (d: SubmitDeps, fn: () => Promise<void>) =>
   d.store.defer ? d.store.defer(fn) : void fn().catch(() => {});

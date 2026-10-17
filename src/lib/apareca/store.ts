@@ -3,6 +3,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import * as nocodb from "@/lib/db/nocodb";
 import { SLUG_PATTERN } from "@/lib/slug";
 import { toHead } from "@/lib/comunidade/votes";
+import { serverNow } from "./clock";
 import { parseConfig } from "./config";
 import { resolveStuck } from "./moderation";
 import { releaseMuxUpload } from "./mux-video";
@@ -104,7 +105,7 @@ const gone = (v: VideoRow, now: Date) => isExpired(v, now) || isStuckUpload(v, n
 const runNow = (fn: () => Promise<void>) => void fn().catch(() => {});
 
 export async function readSnapshot(d: StoreDeps, rid: string): Promise<Snapshot> {
-  const now = (d.now ?? (() => new Date()))();
+  const now = (d.now ?? serverNow)();
   const t = now.getTime();
   let s = snaps.get(rid);
   if (!s || t - s.at >= SNAPSHOT_MS || t < s.at) {
@@ -160,7 +161,7 @@ async function timezones(db: StoreDb, rids: string[]): Promise<(rid: string) => 
 // se resolveu segura a linha (e fica fora do tally) para a próxima leitura tentar de novo.
 // Várias linhas de tally para o mesmo restaurante e dia são normais: quem lê sempre soma.
 export async function purge(d: StoreDeps, rows: VideoRow[]): Promise<{ deleted: number; failed: number }> {
-  const now = (d.now ?? (() => new Date()))();
+  const now = (d.now ?? serverNow)();
   const t = now.getTime();
   const candidates = rows.filter((v) => gone(v, now) && !wasPurged(v.id, t));
   if (!candidates.length) return { deleted: 0, failed: 0 };
@@ -251,7 +252,7 @@ async function computeUsage(db: StoreDb, month: string): Promise<MonthUsage> {
 
 // Soma de todas as casas (o teto é da conta do Mux, não do restaurante). Memória de 60 s por mês.
 export async function monthUsage(d: StoreDeps, month: string): Promise<MonthUsage> {
-  const t = (d.now ?? (() => new Date()))().getTime();
+  const t = (d.now ?? serverNow)().getTime();
   const m = usageMemo.get(month);
   if (m && t - m.at < USAGE_MS && t >= m.at) return m.p;
   const fresh = { at: t, p: computeUsage(d.db, month) };
