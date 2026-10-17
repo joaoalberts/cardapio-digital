@@ -47,6 +47,33 @@ export function alertStep(prev: AlertState, items: QueueItem[]): AlertState & { 
   return { newest: prev.newest, primed: true, ring: false };
 }
 
+// Mensagens da fila. O erro de leitura (load) some na próxima consulta que der certo. A mensagem
+// de uma ação (action) só some na próxima ação, quando a pessoa toca em fechar ou depois de
+// NOTICE_MS; uma consulta nunca apaga a resposta de uma ação.
+export const NOTICE_MS = 8_000;
+export type Notice = { load: string | null; action: { text: string; at: number } | null };
+export type NoticeEvent =
+  | { type: "load_ok" }
+  | { type: "load_fail"; text: string }
+  | { type: "action"; text: string | null; at: number }
+  | { type: "close" }
+  | { type: "tick"; at: number };
+export function noticeOn(n: Notice, ev: NoticeEvent): Notice {
+  switch (ev.type) {
+    case "load_ok":
+      return n.load === null ? n : { ...n, load: null };
+    case "load_fail":
+      return { ...n, load: ev.text };
+    case "action":
+      return { ...n, action: ev.text ? { text: ev.text, at: ev.at } : null };
+    case "close":
+      return { ...n, action: null };
+    case "tick":
+      return n.action && ev.at - n.action.at >= NOTICE_MS ? { ...n, action: null } : n;
+  }
+}
+export const noticeText = (n: Notice): string | null => n.action?.text ?? n.load;
+
 // Consultas da fila: no máximo uma automática por vez (busy), e só a resposta do pedido mais novo
 // vale (current). bump() invalida as que estão em andamento (ação local mais nova que elas).
 export function latestOnly() {

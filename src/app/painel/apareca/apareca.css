@@ -22,6 +22,19 @@
     background: rgba(226, 134, 47, 0.12);
     color: #8a4f12;
   }
+  & .app-note {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  & .app-note-x {
+    flex: none;
+    min-height: 40px;
+    padding: 0 12px;
+    border-radius: 6px;
+    text-decoration: underline;
+  }
   & .app-band-stop {
     background: rgba(214, 60, 60, 0.1);
     color: #9e2323;

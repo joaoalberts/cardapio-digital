@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { alertPattern, alertStep, latestOnly, type AlertState, type QueueItem } from "@/lib/apareca/panel-logic";
+import {
+  alertPattern, alertStep, latestOnly, NOTICE_MS, noticeOn, noticeText, type AlertState, type Notice, type NoticeEvent, type QueueItem,
+} from "@/lib/apareca/panel-logic";
 import { useHls } from "@/lib/menu/use-hls";
 import { approveVideo, listQueue, rejectVideo, removeFromTv, type QueueResult } from "./actions";
 
@@ -71,7 +73,8 @@ function Clip({ item }: { item: QueueItem }) {
 export function Fila({ rid, initial, initialOk, communityOn }: { rid: string; initial: QueueResult; initialOk: boolean; communityOn: boolean }) {
   const [items, setItems] = useState(initial.items);
   const [warn, setWarn] = useState(initial.warn);
-  const [err, setErr] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice>({ load: null, action: null });
+  const note = useCallback((ev: NoticeEvent) => setNotice((n) => noticeOn(n, ev)), []);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [undo, setUndo] = useState<Set<string>>(new Set()); // reprovações esperando os 5 s
@@ -93,13 +96,13 @@ export function Fila({ rid, initial, initialOk, communityOn }: { rid: string; in
       try {
         r = await listQueue(rid);
       } catch {
-        if (q.current(n)) setErr(LOAD_FAIL);
+        if (q.current(n)) note({ type: "load_fail", text: LOAD_FAIL });
         return;
       } finally {
         q.end(n);
       }
       if (!q.current(n)) return;
-      setErr(null);
+      note({ type: "load_ok" });
       const step = alertStep(alert.current, r.items);
       alert.current = { newest: step.newest, primed: step.primed };
       if (step.ring && audio.current) {
@@ -110,7 +113,7 @@ export function Fila({ rid, initial, initialOk, communityOn }: { rid: string; in
       setWarn(r.warn);
       setNow(Date.now());
     },
-    [rid],
+    [rid, note],
   );
 
   // 10 s com a aba visível; escondida, não consulta. Ao voltar à aba, consulta na hora.
@@ -139,6 +142,14 @@ export function Fila({ rid, initial, initialOk, communityOn }: { rid: string; in
     };
   }, [load]);
 
+  // A mensagem de uma ação some sozinha depois de NOTICE_MS (ou antes, em "Fechar").
+  const actionAt = notice.action?.at;
+  useEffect(() => {
+    if (actionAt === undefined) return;
+    const t = setTimeout(() => note({ type: "tick", at: Date.now() }), Math.max(0, actionAt + NOTICE_MS - Date.now()));
+    return () => clearTimeout(t);
+  }, [actionAt, note]);
+
   const mark = (id: string, on: boolean) =>
     setBusy((b) => {
       const n = new Set(b);
@@ -153,17 +164,17 @@ export function Fila({ rid, initial, initialOk, communityOn }: { rid: string; in
       try {
         const r = await act(rid, id);
         queries.current.bump(); // consulta que saiu antes da ação traria a lista velha
-        if (r.error) setErr(r.error);
-        else
+        note({ type: "action", text: r.error ?? null, at: Date.now() });
+        if (!r.error)
           setItems((list) =>
             approved ? list.map((x) => (x.id === id ? { ...x, status: "approved" as const } : x)) : list.filter((x) => x.id !== id),
           );
       } catch {
-        setErr(SAVE_FAIL);
+        note({ type: "action", text: SAVE_FAIL, at: Date.now() });
       }
       await load();
     },
-    [rid, load],
+    [rid, load, note],
   );
 
   const approve = async (id: string) => {
@@ -243,10 +254,15 @@ export function Fila({ rid, initial, initialOk, communityOn }: { rid: string; in
           {WARN_TEXT[warn]}
         </p>
       )}
-      {err && (
-        <p className="app-band app-band-stop" role="alert">
-          {err}
-        </p>
+      {noticeText(notice) && (
+        <div className="app-band app-band-stop app-note" role="alert">
+          <span>{noticeText(notice)}</span>
+          {notice.action && (
+            <button type="button" className="app-note-x" onClick={() => note({ type: "close" })}>
+              Fechar
+            </button>
+          )}
+        </div>
       )}
 
       <div className="app-bar">

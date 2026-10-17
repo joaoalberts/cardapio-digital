@@ -61,7 +61,9 @@ vi.mock("@/lib/apareca/store", () => ({
 }));
 
 import { approveVideo, rejectVideo, removeFromTv } from "@/app/painel/apareca/actions";
-import { alertPattern, alertStep, hasNew, latestOnly, newestOf, queueItems, TEAM_ERRORS, type QueueItem } from "./panel-logic";
+import {
+  alertPattern, alertStep, hasNew, latestOnly, newestOf, NOTICE_MS, noticeOn, noticeText, queueItems, TEAM_ERRORS, type Notice, type QueueItem,
+} from "./panel-logic";
 
 const RID = "00000000-0000-4000-8000-000000000001";
 const OTHER = "00000000-0000-4000-8000-000000000002";
@@ -131,6 +133,31 @@ describe("alertStep", () => {
   });
   it("carga inicial boa e vazia: o primeiro vídeo que chega toca", () => {
     expect(alertStep({ newest: null, primed: true }, [item({ created_at: t1 })]).ring).toBe(true);
+  });
+});
+
+describe("noticeOn (mensagens da fila)", () => {
+  const empty: Notice = { load: null, action: null };
+  const decided = noticeOn(empty, { type: "action", text: TEAM_ERRORS.ai_rejected, at: 1_000 });
+  it("a consulta que dá certo limpa o erro de leitura, nunca a mensagem da ação", () => {
+    const n = noticeOn(decided, { type: "load_ok" });
+    expect(noticeText(n)).toBe(TEAM_ERRORS.ai_rejected);
+    const failed = noticeOn(empty, { type: "load_fail", text: "sem internet" });
+    expect(noticeText(noticeOn(failed, { type: "load_ok" }))).toBeNull();
+  });
+  it("a mensagem da ação fica pelo menos 6 s (NOTICE_MS) e some depois do prazo", () => {
+    expect(NOTICE_MS).toBeGreaterThanOrEqual(6_000);
+    expect(noticeText(noticeOn(decided, { type: "tick", at: 1_000 + NOTICE_MS - 1 }))).toBe(TEAM_ERRORS.ai_rejected);
+    expect(noticeText(noticeOn(decided, { type: "tick", at: 1_000 + NOTICE_MS }))).toBeNull();
+  });
+  it("tocar em fechar ou fazer outra ação que deu certo tira a mensagem", () => {
+    expect(noticeText(noticeOn(decided, { type: "close" }))).toBeNull();
+    expect(noticeText(noticeOn(decided, { type: "action", text: null, at: 2_000 }))).toBeNull();
+  });
+  it("mensagem da ação passa na frente do erro de leitura", () => {
+    const both = noticeOn(noticeOn(empty, { type: "load_fail", text: "sem internet" }), { type: "action", text: TEAM_ERRORS.gone, at: 1 });
+    expect(noticeText(both)).toBe(TEAM_ERRORS.gone);
+    expect(noticeText(noticeOn(both, { type: "close" }))).toBe("sem internet");
   });
 });
 
