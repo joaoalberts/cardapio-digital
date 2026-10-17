@@ -405,3 +405,5 @@
 /* Título e total do carrinho discretos (pedido do João, 17/10): 16 e 18 px. */
 .cm .g-title.cart h2.o-fix { font-size: 16px; }
 .cm .o-total strong.o-fix { font-size: 18px; }
+/* "Seu pedido" 10 px para dentro, alinhado com o "Total" (pedido do João, 17/10). */
+.cm .g-title.cart .g-ttl { padding-left: 10px; }
