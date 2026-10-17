@@ -3,7 +3,7 @@
 // api/comunidade/[slug]/story lê o banco, as imagens e desenha o PNG com o next/og.
 // Regras: o restaurante vem do slug; só o resultado em porcentagem (nunca contagem, device
 // nem mesa) ou uma foto aprovada da casa; Comunidade desligada não gera arte.
-import { mediaUrl, thumbSrc } from "@/lib/menu/media";
+import { mediaUrl, posterSrc } from "@/lib/menu/media";
 import type { MenuItem, PublicMenu } from "@/lib/menu/types";
 import { houseHighlight, leaderOf, questionText } from "./client-logic";
 import { pollPhase } from "./clock";
@@ -119,7 +119,7 @@ export async function resolveStory(
     const leadOpt = pub.options.find((o) => o.id === lead);
     const photo = leadOpt?.item_id ? storyPhoto(items.get(leadOpt.item_id)) : null;
     // Miniatura de cada opção (as perdedoras aparecem ao lado do %); opção sem prato, nada.
-    const thumbs = Object.fromEntries(pub.options.map((o) => [o.id, o.item_id ? thumbSrc(items.get(o.item_id)) : null]));
+    const thumbs = Object.fromEntries(pub.options.map((o) => [o.id, o.item_id ? storyThumb(items.get(o.item_id)) : null]));
     return { kind: "poll", head, poll: { ...pub, options }, photo, thumbs, lang };
   }
 
@@ -234,4 +234,12 @@ export function qrPath(size: number, dark: (row: number, col: number) => boolean
     for (let c = 0; c < size; c++) if (dark(r, c)) d += `M${c} ${r}h1v1h-1z`;
   }
   return d;
+}
+
+// Miniatura para a arte do story: o endereço completo do original (a arte é desenhada no servidor, que
+// não resolve o /api/img relativo que o thumbSrc do cardápio usa).
+function storyThumb(item: MenuItem | undefined): string | null {
+  const m = item?.media[0];
+  if (!m) return null;
+  return posterSrc(m) ?? (m.kind === "photo" ? mediaUrl(m.storage_path) : null);
 }
