@@ -17,9 +17,10 @@ export const HEARTBEAT_MS = 60_000; // last_seen_at no máx. 1x por minuto por T
 // por "tocou" encheria o tally (um institucional de 30 s são 120 linhas por hora por TV).
 export const HOUSE_FLUSH_MS = 10 * 60_000;
 const PLAY_MEMORY_MS = 60 * 60_000; // um "play" repetido dentro de 1 h conta uma vez
-// Teto de tempo por TV: o que ela já disse que tocou (clientes + institucionais) numa janela de
-// 10 min, contando o clipe novo, não passa do tempo de relógio desde o primeiro "tocou" aceito na
-// janela + 30 s de folga.
+// Teto de tempo por TV: a TV avisa no INÍCIO de cada clipe, então o que ela já tocou antes deste
+// clipe (clientes + institucionais, numa janela de 10 min) não passa do tempo de relógio desde o
+// primeiro "tocou" aceito na janela + 30 s de folga. O clipe novo soma depois, com a duração do
+// banco (ou no máximo 60 s sem ela): o pior abuso fica em relógio + 30 s + um clipe limitado.
 // Uma TV (ou um segredo vazado) não infla plays nem o uso do mês mais rápido do que o tempo passa.
 export const AIR_WINDOW_MS = 10 * 60_000;
 export const AIR_SLACK_S = 30;
@@ -169,7 +170,7 @@ function reserveAir(tvId: string, s: number, t: number): (() => void) | null {
   const list = (onAir.get(tvId) ?? []).filter((e) => e.at > t - AIR_WINDOW_MS && e.at <= t);
   const start = list.length ? list[0].at : t;
   const used = list.reduce((n, e) => n + e.s, 0);
-  if (used + s > (t - start) / 1000 + AIR_SLACK_S) {
+  if (used > (t - start) / 1000 + AIR_SLACK_S) {
     onAir.set(tvId, list);
     return null;
   }

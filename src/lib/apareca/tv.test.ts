@@ -374,17 +374,17 @@ describe("correção 1", () => {
     expect(s.tables.apareca_videos[0].plays).toBe(1);
   });
 
-  it("teto de tempo: 100 tocou em 1 s só aceitam até o relógio + 30 s (o clipe novo entra na conta)", async () => {
+  it("teto de tempo: 100 tocou em 1 s só aceitam até o relógio + 30 s + um clipe", async () => {
     const s = await setup({ videos: [vid({ plays_target: 3 }) as unknown as Raw] });
     let ok = 0;
     for (let i = 0; i < 100; i++) {
       if ((await reportPlay(s.deps, tv1, { video: V1, play: P(i) })).ok) ok += 1;
       s.advance(10);
     }
-    // Clipes de 6 s, relógio de ~1 s: no máximo 1 + 30 = 31 s no ar → 5 clipes (30 s), nunca 6 (36 s).
-    expect(ok * 6).toBeLessThanOrEqual(1 + 30);
-    expect(ok).toBe(5);
-    expect(s.tables.apareca_videos[0].plays).toBe(5);
+    // Clipes de 6 s, relógio de ~1 s: já no ar 0, 6, …, 30 s ≤ 1 + 30 → 6 clipes (36 s ≤ 1 + 30 + 6).
+    expect(ok * 6).toBeLessThanOrEqual(1 + 30 + 6);
+    expect(ok).toBe(6);
+    expect(s.tables.apareca_videos[0].plays).toBe(6);
     // Institucional também conta no mesmo teto da TV.
     expect(await reportPlay(s.deps, tv1, { video: H1, play: P(500), kind: "house" })).toEqual({ ok: false });
     // Outra TV tem o seu próprio teto.
@@ -438,5 +438,31 @@ describe("correção 2", () => {
       await flushHouseIfDue(s.deps, RID);
       expect(s.calls.inserts.map((i) => i.rows[0].counts)).toEqual([{ house_played_s: 70 }]);
     }
+  });
+});
+
+describe("correção 3", () => {
+  const H2 = "dddddddd-dddd-4ddd-8ddd-ddddddddddd2";
+  it("institucionais de 45 s e de 10 min (duração no banco) são aceitos já no primeiro tocou e em sequência", async () => {
+    const houses = [house({ duration_ms: 45_000 }), house({ Id: 2, id: H2, position: 2, duration_ms: 600_000 })];
+    const s = await setup({ houses });
+    await identifyTv(s.deps, "forno", SECRET_A);
+    let n = 0;
+    for (let i = 0; i < 6; i++) {
+      const long = i % 2 === 1;
+      expect(await reportPlay(s.deps, tv1, { video: long ? H2 : H1, play: P(++n), kind: "house" })).toEqual({ ok: true });
+      s.advance(long ? 600_000 : 45_000);
+    }
+    // E o de 10 min logo no primeiro tocou de uma TV nova.
+    expect(await reportPlay(s.deps, tv2, { video: H2, play: P(++n), kind: "house" })).toEqual({ ok: true });
+  });
+
+  it("sem duração no banco, duration_s 3.600 no corpo soma no máximo 60 s", async () => {
+    const s = await setup({ houses: [house({ duration_ms: null })] });
+    await identifyTv(s.deps, "forno", SECRET_A);
+    expect(await reportPlay(s.deps, tv1, { video: H1, play: P(1), kind: "house", duration_s: 3_600 })).toEqual({ ok: true });
+    s.advance(10 * 60_000);
+    await flushHouseIfDue(s.deps, RID);
+    expect(s.calls.inserts.map((i) => i.rows[0].counts)).toEqual([{ house_played_s: 60 }]);
   });
 });
