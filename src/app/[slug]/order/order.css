@@ -46,6 +46,10 @@
 .cm .g-title h2 { margin: 0; font-size: 24px; line-height: 1.1; letter-spacing: -0.02em; outline: none; }
 .cm .g-price { text-align: center; font-size: 15px; font-variant-numeric: tabular-nums; color: rgba(247, 239, 230, 0.9); }
 .cm .g-title.cart { display: flex; justify-content: space-between; }
+/* Títulos e total do carrinho travados numa fonte só (Karla em negrito), seja qual for o tema de
+   fonte escolhido no painel: a cursiva de alguns temas não lê bem em preço e contagem. */
+.cm .o-fix { font-family: var(--f-karla), system-ui, sans-serif; font-weight: 700; font-variation-settings: normal; text-transform: none; letter-spacing: -0.02em; }
+.cm .o-total strong.o-fix { font-variant-numeric: tabular-nums; }
 .cm .g-ttl { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 .cm .g-cnt { font-size: 13px; color: var(--o-faint); white-space: nowrap; }
 .cm .g-head-r { display: flex; align-items: center; gap: 12px; }

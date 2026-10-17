@@ -105,7 +105,7 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
     <>
       <div className="g-title cart">
         <span className="g-ttl">
-          <h2 id="o-cart-title" className="fd" tabIndex={-1} data-autofocus>{tr("oYour", L)}</h2>
+          <h2 id="o-cart-title" className="o-fix" tabIndex={-1} data-autofocus>{tr("oYour", L)}</h2>
           {tab === "cart" && !done && <span className="g-cnt">{countLabel(n, L)}</span>}
         </span>
         <span className="g-head-r">
@@ -131,7 +131,7 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
               <circle cx="42" cy="42" r="39" />
               <path d="M26 43l11 11 21-23" />
             </svg>
-            <h3 className="fd">{tr("oSent", L)}</h3>
+            <h3 className="o-fix">{tr("oSent", L)}</h3>
             <p>{tf("oSentBody", L, { n: done.number, table: o.table?.label ?? "" })}</p>
             {done.priceChanged && <p className="o-warn">{tf("oErrPrice", L, { total: money(done.total, L) })}</p>}
             <div className="o-row2">
@@ -147,7 +147,7 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
                   return (
                     <article key={ord.id} className="o-order">
                       <header>
-                        <strong className="fd">{tf("oOrderN", L, { n: o.orders.length - i })}</strong>
+                        <strong className="o-fix">{tf("oOrderN", L, { n: o.orders.length - i })}</strong>
                         <span>
                           {new Date(ord.created_at).toLocaleTimeString(L, { hour: "2-digit", minute: "2-digit" })} · {money(ord.total_cents, L)}
                         </span>
@@ -168,12 +168,12 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
               <p className="o-call">{tr("oCallWaiter", L)}</p>
             </>
           ) : (
-            <div className="o-empty"><strong className="fd">{tr("oNoOrders", L)}</strong>{tr("oNoOrdersBody", L)}</div>
+            <div className="o-empty"><strong className="o-fix">{tr("oNoOrders", L)}</strong>{tr("oNoOrdersBody", L)}</div>
           )
         ) : n ? (
           <ul className="o-lines">{o.lines.map(line)}</ul>
         ) : (
-          <div className="o-empty"><strong className="fd">{tr("oEmpty", L)}</strong>{tr("oEmptyBody", L)}</div>
+          <div className="o-empty"><strong className="o-fix">{tr("oEmpty", L)}</strong>{tr("oEmptyBody", L)}</div>
         )}
       </div>
 
@@ -181,7 +181,7 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
         <div className="o-summary">
           {n > 0 && (
             <>
-              <div className="o-total"><span>{tr("oTotal", L)}</span><strong className="fd">{money(total, L)}</strong></div>
+              <div className="o-total"><span>{tr("oTotal", L)}</span><strong className="o-fix">{money(total, L)}</strong></div>
               {gone && <p className="o-error">{tf("oErrGone", L, { name: o.itemById(gone.item)?.name ?? "" })}</p>}
               {error && <p className="o-error" role="alert">{error}</p>}
             </>
