@@ -29,3 +29,25 @@ export function useStartGate(): boolean {
 export function resetStartGate() {
   open = false;
 }
+
+// Story aberto cobre a capa: os vídeos dos cards soltam o arquivo (não só pausam). No
+// iPhone, cada vídeo carregado ocupa decodificador e memória, e com a capa inteira
+// carregada por baixo o vídeo do story demorava a começar (16/10). Ao voltar, os cards
+// mostram a capa e recarregam (o navegador guarda o que já baixou).
+let covered = false;
+const coverListeners = new Set<() => void>();
+export function setHomeCovered(v: boolean) {
+  if (covered === v) return;
+  covered = v;
+  coverListeners.forEach((l) => l());
+}
+export function useHomeCovered(): boolean {
+  return useSyncExternalStore(
+    (l) => {
+      coverListeners.add(l);
+      return () => coverListeners.delete(l);
+    },
+    () => covered,
+    () => false,
+  );
+}

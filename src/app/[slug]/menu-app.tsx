@@ -13,11 +13,12 @@ import { LANG_FLAG, LANG_NAME, pickLanguage, t as tr, type StringKey } from "@/l
 import { CARD_W, formatPrice, mediaUrl, photoSrc, posterSrc, STORY_W, THUMB_W, thumbSrc, videoSrc } from "@/lib/menu/media";
 import { sizedSrc } from "@/lib/images/sized";
 import { preloadHls, useAutoplay, useHls, warmVideo } from "@/lib/menu/use-hls";
-import { openStartGate, useStartGate } from "@/lib/menu/start-gate";
+import { openStartGate, setHomeCovered, useHomeCovered, useStartGate } from "@/lib/menu/start-gate";
 import type { MenuCategory, MenuItem, MenuMedia, PublicMenu } from "@/lib/menu/types";
 import { Flag } from "./flag";
 import { OrderProvider, useOrder } from "./order/order-context";
 import { OrderLayer } from "./order/order-layer";
+import { VideoDebug } from "./video-debug";
 import { StoryBuy } from "./order/story-actions";
 import { SpecialStory } from "./order/special-story";
 import {
@@ -166,6 +167,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
     langOpen: false,
   });
   useEffect(() => setViewerOpen(view.open), [view.open, setViewerOpen]);
+  useEffect(() => setHomeCovered(view.open), [view.open]);
   // Prato do story na tela: a barrinha da outra metade da pizza usa para oferecer "½ Sabor".
   const storyItem = view.open ? (cats[view.cur]?.items[view.idx[view.cur]] ?? null) : null;
   useEffect(() => setCurrent(storyItem), [storyItem, setCurrent]);
@@ -1300,6 +1302,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
       )}
 
       <OrderLayer />
+      <VideoDebug />
     </div>
   );
 }
@@ -1479,7 +1482,8 @@ function LoopVideo({
   // Cards esperam o banner começar (start-gate.ts); o banner (eager) não espera ninguém.
   // (Testada em 16/10 uma fila de um card por vez: deixou o primeiro card mais lento.)
   const gate = useStartGate();
-  const live = active && (eager || gate) ? src : null;
+  const covered = useHomeCovered();
+  const live = active && (eager || (gate && !covered)) ? src : null;
   useEffect(() => {
     const v = own.current;
     if (!v || !eager) return;

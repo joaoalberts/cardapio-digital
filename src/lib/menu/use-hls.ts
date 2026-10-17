@@ -73,7 +73,8 @@ function armKeeper() {
       const t = v.currentTime;
       const prev = seen.get(v);
       // Parado com dados no buffer (readyState 3+) por ~2 s: engasgo, não falta de internet.
-      if (prev && Math.abs(t - prev.t) < 0.01 && v.readyState >= 3) {
+      // No iPhone não empurra: lá o pulo faz o Safari buscar de novo e o vídeo engasga mais.
+      if (prev && Math.abs(t - prev.t) < 0.01 && v.readyState >= 3 && !apple()) {
         if (prev.n >= 1) {
           const d = v.duration;
           v.currentTime = Number.isFinite(d) && t + 0.1 >= d ? 0 : t + 0.1;
