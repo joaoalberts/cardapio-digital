@@ -1,0 +1,174 @@
+/* Palco do Apareça no telão (T14). Camada por cima do pôster da Comunidade, dentro de .tl:
+   herda a unidade --u (min(1vmin, 0,75vmax)), as cores e o --accent da casa. Medidas do nome, do
+   QR e do logo vêm de tv-layout.ts (--apt-name, --apt-qr, --apt-logo); o tamanho do clipe 9:16,
+   em %, também. Mesmas regras do telão: nenhum filter nem backdrop-filter (o fundo desfocado é o
+   próprio vídeo num canvas de 64 px esticado), anima só opacity, marca só por --accent.
+   Modo simples (.apt-plain, e o .tl-plain do telão tira as transições): sem o fundo desfocado,
+   o vídeo do cliente fica sobre a cor da marca. */
+
+.apt {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s var(--ease);
+}
+.apt.on {
+  opacity: 1;
+}
+
+/* duas camadas, A e B: a da frente aparece por cima da que sai, que segura o último quadro */
+.apt-slot {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0;
+  overflow: hidden;
+  background: var(--ink);
+  transition: opacity 0.45s var(--ease);
+}
+.apt-slot.front {
+  z-index: 2;
+}
+.apt-slot.shown {
+  opacity: 1;
+}
+.apt video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+/* ---------- institucional: a tela toda, sem cortar (pode ser 16:9) ---------- */
+.apt-slot.k-house .apt-clip {
+  position: absolute;
+  inset: 0;
+}
+.apt-slot.k-house video {
+  object-fit: contain;
+}
+.apt-bgw {
+  display: none;
+}
+
+/* ---------- cliente: 9:16 no meio, o próprio vídeo desfocado ao fundo ---------- */
+.apt-slot.k-client .apt-bgw {
+  display: block;
+  position: absolute;
+  inset: 0;
+}
+.apt-bgw canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.apt-bgw::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 90% at 50% 50%, transparent, rgba(20, 14, 11, 0.6)),
+    linear-gradient(rgba(20, 14, 11, 0.45), rgba(20, 14, 11, 0.45));
+}
+.apt-plain .apt-slot.k-client {
+  background: var(--accent);
+}
+.apt-plain .apt-slot.k-client .apt-bgw {
+  display: none;
+}
+
+.apt-slot.k-client .apt-clip {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+  box-shadow: 0 0 calc(var(--u) * 8) rgba(0, 0, 0, 0.45);
+}
+.apt-slot.k-client video {
+  object-fit: cover;
+}
+
+/* nome ou @ embaixo, por cima do vídeo (.tl na frente: vence o reset de margem e padding do telão) */
+.tl .apt-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: calc(var(--u) * 8) calc(var(--u) * 3) calc(var(--u) * 4);
+  background: linear-gradient(rgba(20, 14, 11, 0), rgba(20, 14, 11, 0.82));
+  font-size: var(--apt-name);
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  color: var(--fg);
+  text-shadow: 0 calc(var(--u) * 0.2) calc(var(--u) * 1) rgba(0, 0, 0, 0.5);
+  overflow-wrap: anywhere;
+}
+
+/* logo da casa num canto */
+.apt-logo {
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--u) * 5);
+  left: calc(var(--u) * 5);
+  width: var(--apt-logo);
+  height: var(--apt-logo);
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--ink);
+  box-shadow:
+    0 0 0 calc(var(--u) * 0.5) var(--accent),
+    0 calc(var(--u) * 1) calc(var(--u) * 4) rgba(0, 0, 0, 0.45);
+}
+.apt-initial {
+  display: grid;
+  place-items: center;
+  font-size: calc(var(--apt-logo) * 0.5);
+  color: var(--accent);
+}
+
+/* QR "Quer aparecer aqui? Escaneie!" no outro canto (a placa clara é a .tl-plate do telão) */
+.tl .apt-qr {
+  position: absolute;
+  z-index: 3;
+  right: calc(var(--u) * 5);
+  bottom: calc(var(--u) * 5);
+  width: calc(var(--apt-qr) + var(--u) * 3.2);
+  display: grid;
+  row-gap: calc(var(--u) * 2);
+  justify-items: center;
+  text-align: center;
+  padding: calc(var(--u) * 1.6) calc(var(--u) * 1.6) calc(var(--u) * 2);
+  border-radius: calc(var(--u) * 3);
+  background: rgba(20, 14, 11, 0.62);
+}
+.apt-qcap {
+  display: grid;
+  row-gap: calc(var(--u) * 0.6);
+  color: var(--fg);
+  text-shadow: 0 calc(var(--u) * 0.2) calc(var(--u) * 1.2) rgba(0, 0, 0, 0.6);
+}
+.apt-qcap b {
+  font-size: calc(var(--u) * 3.6 * var(--display-scale, 1));
+  line-height: 1.1;
+}
+.apt-qcap span {
+  font-size: calc(var(--u) * 3);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* TV em pé (ou quase quadrada): tudo por cima do vídeo; o nome à esquerda, longe do QR */
+.tl .apt-port .apt-name {
+  text-align: left;
+  padding-left: calc(var(--u) * 5);
+  padding-right: calc(var(--apt-qr) + var(--u) * 9);
+  padding-bottom: calc(var(--u) * 6);
+}
+.apt-port .apt-qcap b {
+  font-size: calc(var(--u) * 3.2 * var(--display-scale, 1));
+}

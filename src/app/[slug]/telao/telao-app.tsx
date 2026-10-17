@@ -14,7 +14,10 @@ import { sha256Hex } from "@/lib/comunidade/sha256";
 import type { OptionId, PublicPoll, PublicState } from "@/lib/comunidade/types";
 import { thumbSrc } from "@/lib/menu/media";
 import type { MenuItem, PublicMenu } from "@/lib/menu/types";
+import { stageRuns } from "@/lib/apareca/tv-stage";
+import { AparecaStage, useFullscreenOnFirstTouch } from "../apareca/tv/stage";
 import { priceText, useClock } from "../comunidade/parts";
+import "../apareca/tv/stage.css";
 
 // Telão da Comunidade, versão recomendada v2 (ficha: telas 18 a 37). Pôster vivo que se
 // adapta a qualquer TV (unidade --u em telao.css): a líder sempre em primeiro com a foto dela
@@ -31,7 +34,8 @@ import { priceText, useClock } from "../comunidade/parts";
 // - Modo simples (.tl-plain, sem animação): ?simples=1, o interruptor do painel, ou sozinho se
 //   a TV passar de 24 ms por quadro nos primeiros 2 s.
 // - Wake lock pedido de novo ao voltar a aba; recarrega sozinha a cada 3 h sem enquete
-//   aberta; som só depois de um toque.
+//   aberta; som só depois de um toque; tela cheia no primeiro toque.
+// - Apareça na TV (AparecaStage): camada por cima do pôster sem enquete; sem programa, some.
 
 const PAIR_POLL_MS = 5_000;
 const PAIRED_CHECK_MS = 5 * 60_000;
@@ -411,6 +415,7 @@ function LiveTelao({ slug, lang, house, qrSvg, qrLink, menu }: { slug: string; l
   const { data, failures, gone } = useTvData(slug, pair.phase === "live");
   const slow = useSlowTv(pair.phase === "live");
   useWakeLock();
+  useFullscreenOnFirstTouch();
   const nudged = useNudged();
 
   const state = data?.state ?? null;
@@ -495,6 +500,15 @@ function LiveTelao({ slug, lang, house, qrSvg, qrLink, menu }: { slug: string; l
         menu={menu}
         items={items}
         plain={plain}
+      />
+      {/* Apareça na TV: por cima do pôster sem enquete; pausa com enquete aberta e no "Deu X". */}
+      <AparecaStage
+        slug={slug}
+        paused={!stageRuns(kind)}
+        plain={plain}
+        houseName={house.name}
+        houseLogo={house.logo}
+        qrSvg={qrSvg}
       />
       <button className={`tl-sound${sound ? " on" : ""}${nudged ? " show" : ""}`} onClick={toggleSound}>
         <IconSound on={sound} />
