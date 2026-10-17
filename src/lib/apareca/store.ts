@@ -241,8 +241,8 @@ async function computeUsage(db: StoreDb, month: string): Promise<MonthUsage> {
     stored_min_month: houseStoredMin + encoded_s / 60,
     played_s,
     mp4_s,
-    // Minutos dos institucionais exibidos em loop: ainda não há como medir. A T13 (sinal de vida da TV)
-    // passa a contar; até lá, 0 (a fatia grátis de 60 mil min de entrega cobre com folga).
+    // Minutos dos institucionais exibidos: o "tocou" da TV (T13, tv.ts) grava a duração em linhas de
+    // apareca_tally como played_s (mesmo preço de entrega), já somadas acima. Aqui fica 0 para não contar duas vezes.
     house_min: 0,
   };
 }

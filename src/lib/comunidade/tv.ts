@@ -99,8 +99,8 @@ function toLine(r: Raw): TvLine | null {
 }
 
 // Só as linhas do restaurante pedido, conferido de novo aqui além do filtro do banco.
-async function lines(d: TvDeps, w: Where & { restaurant_id: string }): Promise<TvLine[]> {
-  const rows = await d.db.list<Raw>("community_tvs", w);
+async function lines(db: Pick<TvDb, "list">, w: Where & { restaurant_id: string }): Promise<TvLine[]> {
+  const rows = await db.list<Raw>("community_tvs", w);
   return rows.map(toLine).filter((l): l is TvLine => !!l && l.restaurant_id === w.restaurant_id);
 }
 
@@ -140,7 +140,7 @@ export async function requestPairCode(d: TvDeps, slug: string, body: unknown): P
   if (!head.enabled) return { ok: false, code: "disabled" };
 
   const now = nowMs(d);
-  const all = await lines(d, { restaurant_id: head.id });
+  const all = await lines(d.db, { restaurant_id: head.id });
   if (all.some((l) => l.secret_hash === hash && l.revoked)) return { ok: false, code: "invalid" };
   const live = all.filter((l) => isLive(l, now));
   const mine = live.filter((l) => l.secret_hash === hash).sort((a, b) => b.expires - a.expires)[0];
@@ -167,7 +167,7 @@ export async function requestPairCode(d: TvDeps, slug: string, body: unknown): P
   });
 
   // Recontagem: entre a leitura e a gravação, outras TVs podem ter gravado também.
-  const held = (await lines(d, { restaurant_id: head.id })).filter((l) => holdsCode(l, now)).sort(byId);
+  const held = (await lines(d.db, { restaurant_id: head.id })).filter((l) => holdsCode(l, now)).sort(byId);
   const rank = held.findIndex((l) => l.id === row.id);
   if (rank < 0 || rank >= PAIR_CODES_LIVE_MAX) {
     await d.db.remove("community_tvs", { uid: row.id, restaurant_id: head.id });
@@ -193,7 +193,7 @@ export async function confirmPair(d: TvDeps, restaurantId: string, code: string,
   if (!CODE.test(c) || typeof restaurantId !== "string" || !UUID.test(restaurantId)) return { ok: false, error: ERR_CODE };
 
   const now = nowMs(d);
-  const found = (await lines(d, { restaurant_id: restaurantId, pair_code: c })).filter((l) => l.pair_code === c);
+  const found = (await lines(d.db, { restaurant_id: restaurantId, pair_code: c })).filter((l) => l.pair_code === c);
   const live = found.filter((l) => isLive(l, now));
   // Dois pendentes com o mesmo código (corrida rara): recusa em vez de parear a TV errada.
   if (live.length !== 1) {
@@ -220,14 +220,23 @@ export async function checkTv(d: TvDeps, slug: string, secret: string | null): P
   if (isOff(d)) return { ok: false, status: 404 };
   const head = await d.getHead(slug);
   if (!head?.enabled) return { ok: false, status: 404 };
-  if (typeof secret !== "string" || !HEX64.test(secret)) return { ok: false, status: 401 };
-
-  const hash = await sha256Hex(secret);
-  const mine = (await lines(d, { restaurant_id: head.id, secret_hash: hash })).filter((l) => l.secret_hash === hash);
-  if (!mine.length || mine.some((l) => l.revoked)) return { ok: false, status: 401 };
-
-  const tv = mine.filter(isPaired).sort((a, b) => b.paired - a.paired)[0];
-  if (!tv) return { ok: true, paired: false };
-  await d.db.update("community_tvs", { uid: tv.id, restaurant_id: head.id }, { last_seen_at: iso(nowMs(d)) });
+  const m = await matchTvSecret(d.db, head.id, secret);
+  if (!m.ok) return { ok: false, status: 401 };
+  if (!m.tv) return { ok: true, paired: false };
+  await d.db.update("community_tvs", { uid: m.tv.id, restaurant_id: head.id }, { last_seen_at: iso(nowMs(d)) });
   return { ok: true, paired: true, simple: head.tv_simple === true };
+}
+
+// A conferência do segredo, comum ao telão da Comunidade (checkTv) e ao Apareça na TV
+// (identifyTv): segredo fora do formato, sem linha daquele restaurante ou com qualquer linha
+// do segredo revogada → { ok: false } (401). Sem pareamento ainda → tv: null. Pareada → a
+// linha pareada mais recente (uid e o Id numérico do NocoDB, para gravar sem reler).
+export type TvSecretMatch = { ok: false } | { ok: true; tv: { id: string; Id: number } | null };
+export async function matchTvSecret(db: Pick<TvDb, "list">, restaurantId: string, secret: string | null): Promise<TvSecretMatch> {
+  if (typeof secret !== "string" || !HEX64.test(secret)) return { ok: false };
+  const hash = await sha256Hex(secret);
+  const mine = (await lines(db, { restaurant_id: restaurantId, secret_hash: hash })).filter((l) => l.secret_hash === hash);
+  if (!mine.length || mine.some((l) => l.revoked)) return { ok: false };
+  const tv = mine.filter(isPaired).sort((a, b) => b.paired - a.paired)[0];
+  return { ok: true, tv: tv ? { id: tv.id, Id: tv.Id } : null };
 }
