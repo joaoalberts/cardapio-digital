@@ -108,4 +108,22 @@ describe("pegar a oferta relâmpago", () => {
     const s = setup();
     expect(await claimSpecial({ ...s.deps, getMenu: async () => null }, "forno", body())).toEqual({ ok: false, code: "not_found" });
   });
+
+  it("horário marcado: pega só na hora (1 minuto de folga) e de novo no horário seguinte", async () => {
+    const s = setup(makeMenu({}, info({ times: ["20:00", "21:00"] })));
+    expect((await claimSpecial(s.deps, "forno", body())).ok).toBe(true); // 20:00
+    const t = setup(makeMenu({}, info({ times: ["20:00"] })), new Date(FRI_20.getTime() + 90_000));
+    expect((await claimSpecial(t.deps, "forno", body())).ok).toBe(true); // 20:01:30: a oferta começou na folga e o toque veio depois da contagem
+    s.at(new Date(FRI_20.getTime() + 2 * 60_000 + 30_000));
+    expect(await claimSpecial(s.deps, "forno", body())).toEqual({ ok: false, code: "unavailable" }); // 20:02:30
+    s.at(new Date(FRI_20.getTime() + HOUR + 20_000));
+    expect((await claimSpecial(s.deps, "forno", body())).ok).toBe(true); // 21:00:20
+  });
+
+  it("horário marcado: o mesmo celular não pega duas vezes no mesmo horário (janela de 2 minutos)", async () => {
+    const s = setup(makeMenu({}, info({ times: ["20:00"] })), new Date(FRI_20.getTime() + 5_000));
+    expect((await claimSpecial(s.deps, "forno", body())).ok).toBe(true); // 20:00:05
+    s.at(new Date(FRI_20.getTime() + 70_000));
+    expect(await claimSpecial(s.deps, "forno", body())).toEqual({ ok: false, code: "too_soon" }); // 20:01:10
+  });
 });

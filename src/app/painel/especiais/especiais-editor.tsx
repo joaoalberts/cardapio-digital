@@ -23,6 +23,7 @@ export type EditorSpecial = {
   from: string | null;
   to: string | null;
   limit: number;
+  times: string[];
   media: SlotMedia;
 };
 
@@ -83,10 +84,10 @@ export function SpecialsEditor({ restaurantId, specials }: { restaurantId: strin
                       <strong>{brl(s.promoCents)}</strong>
                     </span>
                     <span className="sp-chips">
-                      <i>a cada {hours(s.everyH)}</i>
+                      <i>{s.times.length ? `às ${s.times.join(", ")}` : `a cada ${hours(s.everyH)}`}</i>
                       <i>{s.showS} s na tela</i>
                       <i>{daysText(s.days)}</i>
-                      {s.from && s.to && (
+                      {!s.times.length && s.from && s.to && (
                         <i>
                           {s.from}–{s.to}
                         </i>
@@ -138,6 +139,8 @@ function SpecialModal({ restaurantId, item, onClose }: { restaurantId: string; i
   const [from, setFrom] = useState(item?.from ?? "");
   const [to, setTo] = useState(item?.to ?? "");
   const [limit, setLimit] = useState(String(item?.limit ?? 1));
+  const [useTimes, setUseTimes] = useState(!!item?.times.length);
+  const [times, setTimes] = useState<string[]>(item?.times.length ? item.times : ["20:00"]);
   const [active, setActive] = useState(item?.active ?? true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -163,6 +166,8 @@ function SpecialModal({ restaurantId, item, onClose }: { restaurantId: string; i
       from: from || null,
       to: to || null,
       limit: Number(limit),
+      useTimes,
+      times,
       active,
       media: slot.value,
     });
@@ -220,16 +225,48 @@ function SpecialModal({ restaurantId, item, onClose }: { restaurantId: string; i
         </label>
       </div>
 
-      <div className="sp-two">
+      <div className="md-field">
+        <span>Quando aparece</span>
+        <div className="md-seg" role="tablist" aria-label="Quando a oferta aparece">
+          <button role="tab" aria-selected={!useTimes} onClick={() => setUseTimes(false)}>
+            A cada X horas
+          </button>
+          <button role="tab" aria-selected={useTimes} onClick={() => setUseTimes(true)}>
+            Nos horários marcados
+          </button>
+        </div>
+      </div>
+
+      {useTimes ? (
+        <div className="md-field">
+          <span>Horários (na hora exata, a oferta aparece para quem estiver no cardápio)</span>
+          <div className="sp-times">
+            {times.map((t, i) => (
+              <span key={i} className="sp-time">
+                <input type="time" aria-label={`Horário ${i + 1}`} value={t} onChange={(e) => setTimes((all) => all.map((x, k) => (k === i ? e.target.value : x)))} />
+                <button type="button" className="md-x" aria-label={`Remover horário ${i + 1}`} disabled={times.length <= 1} onClick={() => setTimes((all) => all.filter((_, k) => k !== i))}>
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+          {times.length < 12 && (
+            <button type="button" className="md-link" onClick={() => setTimes((all) => [...all, ""])}>
+              Adicionar horário
+            </button>
+          )}
+        </div>
+      ) : (
         <label className="md-field">
           <span>Aparece a cada (horas)</span>
           <input inputMode="decimal" value={everyH} onChange={(e) => setEveryH(e.target.value)} />
         </label>
-        <label className="md-field">
-          <span>Fica na tela (segundos)</span>
-          <input inputMode="numeric" value={showS} onChange={(e) => setShowS(e.target.value)} />
-        </label>
-      </div>
+      )}
+
+      <label className="md-field">
+        <span>Fica na tela (segundos)</span>
+        <input inputMode="numeric" value={showS} onChange={(e) => setShowS(e.target.value)} />
+      </label>
 
       <div className="md-field">
         <span>Dias (nenhum marcado = todos os dias)</span>
@@ -242,16 +279,18 @@ function SpecialModal({ restaurantId, item, onClose }: { restaurantId: string; i
         </div>
       </div>
 
-      <div className="sp-two">
-        <label className="md-field">
-          <span>Horário de</span>
-          <input type="time" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </label>
-        <label className="md-field">
-          <span>até</span>
-          <input type="time" value={to} onChange={(e) => setTo(e.target.value)} />
-        </label>
-      </div>
+      {!useTimes && (
+        <div className="sp-two">
+          <label className="md-field">
+            <span>Horário de</span>
+            <input type="time" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </label>
+          <label className="md-field">
+            <span>até</span>
+            <input type="time" value={to} onChange={(e) => setTo(e.target.value)} />
+          </label>
+        </div>
+      )}
 
       <label className="md-field">
         <span>Limite cada vez que aparece</span>

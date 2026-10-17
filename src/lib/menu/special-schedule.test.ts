@@ -5,6 +5,7 @@ import {
   ensureFirstEligible,
   injectOffer,
   isSpecialOpen,
+  nextTimedStart,
   parseClock,
   pickSpecial,
   placeOffer,
@@ -135,5 +136,41 @@ describe("placeOffer só olha para frente", () => {
   it("na última categoria, sem story à frente, não volta para uma categoria anterior", () => {
     const cats = [cat("pizzas", 4), cat("burgers", 3)];
     expect(placeOffer(cats, 1, 2, "s", () => 0)).toBeNull();
+  });
+});
+
+describe("horários marcados (pontual)", () => {
+  const s = item("s", info({ times: ["20:00"] }));
+  it("vale a partir das 20:00 em ponto, com folga de 1 minuto (carrinho ou folha abertos)", () => {
+    expect(isSpecialOpen(s, TZ, new Date("2026-10-16T23:00:00Z"))).toBe(true); // 20:00:00
+    expect(isSpecialOpen(s, TZ, new Date("2026-10-16T23:00:59Z"))).toBe(true); // 20:00:59
+    expect(isSpecialOpen(s, TZ, new Date("2026-10-16T23:01:00Z"))).toBe(false); // 20:01
+    expect(isSpecialOpen(s, TZ, new Date("2026-10-16T22:59:59Z"))).toBe(false); // 19:59:59
+  });
+  it("respeita os dias marcados", () => {
+    const seg = item("s", info({ times: ["20:00"], days: [1] }));
+    expect(isSpecialOpen(seg, TZ, new Date("2026-10-16T23:00:10Z"))).toBe(false); // sexta, não segunda
+  });
+  it("na hora marcada não espera stories nem a primeira visita", () => {
+    const now = Date.parse("2026-10-16T23:00:05Z");
+    expect(pickSpecial([s], clock({ firstEligibleAt: now + 60_000 }), ctx({ now, storiesSeen: 0 }), () => 0)?.id).toBe("s");
+  });
+  it("depois de aparecer, não repete no mesmo horário", () => {
+    const now = Date.parse("2026-10-16T23:00:05Z");
+    expect(afterShown(clock(), s, now).nextAt).toBe(now + 60_000);
+  });
+});
+
+describe("nextTimedStart", () => {
+  it("próximo horário marcado em milissegundos, no fuso do restaurante", () => {
+    const now = new Date("2026-10-16T22:59:30Z"); // 19:59:30
+    expect(nextTimedStart([item("s", info({ times: ["20:00", "12:00"] }))], TZ, now)).toBe(Date.parse("2026-10-16T23:00:00Z"));
+  });
+  it("já passou hoje: vai para o próximo dia permitido", () => {
+    const now = new Date("2026-10-16T23:30:00Z"); // sexta 20:30
+    expect(nextTimedStart([item("s", info({ times: ["20:00"], days: [6] }))], TZ, now)).toBe(Date.parse("2026-10-17T23:00:00Z"));
+  });
+  it("sem horários marcados, não há o que esperar", () => {
+    expect(nextTimedStart([item("s", info())], TZ, new Date())).toBeNull();
   });
 });

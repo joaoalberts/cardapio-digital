@@ -31,7 +31,9 @@ export type MenuItem = {
 // Regras de um produto especial: a cada quantas horas aparece para o mesmo cliente,
 // quantos segundos fica na tela, em que dias (0 = domingo; vazio = todos), em que
 // horário ("HH:MM"; vazio = o dia todo) e quantas unidades cada vez que é pego.
-export type SpecialInfo = { every_h: number; show_s: number; days: number[]; from: string | null; to: string | null; limit: number };
+// times = horários marcados ("HH:MM"): com algum, a oferta só aparece nos 5 minutos de cada um
+// (no lugar do "a cada X horas").
+export type SpecialInfo = { every_h: number; show_s: number; days: number[]; from: string | null; to: string | null; limit: number; times?: string[] };
 
 export type MenuCategory = {
   id: string;

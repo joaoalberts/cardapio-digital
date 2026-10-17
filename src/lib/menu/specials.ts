@@ -6,6 +6,8 @@ export const SPECIAL_DEFAULTS = { every_h: 2, show_s: 6, limit: 1 } as const;
 export const SPECIAL_LIMITS = { show_s: [4, 15], every_h: [0.5, 24], limit: [1, 10] } as const;
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+export const SPECIAL_MAX_TIMES = 12;
+export const SPECIAL_TIME_WINDOW_MIN = 1; // pontual: na hora marcada, com 1 minuto de folga (decisão do João, 16/10)
 
 const clamp = (v: unknown, [min, max]: readonly [number, number], fallback: number) => {
   const n = typeof v === "number" ? v : Number(v);
@@ -21,6 +23,7 @@ export function specialInfo(row: {
   special_from?: unknown;
   special_to?: unknown;
   special_limit?: unknown;
+  special_times?: unknown;
 }): SpecialInfo {
   const days = Array.isArray(row.special_days)
     ? row.special_days.filter((d): d is number => Number.isInteger(d) && d >= 0 && d <= 6)
@@ -32,5 +35,8 @@ export function specialInfo(row: {
     from: time(row.special_from),
     to: time(row.special_to),
     limit: Math.round(clamp(row.special_limit, SPECIAL_LIMITS.limit, SPECIAL_DEFAULTS.limit)),
+    times: Array.isArray(row.special_times)
+      ? [...new Set(row.special_times.filter((t): t is string => typeof t === "string" && HHMM.test(t)))].sort().slice(0, SPECIAL_MAX_TIMES)
+      : [],
   };
 }

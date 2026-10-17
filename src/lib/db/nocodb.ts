@@ -38,7 +38,7 @@ export type Where = Record<string, string | number | boolean | null>;
 
 // Colunas JSON e Checkbox voltam em formatos diferentes conforme o banco do NocoDB.
 const JSON_COLS = new Set([
-  "languages", "opening_hours", "payment_methods", "price_options", "tags", "lines", "special_days",
+  "languages", "opening_hours", "payment_methods", "price_options", "tags", "lines", "special_days", "special_times",
   "options", "counts", "tables_qr", "tables_open", "result", "apareca_config", "hours",
 ]);
 const BOOL_COLS = new Set([

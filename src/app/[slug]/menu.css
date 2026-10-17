@@ -414,6 +414,13 @@ html:has(.cm .viewer:not([hidden])) body {
   & .media .hi.on {
     opacity: 1;
   }
+  /* Vídeo nunca fica invisível: o Safari do iPhone não avança vídeo com opacidade 0, e
+     o vídeo só aparecia depois de tocar (travava no 0,0 s, visto no diagnóstico, 17/10).
+     Até o primeiro quadro ele mostra a própria capa (poster), igual à miniatura. */
+  & .media video.hi {
+    opacity: 1;
+    transition: none;
+  }
   & .shade {
     position: absolute;
     inset: 0;

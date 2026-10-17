@@ -25,7 +25,7 @@ export default function EspeciaisPage() {
 
 type It = {
   id: string; name: string; description: string | null; price_cents: number; promo_price_cents: number | null; active: boolean;
-  special_every_h: number | null; special_show_s: number | null; special_days: unknown; special_from: string | null; special_to: string | null; special_limit: number | null;
+  special_every_h: number | null; special_show_s: number | null; special_days: unknown; special_from: string | null; special_to: string | null; special_limit: number | null; special_times: unknown;
 };
 type Med = { item_id: string | null; kind: "photo" | "video"; storage_path: string | null; poster_path: string | null; mux_playback_id: string | null; status: "processing" | "ready" | "failed" };
 
@@ -61,6 +61,7 @@ async function Especiais() {
       from: s.from,
       to: s.to,
       limit: s.limit,
+      times: s.times ?? [],
       media: toMedia(media.find((x) => x.item_id === i.id)),
     };
   });

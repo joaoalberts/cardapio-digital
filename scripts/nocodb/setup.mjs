@@ -54,7 +54,7 @@ export const TABLES = {
     num("price_cents"), num("promo_price_cents"), json("price_options"), json("tags"),
     num("position"), bool("active"), bool("featured"), bool("hide_price"), num("serves"),
     text("country"), num("special_every_h"), num("special_show_s"), json("special_days"),
-    text("special_from"), text("special_to"), num("special_limit"), created,
+    text("special_from"), text("special_to"), num("special_limit"), json("special_times"), created,
   ],
   media: [
     id, text("restaurant_id"), text("item_id"), text("category_id"), text("kind"),

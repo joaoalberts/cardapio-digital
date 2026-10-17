@@ -41,6 +41,7 @@ type I = Omit<MenuItem, "media" | "special"> & {
   special_from?: string | null;
   special_to?: string | null;
   special_limit?: number | null;
+  special_times?: unknown;
 };
 type M = MenuMedia & { Id: number; item_id: string | null; category_id: string | null; status: string };
 type T = { category_id: string | null; item_id: string | null; language: string; name: string; description: string | null };
@@ -56,10 +57,16 @@ const media = (m: M): MenuMedia => ({
 
 // Cardápio público em cache; o painel invalida pela tag ao salvar.
 // Só o que está ativo e pronto, no idioma pedido; sem tradução, cai no texto base (pt-BR).
+// Cache remoto (compartilhado entre os servidores da Vercel): com o "use cache" comum,
+// cada servidor novo buscava de novo no NocoDB, que aceita 4 pedidos por segundo, e a
+// abertura esperava ~1,3 s (16/10). Assim o cliente quase nunca espera o banco.
 export async function getPublicMenu(slug: string, lang = "pt-BR"): Promise<PublicMenu | null> {
-  "use cache";
+  "use cache: remote";
   cacheTag(menuTag(slug));
-  cacheLife("minutes");
+  // O painel atualiza o cache na hora ao salvar (updateTag). Fora isso, confere o banco
+  // em segundo plano a cada 5 min e nunca deixa o cliente esperar por ele: a cópia vale
+  // por 30 dias, então mesmo depois de horas sem visita a abertura sai do cache.
+  cacheLife({ stale: 60, revalidate: 300, expire: 60 * 60 * 24 * 30 });
 
   const s = slug.toLowerCase();
   if (!SLUG.test(s)) return null;

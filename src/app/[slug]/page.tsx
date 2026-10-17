@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { preconnect } from "react-dom";
 import { fontVariables } from "@/lib/menu/fonts";
 import { getPublicMenu } from "@/lib/menu/data";
+import * as db from "@/lib/db/nocodb";
 import { isValidSlug } from "@/lib/slug";
 import { MenuApp } from "./menu-app";
 import { MesaTag } from "./mesa-tag";
@@ -20,6 +21,18 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
 };
+
+// Cardápio de cada restaurante pronto no cache (ISR): o HTML já sai com o cardápio
+// dentro, sem a etapa de "revelar" o trecho que chega depois. No iPhone essa etapa só
+// acontecia quando todas as imagens terminavam (o Safari não desenha a página quase
+// vazia), e a abertura levava ~2 s a mais (16/10). Restaurante novo fica pronto na
+// primeira visita; o painel atualiza a página pela mesma tag do cache ao salvar.
+export async function generateStaticParams(): Promise<{ slug: string }[]> {
+  const rows = await db.list<{ slug: string }>("restaurants").catch(() => []);
+  const slugs = rows.map((r) => r.slug?.toLowerCase()).filter((s): s is string => !!s && isValidSlug(s));
+  // O Next exige ao menos um; sem banco no build, um nome que dá "não encontrado".
+  return slugs.length ? slugs.map((slug) => ({ slug })) : [{ slug: "nao-existe" }];
+}
 
 export async function generateMetadata({ params }: PageProps<"/[slug]">): Promise<Metadata> {
   const slug = (await params).slug.toLowerCase();
