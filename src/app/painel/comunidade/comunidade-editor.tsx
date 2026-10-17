@@ -3,18 +3,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { startTransition, useEffect, useOptimistic, useRef, useState, useTransition } from "react";
+import { startTransition, useEffect, useOptimistic, useState, useTransition } from "react";
 import type { Goals } from "@/lib/comunidade/scoreboard";
 import type { FunnelKey, PollTemplate } from "@/lib/comunidade/types";
-import { extOf, IMAGE_TYPES, shrinkImage } from "@/lib/images/shrink";
-import { uploadFile } from "@/lib/upload-client";
-import { uuid } from "@/lib/uuid";
-import { Modal, money } from "../cardapio/modals";
-import { discardFiles } from "../files-actions";
+import { money } from "../cardapio/modals";
 import {
-  addHousePost,
   closePoll,
-  createPoll,
   deletePoll,
   deletePost,
   hidePost,
@@ -25,7 +19,10 @@ import {
   setPostTv,
   setTvSimple,
 } from "./actions";
-import { LABEL_MAX, POLL_MINUTES, QUESTION_MAX, TEMPLATES, suggestOptions, templateQuestion, type PollMinutes } from "./validate";
+import { Confirm } from "./confirm";
+import { HousePhotoSend } from "./house-photo";
+import { NewPoll } from "./poll-maker";
+import { ICONS, Icon, TPL } from "./shared";
 
 // Seção "Comunidade" do painel: interruptor, Instagram e hora do dia, enquetes por modelo,
 // fotos da casa no Mural, pareamento do telão e o placar do dia com as metas. Visual dos
@@ -63,29 +60,6 @@ export type EditorData = {
 };
 
 type Res = { error?: string };
-
-const TPL: Record<PollTemplate, { emoji: string; name: string }> = {
-  dessert: { emoji: "🍰", name: "Sobremesa" },
-  drink: { emoji: "🍹", name: "Bebida" },
-  music: { emoji: "🎵", name: "Música" },
-  custom: { emoji: "💬", name: "Personalizada" },
-};
-
-const ICONS = {
-  chat: "M21 12a8 8 0 01-11.6 7.1L4 20l1-4.3A8 8 0 1121 12z",
-  clock: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2",
-  camera: "M4 8h3l2-3h6l2 3h3v11H4zM12 17a4 4 0 100-8 4 4 0 000 8z",
-  tv: "M5 5h14a2.5 2.5 0 012.5 2.5v7A2.5 2.5 0 0119 17H5a2.5 2.5 0 01-2.5-2.5v-7A2.5 2.5 0 015 5zM8 21h8M12 17v4",
-  chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
-  plus: "M12 5v14M5 12h14",
-};
-function Icon({ d }: { d: string }) {
-  return (
-    <svg className="icon" viewBox="0 0 24 24" aria-hidden>
-      <path d={d} />
-    </svg>
-  );
-}
 
 const brl = (c: number) => `R$ ${money(c)}`;
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
@@ -131,8 +105,8 @@ export function ComunidadeEditor({ data }: { data: EditorData }) {
         </p>
       )}
       <MainCard data={data} run={run} />
-      <PollsCard data={data} run={run} saved={saved} />
-      <PostsCard data={data} run={run} saved={saved} />
+      <PollsCard data={data} run={run} flash={flash} />
+      <PostsCard data={data} run={run} flash={flash} />
       <TvCard data={data} run={run} />
       <ScoreCard data={data} />
       {toast && (
@@ -145,7 +119,6 @@ export function ComunidadeEditor({ data }: { data: EditorData }) {
 }
 
 type Run = (fn: () => Promise<Res>, ok: string) => Promise<boolean>;
-type Saved = (ok: string) => void;
 
 // ---------- Interruptor, Instagram e hora do dia ----------
 
@@ -223,9 +196,7 @@ function MainCard({ data, run }: { data: EditorData; run: Run }) {
 
 // ---------- Enquetes ----------
 
-function PollsCard({ data, run, saved }: { data: EditorData; run: Run; saved: Saved }) {
-  const [models, setModels] = useState(false);
-  const [form, setForm] = useState<PollTemplate | null>(null);
+function PollsCard({ data, run, flash }: { data: EditorData; run: Run; flash: (msg: string) => void }) {
   const { open, scheduled, closed } = data.polls;
   const none = !open.length && !scheduled.length && !closed.length;
 
@@ -240,39 +211,7 @@ function PollsCard({ data, run, saved }: { data: EditorData; run: Run; saved: Sa
       <PollGroup title="Encerradas hoje" polls={closed} restaurantId={data.restaurantId} run={run} />
       {none && <p className="cp-empty">Nenhuma enquete hoje. Comece de um modelo: em menos de um minuto ela vai ao ar.</p>}
 
-      <button className="btn primary cp-new" aria-expanded={models} onClick={() => setModels((v) => !v)}>
-        <Icon d={ICONS.plus} />
-        Nova enquete
-      </button>
-      {models && (
-        <div className="cp-models">
-          <span>Comece de um modelo</span>
-          {TEMPLATES.map((t) => (
-            <button key={t} onClick={() => setForm(t)}>
-              <em aria-hidden>{TPL[t].emoji}</em>
-              <span>
-                <b>{TPL[t].name}</b>
-                <small>{t === "custom" ? "Escreva a sua pergunta" : templateQuestion(t)}</small>
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-      {form && (
-        <PollModal
-          template={form}
-          data={data}
-          onClose={(created) => {
-            // Criada: chamado dentro da transição do modal, que fica em "Criando…" até a
-            // lista nova chegar; o modal fecha junto com a enquete aparecendo em "Agora".
-            setForm(null);
-            if (created) {
-              setModels(false);
-              saved("Enquete criada.");
-            }
-          }}
-        />
-      )}
+      <NewPoll data={data} onCreated={() => flash("Enquete criada.")} />
     </section>
   );
 }
@@ -306,203 +245,13 @@ function PollGroup({ title, polls, restaurantId, run }: { title: string; polls: 
   );
 }
 
-// Botão discreto que pede confirmação antes de uma ação que não dá para desfazer. Deu certo,
-// a linha fica em "Um instante…" até o refresh tirá-la da lista; deu errado, volta na hora.
-function Confirm({ label, ask, yes, onYes }: { label: string; ask: string; yes: string; onYes: () => Promise<boolean> }) {
-  const [asking, setAsking] = useState(false);
-  const [busy, startYes] = useTransition();
-  if (!asking)
-    return (
-      <span className="cp-acts">
-        <button className="cp-link" onClick={() => setAsking(true)}>
-          {label}
-        </button>
-      </span>
-    );
-  return (
-    <span className="cp-acts asking">
-      <span>{ask}</span>
-      <button
-        className="cp-link danger"
-        disabled={busy}
-        onClick={() =>
-          startYes(async () => {
-            if (await onYes()) startTransition(() => setAsking(false));
-            else setAsking(false);
-          })
-        }
-      >
-        {busy ? "Um instante…" : yes}
-      </button>
-      <button className="cp-link" disabled={busy} onClick={() => setAsking(false)}>
-        Não
-      </button>
-    </span>
-  );
-}
 
-type OptState = { mode: "dish" | "text"; item_id: string; label: string };
-const TEXT = "__texto";
-
-function PollModal({ template, data, onClose }: { template: PollTemplate; data: EditorData; onClose: (created?: boolean) => void }) {
-  const dishes = new Map(data.categories.flatMap((c) => c.items.map((i) => [i.id, i] as const)));
-  const textFirst = template === "music" || template === "custom";
-  const [question, setQuestion] = useState("");
-  const [opts, setOpts] = useState<OptState[]>(() =>
-    suggestOptions(template, data.categories).map((o) => ({
-      mode: o.item_id || !textFirst ? "dish" : "text",
-      item_id: o.item_id ?? "",
-      label: o.item_id ? "" : o.label,
-    })),
-  );
-  const [later, setLater] = useState(false);
-  const [start, setStart] = useState("");
-  const [minutes, setMinutes] = useState<PollMinutes>(10);
-  const [busy, startSaving] = useTransition();
-  const [err, setErr] = useState<string | null>(null);
-
-  const setOpt = (k: number, patch: Partial<OptState>) => setOpts((s) => s.map((o, i) => (i === k ? { ...o, ...patch } : o)));
-  const pick = (k: number, v: string) => (v === TEXT ? setOpt(k, { mode: "text", item_id: "" }) : setOpt(k, { mode: "dish", item_id: v }));
-
-  const save = () => {
-    setErr(null);
-    if (later && !start) return setErr("Escolha a hora de início.");
-    startSaving(async () => {
-      const res = await createPoll(data.restaurantId, {
-        template,
-        question,
-        options: opts.map((o) =>
-          o.mode === "dish" ? { item_id: o.item_id || null, label: dishes.get(o.item_id)?.name ?? "" } : { item_id: null, label: o.label },
-        ),
-        start: later ? start : null,
-        minutes,
-      }).catch(() => ({ error: "Não foi possível salvar. Tente de novo." }));
-      if (res.error) return setErr(res.error);
-      startTransition(() => onClose(true));
-    });
-  };
-
-  return (
-    <Modal
-      title={`Nova enquete: ${TPL[template].name.toLowerCase()}`}
-      onClose={() => onClose()}
-      footer={
-        <>
-          {err && (
-            <p className="md-err" role="alert">
-              {err}
-            </p>
-          )}
-          <div className="md-actions">
-            <button className="btn outline" onClick={() => onClose()} disabled={busy}>
-              Fechar
-            </button>
-            <button className="btn primary" onClick={save} disabled={busy}>
-              {busy ? "Criando…" : later ? "Agendar enquete" : "Pôr no ar agora"}
-            </button>
-          </div>
-        </>
-      }
-    >
-      {template === "custom" ? (
-        <label className="md-field">
-          <span>Pergunta</span>
-          <input value={question} onChange={(e) => setQuestion(e.target.value)} maxLength={QUESTION_MAX} placeholder="Qual prato sai primeiro hoje?" />
-        </label>
-      ) : (
-        <div className="md-field">
-          <span>Pergunta</span>
-          <p className="cp-q">{templateQuestion(template)}</p>
-          <small className="cp-hint">O cliente lê a pergunta no idioma dele.</small>
-        </div>
-      )}
-
-      <div className="md-field">
-        <span>Opções (2 ou 3)</span>
-        <div className="cp-opts">
-          {opts.map((o, k) => (
-            <div key={k} className="cp-opt">
-              <i aria-hidden>{String.fromCharCode(65 + k)}</i>
-              <div className="cp-opt-in">
-                <select value={o.mode === "text" ? TEXT : o.item_id} onChange={(e) => pick(k, e.target.value)} aria-label={`Opção ${k + 1}`}>
-                  <option value="">Escolha um prato…</option>
-                  {data.categories.map((c) => (
-                    <optgroup key={c.name} label={c.name}>
-                      {c.items.map((i) => (
-                        <option key={i.id} value={i.id}>
-                          {i.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                  <option value={TEXT}>Escrever um texto</option>
-                </select>
-                {o.mode === "text" && (
-                  <input
-                    value={o.label}
-                    onChange={(e) => setOpt(k, { label: e.target.value })}
-                    maxLength={LABEL_MAX}
-                    placeholder={template === "music" ? "ex.: Rock clássico" : "Texto curto da casa"}
-                    aria-label={`Texto da opção ${k + 1}`}
-                  />
-                )}
-              </div>
-              {opts.length > 2 && (
-                <button className="cp-x" onClick={() => setOpts((s) => s.filter((_, i) => i !== k))} aria-label={`Tirar a opção ${k + 1}`}>
-                  ×
-                </button>
-              )}
-            </div>
-          ))}
-          {opts.length < 3 && (
-            <button className="cp-link" onClick={() => setOpts((s) => [...s, { mode: textFirst ? "text" : "dish", item_id: "", label: "" }])}>
-              + Adicionar a 3ª opção
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="md-field">
-        <span>Começa</span>
-        <div className="cp-seg" role="radiogroup" aria-label="Começa">
-          <button role="radio" aria-checked={!later} onClick={() => setLater(false)}>
-            Agora
-          </button>
-          <button role="radio" aria-checked={later} onClick={() => setLater(true)}>
-            Mais tarde, hoje
-          </button>
-        </div>
-        {later && (
-          <span className="cp-in cp-time">
-            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} aria-label="Hora de início" />
-          </span>
-        )}
-      </div>
-
-      <div className="md-field">
-        <span>Duração</span>
-        <div className="cp-seg" role="radiogroup" aria-label="Duração">
-          {POLL_MINUTES.map((m) => (
-            <button key={m} role="radio" aria-checked={minutes === m} onClick={() => setMinutes(m)}>
-              {m} min
-            </button>
-          ))}
-        </div>
-      </div>
-    </Modal>
-  );
-}
 
 // ---------- Fotos da casa ----------
 
 type PostPatch = { id: string; onTv?: boolean; hidden?: boolean };
 
-function PostsCard({ data, run, saved }: { data: EditorData; run: Run; saved: Saved }) {
-  const file = useRef<HTMLInputElement>(null);
-  const [dish, setDish] = useState("");
-  const [tv, setTv] = useState(false);
-  const [busy, startSend] = useTransition();
-  const [err, setErr] = useState<string | null>(null);
+function PostsCard({ data, run, flash }: { data: EditorData; run: Run; flash: (msg: string) => void }) {
   const rid = data.restaurantId;
   // "No telão" e "Ocultar" mudam a linha na hora e ficam assim até o refresh trazer o banco.
   const [posts, patchPost] = useOptimistic(data.posts, (list, p: PostPatch) => list.map((x) => (x.id === p.id ? { ...x, ...p } : x)));
@@ -513,32 +262,6 @@ function PostsCard({ data, run, saved }: { data: EditorData; run: Run; saved: Sa
       await run(fn, ok);
     });
 
-  // Foto até 1.600 px e miniatura até 480 px, reduzidas aqui no navegador; as duas vão para
-  // a pasta comunidade do restaurante. Se gravar o post falhar, os arquivos são apagados.
-  // O botão fica em "Enviando…" até a foto nova aparecer na lista.
-  const send = (f: File) => {
-    setErr(null);
-    if (!IMAGE_TYPES.test(f.type)) return setErr("Use uma foto (PNG, JPG ou WebP).");
-    startSend(async () => {
-      const sent: string[] = [];
-      try {
-        const [full, small] = await Promise.all([shrinkImage(f, 1600, 0.85, "image/jpeg"), shrinkImage(f, 480, 0.8, "image/jpeg")]);
-        const id = uuid();
-        sent.push(await uploadFile(rid, `comunidade/${id}-full.${extOf(full)}`, full));
-        sent.push(await uploadFile(rid, `comunidade/${id}-thumb.${extOf(small)}`, small));
-        const res = await addHousePost(rid, { item_id: dish, photo_url: sent[0], thumb_url: sent[1], on_tv: tv });
-        if (res.error) throw new Error(res.error);
-        sent.length = 0;
-        startTransition(() => setTv(false));
-        saved("Foto publicada no Mural.");
-      } catch (e) {
-        if (sent.length) await discardFiles(rid, sent).catch(() => undefined);
-        setErr(e instanceof Error && e.message.length > 12 ? e.message : "Não foi possível enviar a foto. Tente de novo.");
-      } finally {
-        if (file.current) file.current.value = "";
-      }
-    });
-  };
 
   return (
     <section className="ap-card">
@@ -548,49 +271,7 @@ function PostsCard({ data, run, saved }: { data: EditorData; run: Run; saved: Sa
       </div>
       <p className="cp-lead">Fotos dos pratos tiradas pela casa. Aparecem no Mural para quem está no salão, com &quot;Pedir também&quot;.</p>
 
-      <div className="cp-send">
-        <label className="cp-fld">
-          <span>Prato da foto</span>
-          <span className="cp-in">
-            <select value={dish} onChange={(e) => setDish(e.target.value)}>
-              <option value="">Escolha um prato…</option>
-              {data.categories.map((c) => (
-                <optgroup key={c.name} label={c.name}>
-                  {c.items.map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {i.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </span>
-        </label>
-        <label className="cp-check">
-          <input type="checkbox" checked={tv} onChange={(e) => setTv(e.target.checked)} />
-          <span>Pode ir para o telão: só o prato, sem pessoas</span>
-        </label>
-        <input
-          ref={file}
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          hidden
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) send(f);
-          }}
-        />
-        <button className="btn primary cp-new" disabled={!dish || busy} onClick={() => file.current?.click()}>
-          <Icon d={ICONS.camera} />
-          {busy ? "Enviando…" : "Enviar foto"}
-        </button>
-        {!dish && <small className="cp-hint">Escolha o prato antes de enviar a foto.</small>}
-        {err && (
-          <p className="cp-err" role="alert">
-            {err}
-          </p>
-        )}
-      </div>
+      <HousePhotoSend data={data} onSent={() => flash("Foto publicada no Mural.")} />
 
       {posts.length ? (
         <ul className="cp-posts">

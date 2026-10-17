@@ -8,13 +8,12 @@ import { communityOff } from "@/lib/comunidade/off";
 import { goalNights, goalsCut, salesGoals, scoreboard } from "@/lib/comunidade/scoreboard";
 import type { PollRow, TallyRow } from "@/lib/comunidade/types";
 import { toContent, toHead } from "@/lib/comunidade/votes";
-import { getPublicMenu } from "@/lib/menu/data";
 import { mediaUrl, thumbSrc } from "@/lib/menu/media";
-import type { MenuItem } from "@/lib/menu/types";
 import type { OrderRow } from "@/lib/orders/service";
 import { currentRestaurant } from "../current";
 import { PanelShell } from "../shell";
 import { ComunidadeEditor, type EditorData, type EditorPoll } from "./comunidade-editor";
+import { loadDishes } from "./load";
 import "../panel.css";
 import "../cardapio/cardapio.css";
 import "./comunidade.css";
@@ -59,25 +58,15 @@ async function Comunidade() {
   const bounds = dayBounds(day, tz, head.day_start);
 
   const mine = { restaurant_id: r.id };
-  const [pollRows, postRows, tvRows, orders, tallies, menu, h] = await Promise.all([
+  const [pollRows, postRows, tvRows, orders, tallies, { categories, items }, h] = await Promise.all([
     db.list<Raw>("community_polls", mine, { sort: "-Id", limit: 200 }),
     db.list<Raw>("community_posts", mine, { sort: "-Id", limit: POSTS_READ }),
     db.list<Raw>("community_tvs", mine),
     db.list<OrderRow>("orders", mine, { sort: "-Id", limit: ORDERS_READ }),
     db.list<TallyRow>("community_tally", mine, { sort: "-Id", limit: TALLY_READ }),
-    getPublicMenu(r.slug),
+    loadDishes(r.slug),
     headers(),
   ]);
-
-  // Pratos do cardápio (o mesmo que o cliente vê), para as opções e as fotos da casa.
-  const items = new Map<string, MenuItem>();
-  const categories = (menu?.categories ?? []).map((c) => ({
-    name: c.name,
-    items: c.items.filter((i) => !i.special).map((i) => {
-      items.set(i.id, i);
-      return { id: i.id, name: i.name, thumb: thumbSrc(i) };
-    }),
-  })).filter((c) => c.items.length);
 
   // Miniatura mais nova de foto da casa (aprovada) por prato, para a linha da enquete.
   const houseThumb = new Map<string, string>();
