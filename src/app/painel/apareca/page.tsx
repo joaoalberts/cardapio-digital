@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import * as db from "@/lib/db/nocodb";
+import { currentUser } from "@/lib/auth";
 import { parseConfig } from "@/lib/apareca/config";
 import { frameUrl } from "@/lib/apareca/mux-video";
 import { aparecaOff } from "@/lib/apareca/off";
 import { allowedModes, HOUSE_MAX_S } from "@/lib/apareca/panel-logic";
+import { isSuperAdmin } from "@/lib/apareca/superadmin";
 import type { HouseVideoRow } from "@/lib/apareca/types";
 import { mediaUrl } from "@/lib/menu/media";
 import { muxEnabled } from "@/lib/mux";
@@ -52,13 +55,16 @@ async function Apareca() {
   const { restaurant, isOwner } = await currentRestaurant();
   const r = restaurant as typeof restaurant & { logo_path: string | null; community_enabled?: unknown } & Raw;
   const mine = { restaurant_id: r.id };
-  const [initial, report, houseRows, tableRows, tvRows] = await Promise.all([
+  const [initial, report, houseRows, tableRows, tvRows, user] = await Promise.all([
     listQueue(r.id).catch(() => null),
     loadReport(r.id, 7).catch(() => null),
     db.list<HouseVideoRow>("apareca_house_videos", mine).catch(() => [] as HouseVideoRow[]),
     db.list<Raw>("dining_tables", mine).catch(() => [] as Raw[]),
     db.list<Raw>("community_tvs", mine).catch(() => [] as Raw[]),
+    currentUser().catch(() => null),
   ]);
+  // Link discreto para a liberação por restaurante: só o super admin (SUPERADMIN_EMAILS, no servidor) vê.
+  const superAdmin = isSuperAdmin(user?.email, process.env.SUPERADMIN_EMAILS);
   const cfg = parseConfig(r.apareca_config);
   const allowed = r.apareca_allowed === true;
   const modes = allowedModes({ ai_allowed: r.apareca_ai_allowed === true }, Boolean(process.env.ANTHROPIC_API_KEY) && !aparecaOff());
@@ -94,6 +100,11 @@ async function Apareca() {
         <Institucionais rid={r.id} items={house} muxOn={muxEnabled()} />
         <Zonas rid={r.id} zones={cfg.zones} tableZones={cfg.table_zones} tvZones={cfg.tv_zones} tables={tables} tvs={tvs} />
         <Relatorios rid={r.id} initial={report} />
+        {superAdmin && (
+          <p className="app-adm-link">
+            <Link href="/painel/apareca/admin">Liberação por restaurante</Link>
+          </p>
+        )}
       </div>
     </PanelShell>
   );

@@ -825,3 +825,125 @@
     transition: none;
   }
 }
+
+/* Super admin (T17): página sem o menu do painel, uma coluna em 390 px. Contraste: #1a1a1a e
+   #666 sobre branco (17:1 e 5,7:1), link dourado escuro #7a5218 sobre o cinza do painel (6,1:1); medidos no navegador: todos os textos 5,3:1 ou mais. */
+.ap .app-admin {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 18px 16px 40px;
+
+  & .app-adm-top {
+    display: grid;
+    gap: 6px;
+  }
+  & .app-adm-top a {
+    justify-self: start;
+    color: #7a5218;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: underline;
+  }
+  & .app-adm-top h1 {
+    margin: 0;
+    color: var(--app-ink);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+  & .app-adm-usd {
+    margin: 0 0 8px;
+    color: var(--app-ink);
+    font-size: 15px;
+  }
+  & .app-adm-usd b {
+    font-size: 22px;
+  }
+  & .app-adm-meter {
+    height: 10px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    background: #e6e6e6;
+    overflow: hidden;
+  }
+  & .app-adm-meter i {
+    display: block;
+    height: 100%;
+    background: var(--green);
+    transform-origin: left;
+  }
+  & .app-adm-meter i[data-gate="warn"] {
+    background: var(--orange);
+  }
+  & .app-adm-meter i[data-gate="paused"] {
+    background: var(--red);
+  }
+  & .app-adm-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 14px;
+  }
+  & .app-adm-list > li {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid #e8e8e8;
+    border-radius: 6px;
+  }
+  & .app-adm-name {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    margin-bottom: 10px;
+    color: var(--app-ink);
+  }
+  & .app-adm-name b {
+    font-size: 17px;
+    overflow-wrap: anywhere;
+  }
+  & .app-adm-name small {
+    color: var(--app-muted);
+    font-size: 13.5px;
+    overflow-wrap: anywhere;
+  }
+  & .app-adm-sw .app-sw-row:last-child {
+    margin-bottom: 10px;
+  }
+  & .app-adm-facts {
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  & .app-adm-facts div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  & .app-adm-facts dt {
+    color: var(--app-muted);
+    font-size: 12.5px;
+    line-height: 1.3;
+  }
+  & .app-adm-facts dd {
+    margin: 2px 0 0;
+    color: var(--app-ink);
+    font-size: 16px;
+    font-weight: 700;
+  }
+}
+
+/* Link discreto para o super admin, no fim da página do Apareça (só aparece para ele). */
+.ap .app-setup .app-adm-link {
+  margin: 0;
+  font-size: 13px;
+  text-align: left;
+
+  & a {
+    color: var(--app-muted);
+    text-decoration: underline;
+  }
+}
