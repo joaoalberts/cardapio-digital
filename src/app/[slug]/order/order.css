@@ -353,7 +353,7 @@
 .cm .o-slide-knob { top: 5px; left: 5px; width: 62px; height: 62px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); animation: none; }
 .cm .o-slide-knob[data-nudge] { animation: o-nudge 0.5s; }
 .cm .o-slide-knob .icon { width: 26px; height: 26px; }
-.cm .o-slide-txt { padding-left: 72px; font-size: 17px; color: transparent; background: linear-gradient(100deg, rgba(247, 239, 230, 0.5) 35%, #fff 50%, rgba(247, 239, 230, 0.5) 65%) 0 0 / 300% 100%; -webkit-background-clip: text; background-clip: text; animation: o-shine 2.6s linear infinite; }
+.cm .o-slide-txt { padding-left: 72px; padding-right: 10px; font-size: min(19px, 5vw); color: transparent; background: linear-gradient(100deg, rgba(247, 239, 230, 0.5) 35%, #fff 50%, rgba(247, 239, 230, 0.5) 65%) 0 0 / 300% 100%; -webkit-background-clip: text; background-clip: text; animation: o-shine 2.6s linear infinite; }
 @keyframes o-shine { from { background-position: 100% 0; } to { background-position: 0 0; } }
 @media (prefers-reduced-motion: reduce) { .cm .o-slide-txt { animation: none; color: rgba(247, 239, 230, 0.85); } }
 
