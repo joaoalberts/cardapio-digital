@@ -679,7 +679,10 @@ describe("downloadTarget e countDownload", () => {
 // ---------------------------------------------------------------- publicHead
 
 describe("limite por IP em meu, baixar e baixou", () => {
-  it(`até ${READS_PER_HOUR}/h por IP e restaurante; acima, too_many sem tocar no banco`, async () => {
+  it("o limite é 5.000/h (cerca de 10 celulares no mesmo Wi-Fi, um \"meu\" a cada 8 s)", () => {
+    expect(READS_PER_HOUR).toBe(5_000);
+  });
+  it(`até ${READS_PER_HOUR}/h por IP e restaurante; o ${READS_PER_HOUR + 1}º pedido recebe too_many sem tocar no banco`, async () => {
     const v = video({ status: "approved", mux_asset_id: "aD", mux_playback_id: "pbD" });
     tables.apareca_videos = [v];
     const { d, assetInfo } = mk();

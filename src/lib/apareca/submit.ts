@@ -68,9 +68,12 @@ const IP_PER_HOUR = 60;
 // cheias (decisão do controlador na correção 2 da T7).
 const IP_PER_HOUR_GLOBAL = 120;
 const DOWNLOADS_PER_HOUR = 5; // minha escolha: o contador de downloads não infla com toques repetidos
-// "meu", "baixar" e "baixou" somados, por IP e restaurante (decisão do controlador na revisão final):
-// o celular consulta o "meu" a cada 8 s (450/h). Acima disso, 429 antes de ler a fila ou o banco.
-export const READS_PER_HOUR = 600;
+// "meu", "baixar" e "baixou" somados, por IP e restaurante (decisão do controlador na revisão final).
+// No Wi-Fi da casa todos os celulares saem pelo mesmo IP. Cada celular na tela da fila consulta o
+// "meu" a cada 8 s: 3.600 / 8 = 450 por hora. 5.000 / 450 ≈ 11, então cabem cerca de 10 celulares
+// esperando ao mesmo tempo na mesma rede, com folga para "baixar" e "baixou". Acima disso, 429
+// antes de ler a fila ou o banco.
+export const READS_PER_HOUR = 5_000;
 const CONSENT_SKEW_MS = 10 * 60_000;
 const MUX_CHECK_MS = 5_000; // Mux consultado no máximo 1 vez a cada 5 s por vídeo
 const MEMO_MAX = 5_000;
