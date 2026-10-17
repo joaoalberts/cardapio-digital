@@ -13,6 +13,7 @@ import { mediaUrl } from "@/lib/menu/media";
 import { muxEnabled } from "@/lib/mux";
 import { currentRestaurant } from "../current";
 import { PanelShell } from "../shell";
+import { Abas } from "./abas";
 import { listQueue, loadReport, type QueueResult } from "./actions";
 import { ConfigEditor } from "./config-editor";
 import { Fila } from "./fila";
@@ -33,6 +34,16 @@ export default function AparecaPage() {
     </div>
   );
 }
+
+// A ordem segue o uso: a Fila de noite, os vídeos da casa e as zonas de vez em quando, os ajustes
+// quase nunca e os números quando o dono quer olhar.
+const ABAS = [
+  { id: "fila", label: "Fila" },
+  { id: "casa", label: "Vídeos da casa" },
+  { id: "zonas", label: "Zonas e TVs" },
+  { id: "ajustes", label: "Ajustes" },
+  { id: "numeros", label: "Números" },
+];
 
 const EMPTY: QueueResult = { items: [], newest: null, warn: "ok" };
 type Raw = Record<string, unknown>;
@@ -84,28 +95,36 @@ async function Apareca() {
 
   return (
     <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/apareca" title="Apareça na TV">
-      <Fila rid={r.id} initial={initial ?? EMPTY} initialOk={initial !== null} communityOn={r.community_enabled === true} />
-      <div className="app-setup">
-        <ConfigEditor
-          rid={r.id}
-          isOwner={isOwner}
-          allowed={allowed}
-          enabled={r.apareca_enabled === true}
-          modes={modes}
-          cfg={{
-            mode: cfg.mode, clients_max: cfg.rule.clients_max, plays: cfg.plays, device_per_hour: cfg.device_per_hour,
-            hours: cfg.hours, retention_h: cfg.retention_h,
-          }}
-        />
-        <Institucionais rid={r.id} items={house} muxOn={muxEnabled()} />
-        <Zonas rid={r.id} zones={cfg.zones} tableZones={cfg.table_zones} tvZones={cfg.tv_zones} tables={tables} tvs={tvs} />
-        <Relatorios rid={r.id} initial={report} />
-        {superAdmin && (
-          <p className="app-adm-link">
-            <Link href="/painel/apareca/admin">Liberação por restaurante</Link>
-          </p>
-        )}
-      </div>
+      <Abas abas={ABAS} pending={(initial ?? EMPTY).items.filter((i) => i.status === "pending").length}>
+        <Fila rid={r.id} initial={initial ?? EMPTY} initialOk={initial !== null} communityOn={r.community_enabled === true} />
+        <div className="app-setup">
+          <Institucionais rid={r.id} items={house} muxOn={muxEnabled()} />
+        </div>
+        <div className="app-setup">
+          <Zonas rid={r.id} zones={cfg.zones} tableZones={cfg.table_zones} tvZones={cfg.tv_zones} tables={tables} tvs={tvs} />
+        </div>
+        <div className="app-setup">
+          <ConfigEditor
+            rid={r.id}
+            isOwner={isOwner}
+            allowed={allowed}
+            enabled={r.apareca_enabled === true}
+            modes={modes}
+            cfg={{
+              mode: cfg.mode, clients_max: cfg.rule.clients_max, plays: cfg.plays, device_per_hour: cfg.device_per_hour,
+              hours: cfg.hours, retention_h: cfg.retention_h,
+            }}
+          />
+        </div>
+        <div className="app-setup">
+          <Relatorios rid={r.id} initial={report} />
+          {superAdmin && (
+            <p className="app-adm-link">
+              <Link href="/painel/apareca/admin">Liberação por restaurante</Link>
+            </p>
+          )}
+        </div>
+      </Abas>
     </PanelShell>
   );
 }

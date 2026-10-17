@@ -643,13 +643,83 @@
   }
 }
 
-@media (min-width: 900px) {
-  .ap .app-setup {
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
+/* Abas: uma linha que rola de lado no celular (a página não). Aba ativa sublinhada em dourado. */
+.ap .app-tabs {
+  display: flex;
+  gap: 4px;
+  max-width: 1100px;
+  margin: 0 0 18px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ap .app-tab {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 48px; /* área de toque */
+  padding: 0 16px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: #666666; /* 5,1:1 no fundo do painel */
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.ap .app-tab:hover {
+  color: var(--fg);
+}
+.ap .app-tab[aria-selected="true"] {
+  color: #1a1a1a;
+  border-bottom-color: var(--gold);
+}
+.ap .app-tab:focus-visible {
+  outline: 2px solid var(--gold-dark);
+  outline-offset: -2px;
+}
+.ap .app-tab .app-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: #1a1a1a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Fila: "Para aprovar" e "Na TV agora" lado a lado no computador, um embaixo do outro no celular. */
+.ap .app-fila .app-cols {
+  display: grid;
+  gap: 18px;
+  align-items: start;
+
+  & .ap-card + .ap-card {
+    margin-top: 0;
   }
-  .ap .app-setup .app-cfg {
-    grid-row: span 2;
+}
+@media (min-width: 1000px) {
+  .ap .app-fila .app-cols {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+}
+
+/* Cada aba de ajuste tem um cartão só, numa coluna de leitura confortável. */
+.ap .app-setup {
+  max-width: 820px;
+  margin-top: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ap .app-tab {
+    transition: none;
   }
 }
 

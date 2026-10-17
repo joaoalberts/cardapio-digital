@@ -5,6 +5,7 @@ import {
   alertPattern, alertStep, latestOnly, NOTICE_MS, noticeOn, noticeText, WARN_TEXT, type AlertState, type Notice, type NoticeEvent, type QueueItem,
 } from "@/lib/apareca/panel-logic";
 import { useHls } from "@/lib/menu/use-hls";
+import { PENDING_EVENT } from "./abas";
 import { approveVideo, listQueue, rejectVideo, removeFromTv, type QueueResult } from "./actions";
 
 // Fila do Apareça no celular da equipe: aprovar ou reprovar com um toque. "Reprovar" espera 5 s
@@ -237,6 +238,11 @@ export function Fila({ rid, initial, initialOk, communityOn }: { rid: string; in
   const pending = items.filter((i) => i.status === "pending");
   const onTv = items.filter((i) => i.status === "approved");
 
+  // O número na aba "Fila" acompanha o que está esperando aprovação.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent(PENDING_EVENT, { detail: pending.length }));
+  }, [pending.length]);
+
   return (
     <div className="app-fila">
       {!communityOn && (
@@ -270,79 +276,81 @@ export function Fila({ rid, initial, initialOk, communityOn }: { rid: string; in
         <span className="app-hint">A fila se atualiza sozinha a cada 10 s.</span>
       </div>
 
-      <section className="ap-card" aria-labelledby="app-h-pend">
-        <div className="ap-card-head">
-          <h2 id="app-h-pend">
-            Para aprovar {pending.length > 0 && <span className="app-count">{pending.length}</span>}
-          </h2>
-        </div>
-        {pending.length === 0 ? (
-          <p className="app-empty">Nenhum vídeo esperando. Quando um cliente enviar, ele aparece aqui.</p>
-        ) : (
-          <ul className="app-grid">
-            {pending.map((i) => (
-              <li key={i.id} className="app-item">
-                <Clip item={i} />
-                <div className="app-meta">
-                  <b>{i.name ?? "Sem nome"}</b>
-                  <span>{where(i)}</span>
-                  <span>{ago(i.created_at, now)}</span>
-                </div>
-                {undo.has(i.id) ? (
-                  <div className="app-undo" role="status">
-                    <span>Vídeo reprovado.</span>
-                    <button type="button" className="app-btn app-btn-undo" onClick={() => cancelReject(i.id)}>
-                      Desfazer
-                    </button>
-                    <i className="app-undo-bar" aria-hidden />
+      <div className="app-cols">
+        <section className="ap-card" aria-labelledby="app-h-pend">
+          <div className="ap-card-head">
+            <h2 id="app-h-pend">
+              Para aprovar {pending.length > 0 && <span className="app-count">{pending.length}</span>}
+            </h2>
+          </div>
+          {pending.length === 0 ? (
+            <p className="app-empty">Nenhum vídeo esperando. Quando um cliente enviar, ele aparece aqui.</p>
+          ) : (
+            <ul className="app-grid">
+              {pending.map((i) => (
+                <li key={i.id} className="app-item">
+                  <Clip item={i} />
+                  <div className="app-meta">
+                    <b>{i.name ?? "Sem nome"}</b>
+                    <span>{where(i)}</span>
+                    <span>{ago(i.created_at, now)}</span>
                   </div>
-                ) : (
-                  <div className="app-actions">
-                    <button type="button" className="app-btn app-btn-no" onClick={() => reject(i.id)} disabled={busy.has(i.id)}>
-                      Reprovar
-                    </button>
-                    <button type="button" className="app-btn app-btn-yes" onClick={() => approve(i.id)} disabled={busy.has(i.id)}>
-                      Aprovar
-                    </button>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                  {undo.has(i.id) ? (
+                    <div className="app-undo" role="status">
+                      <span>Vídeo reprovado.</span>
+                      <button type="button" className="app-btn app-btn-undo" onClick={() => cancelReject(i.id)}>
+                        Desfazer
+                      </button>
+                      <i className="app-undo-bar" aria-hidden />
+                    </div>
+                  ) : (
+                    <div className="app-actions">
+                      <button type="button" className="app-btn app-btn-no" onClick={() => reject(i.id)} disabled={busy.has(i.id)}>
+                        Reprovar
+                      </button>
+                      <button type="button" className="app-btn app-btn-yes" onClick={() => approve(i.id)} disabled={busy.has(i.id)}>
+                        Aprovar
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-      <section className="ap-card" aria-labelledby="app-h-tv">
-        <div className="ap-card-head">
-          <h2 id="app-h-tv">Na TV agora</h2>
-        </div>
-        {onTv.length === 0 ? (
-          <p className="app-empty">Nenhum vídeo de cliente na programação.</p>
-        ) : (
-          <ul className="app-list">
-            {onTv.map((i) => (
-              <li key={i.id} className="app-row">
-                {i.poster ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- miniatura do Mux
-                  <img className="app-thumb" src={i.poster} alt="" loading="lazy" />
-                ) : (
-                  <i className="app-thumb" aria-hidden />
-                )}
-                <div className="app-meta">
-                  <b>{i.name ?? "Sem nome"}</b>
-                  <span>{where(i)}</span>
-                  <span>
-                    Passou {Math.min(i.plays, i.plays_target)} de {i.plays_target} {i.plays_target === 1 ? "vez" : "vezes"}
-                  </span>
-                </div>
-                <button type="button" className="app-btn app-btn-out" onClick={() => remove(i.id)} disabled={busy.has(i.id)}>
-                  Remover da TV agora
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        <section className="ap-card" aria-labelledby="app-h-tv">
+          <div className="ap-card-head">
+            <h2 id="app-h-tv">Na TV agora</h2>
+          </div>
+          {onTv.length === 0 ? (
+            <p className="app-empty">Nenhum vídeo de cliente na programação.</p>
+          ) : (
+            <ul className="app-list">
+              {onTv.map((i) => (
+                <li key={i.id} className="app-row">
+                  {i.poster ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- miniatura do Mux
+                    <img className="app-thumb" src={i.poster} alt="" loading="lazy" />
+                  ) : (
+                    <i className="app-thumb" aria-hidden />
+                  )}
+                  <div className="app-meta">
+                    <b>{i.name ?? "Sem nome"}</b>
+                    <span>{where(i)}</span>
+                    <span>
+                      Passou {Math.min(i.plays, i.plays_target)} de {i.plays_target} {i.plays_target === 1 ? "vez" : "vezes"}
+                    </span>
+                  </div>
+                  <button type="button" className="app-btn app-btn-out" onClick={() => remove(i.id)} disabled={busy.has(i.id)}>
+                    Remover da TV agora
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
