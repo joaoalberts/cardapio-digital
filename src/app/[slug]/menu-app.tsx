@@ -1483,7 +1483,16 @@ function LoopVideo({
   // (Testada em 16/10 uma fila de um card por vez: deixou o primeiro card mais lento.)
   const gate = useStartGate();
   const covered = useHomeCovered();
-  const live = active && (eager || (gate && !covered)) ? src : null;
+  // Story aberto: banner e cards soltam o vídeo (o iPhone seguia baixando o banner de
+  // ~2 min pausado e o vídeo do story ficava parado no começo, visto no diagnóstico, 17/10).
+  const live = active && !covered && (eager || gate) ? src : null;
+  useEffect(() => {
+    const v = own.current;
+    // Só tirar o src não basta no Safari: o arquivo continua preso e baixando.
+    if (!v || live || !v.currentSrc || v.currentSrc.startsWith("blob:")) return;
+    v.removeAttribute("src");
+    v.load();
+  }, [live]);
   useEffect(() => {
     const v = own.current;
     if (!v || !eager) return;
