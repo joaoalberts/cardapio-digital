@@ -12,7 +12,7 @@ import { ProfileForm } from "./profile-form";
 import "../panel.css";
 import "../cardapio/cardapio.css";
 
-export const metadata: Metadata = { title: "Editar Perfil" };
+export const metadata: Metadata = { title: "Perfil" };
 
 export default function PerfilPage() {
   return (
@@ -56,7 +56,7 @@ async function Perfil() {
   const cover = banners[0];
   const logo = mediaUrl(r.logo_path);
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo }} active="/painel/perfil" title="Editar Perfil">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo }} active="/painel/perfil" title="Perfil" lead="Nome, endereço, horário e Instagram da casa.">
       <ProfileForm
         data={{
           id: r.id,

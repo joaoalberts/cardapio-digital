@@ -66,13 +66,12 @@ async function Agora() {
   });
 
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/agora" title="Agora">
-      <p className="ag-lead">Aqui fica o que pede um toque agora: vídeos para aprovar, a enquete no ar e as TVs.</p>
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/agora" title="Agora" lead="O que precisa de você neste momento.">
       <AgoraLive
         rid={r.id}
         isOwner={isOwner}
         initial={initial}
-        initialOk={agora !== null}
+        initialOk={agora !== null && agora.queueOk}
         aparecaOff={aparecaOff()}
         maker={maker}
         setup={setupDone(steps) ? null : <SetupCard rid={r.id} steps={steps} />}

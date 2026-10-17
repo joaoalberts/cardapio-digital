@@ -82,7 +82,7 @@ async function Tvs() {
   };
 
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/tvs" title="TVs">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo: mediaUrl(r.logo_path) }} active="/painel/tvs" title="TVs" lead="Aqui você liga a TV do salão e escolhe o que cada uma mostra.">
       <TvsEditor data={data} />
     </PanelShell>
   );

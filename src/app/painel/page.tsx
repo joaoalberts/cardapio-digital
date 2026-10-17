@@ -41,6 +41,6 @@ async function PainelContent() {
     );
   }
 
-  // Com restaurante criado, o painel abre direto no cardápio.
-  redirect("/painel/cardapio");
+  // Com restaurante criado, o painel abre na tela Agora (o que precisa de você neste momento).
+  redirect("/painel/agora");
 }

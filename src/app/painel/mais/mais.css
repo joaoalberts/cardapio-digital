@@ -1,0 +1,59 @@
+/* Página Mais: lista grande, um cartão branco por grupo, linhas de 52 px fáceis de tocar. */
+.ap .mx-group {
+  max-width: 640px;
+}
+.ap .mx-group + .mx-group {
+  margin-top: 20px;
+}
+.ap .mx-group h2 {
+  margin: 0 0 8px;
+  padding: 0 4px;
+  color: #666666;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ap .mx-group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.ap .mx-group li + li {
+  border-top: 1px solid var(--line);
+}
+.ap .mx-group :is(a, button) {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 14px 0 16px;
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  text-align: left;
+}
+.ap .mx-group :is(a, button):hover {
+  background: var(--gold-soft);
+}
+.ap .mx-group :is(a, button) span {
+  flex: 1;
+  min-width: 0;
+}
+.ap .mx-group .icon {
+  color: var(--gold-dark);
+}
+.ap .mx-group .mx-go {
+  width: 18px;
+  height: 18px;
+  color: #666666;
+}
+.ap .mx-group form {
+  margin: 0;
+}

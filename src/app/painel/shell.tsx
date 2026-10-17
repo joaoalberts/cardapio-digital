@@ -4,88 +4,130 @@ import * as db from "@/lib/db/nocodb";
 import { muxPending } from "@/lib/media-store";
 import { ShellMenu, TopButton, VideoSync } from "./shell-menu";
 import { ownerMenuHref } from "./menu-link";
+import { pendingCount } from "./apareca/actions";
+import { BOTTOM_NAV, MAIS_GROUPS, NAV_GROUPS, type NavItem } from "@/lib/painel/nav";
 
 // Fonte do painel (a mesma família leve do DGuests); só o painel baixa.
 const raleway = Raleway({ subsets: ["latin"], display: "swap", variable: "--f-panel" });
 
-const NAV = [
-  { href: "/painel/pedidos", label: "Pedidos", icon: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6" },
-  { href: "/painel/cardapio", label: "Adicionar/Editar", icon: "M12 5v14M5 12h14" },
-  { href: "/painel/especiais", label: "Produtos especiais", icon: "M13 2L4 14h7l-1 8 9-12h-7z" },
-  { href: "/painel/comunidade", label: "Comunidade", icon: "M21 12a8 8 0 01-11.6 7.1L4 20l1-4.3A8 8 0 1121 12z" },
-  { href: "/painel/apareca", label: "Apareça na TV", icon: "M3 5h18v12H3zM8 21h8M12 17v4" },
-  { href: "/painel/aparencia", label: "Aparência", icon: "M12 3a9 9 0 100 18c1 0 1.5-.7 1.5-1.5 0-1.2-1-1.6-1-2.6 0-.8.7-1.4 1.5-1.4H16a5 5 0 005-5c0-4-4-7.5-9-7.5zM7.5 12a1 1 0 100-2 1 1 0 000 2zM10.5 8a1 1 0 100-2 1 1 0 000 2zM15 8a1 1 0 100-2 1 1 0 000 2z" },
-  { href: "/painel/mesas", label: "Mesas", icon: "M3 4h18v4H3zM4 8v12M20 8v12M4 14h16" },
-  { href: "/painel/perfil", label: "Editar Perfil", icon: "M10 12a4 4 0 100-8 4 4 0 000 8zM3 21c0-4 3.1-7 7-7 1.3 0 2.5.3 3.5.9M17.5 14.5l3 3-4.5 4.5h-3v-3z" },
-  { href: "/painel/suporte", label: "Suporte", icon: "M4 6h16v12H4zM4 7l8 6 8-6" },
-] as const;
+// Toda tela do painel que usa o shell. As do "Mais" acendem o botão Mais na barra de baixo do celular.
+export type PanelHref =
+  | "/painel/pedidos"
+  | "/painel/agora"
+  | "/painel/cardapio"
+  | "/painel/especiais"
+  | "/painel/aparencia"
+  | "/painel/mesas"
+  | "/painel/tvs"
+  | "/painel/comunidade"
+  | "/painel/apareca"
+  | "/painel/perfil"
+  | "/painel/suporte"
+  | "/painel/mais";
 
-// "/painel/tvs" e "/painel/agora" ainda não estão no menu (a Tarefa 5 refaz o menu); as telas já usam o shell.
-export type PanelHref = (typeof NAV)[number]["href"] | "/painel/tvs" | "/painel/agora";
+export const OPEN_MENU_ICON = "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5";
+const IN_MAIS = new Set<string>(["/painel/mais", ...MAIS_GROUPS.flatMap((g) => g.items.map((i) => i.href))]);
 
 export async function PanelShell({
   restaurant,
   active,
   title,
+  lead,
   children,
 }: {
   restaurant: { id: string; name: string; slug: string; logo: string | null };
   active: PanelHref;
   title: string;
+  lead?: string; // a linha "para que serve", sob o título (opcional: Produtos especiais ainda não tem)
   children: React.ReactNode;
 }) {
   // Vídeos ainda em preparo no Mux (de prato, categoria ou banner): qualquer página do
   // painel confere até ficarem prontos.
   type Pending = { status: string | null; mux_mp4: string | null; mux_upload_id: string | null };
   const count = (await db.list<Pending>("media", { restaurant_id: restaurant.id })).filter(muxPending).length;
-  const newOrders = await db.count("orders", { restaurant_id: restaurant.id, status: "new" }).catch(() => 0);
-  const menuHref = await ownerMenuHref(restaurant.id, restaurant.slug); // "Abrir cardápio" com "Pedir" e carrinho
+  // "Abrir cardápio" com "Pedir" e carrinho; pending = vídeos esperando aprovação (0 sem o Apareça ou em erro).
+  const [newOrders, menuHref, pending] = await Promise.all([
+    db.count("orders", { restaurant_id: restaurant.id, status: "new" }).catch(() => 0),
+    ownerMenuHref(restaurant.id, restaurant.slug),
+    pendingCount(restaurant.id),
+  ]);
+  const badge = (href: string) => (href === "/painel/pedidos" ? newOrders : href === "/painel/agora" ? pending : 0);
+  const avatar = (
+    // eslint-disable-next-line @next/next/no-img-element -- logo enviada pelo restaurante
+    <i className="ap-avatar">{restaurant.logo ? <img src={restaurant.logo} alt="" /> : initials(restaurant.name)}</i>
+  );
   return (
     <div className={`ap-app ${raleway.variable}`}>
       <aside>
         <div className="ap-brand">
           <b>C</b>ARDÁPIO
         </div>
-        <ShellMenu
-          name={restaurant.name}
-          menuHref={menuHref}
-          avatar={
-            // eslint-disable-next-line @next/next/no-img-element -- logo enviada pelo restaurante
-            <i className="ap-avatar">{restaurant.logo ? <img src={restaurant.logo} alt="" /> : initials(restaurant.name)}</i>
-          }
-        />
-        <nav>
-          {NAV.map((n) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              className={n.href === active ? "on" : undefined}
-              aria-current={n.href === active ? "page" : undefined}
-            >
-              <svg className="icon" viewBox="0 0 24 24" aria-hidden>
-                <path d={n.icon} />
-              </svg>
-              {n.label}
-              {n.href === "/painel/pedidos" && newOrders > 0 && <span className="ap-badge">{newOrders}</span>}
-            </Link>
+        <ShellMenu name={restaurant.name} menuHref={menuHref} avatar={avatar} />
+        <nav aria-label="Menu do painel">
+          {NAV_GROUPS.map((g, i) => (
+            <div key={g.title} className="ap-navgroup">
+              <span className="ap-navtitle">{g.title}</span>
+              {g.items.map((n) => (
+                <SideLink key={n.href} item={n} on={n.href === active} badge={badge(n.href)} />
+              ))}
+              {/* "Abrir cardápio" fecha o grupo Conta: abre o cardápio público numa aba nova. */}
+              {i === NAV_GROUPS.length - 1 && (
+                <a href={menuHref} target="_blank" rel="noreferrer">
+                  <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+                    <path d={OPEN_MENU_ICON} />
+                  </svg>
+                  Abrir cardápio
+                </a>
+              )}
+            </div>
           ))}
-          <a href={menuHref} target="_blank" rel="noreferrer">
-            <svg className="icon" viewBox="0 0 24 24" aria-hidden>
-              <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5" />
-            </svg>
-            Abrir cardápio
-          </a>
         </nav>
       </aside>
       <div className="ap-main">
         <header className="ap-top">
           <h1>{title}</h1>
+          {/* No celular a barra lateral some: o avatar (Editar Perfil, Ver cardápio, Suporte, Sair) vem para o topo. */}
+          <div className="ap-top-rest">
+            <ShellMenu name={restaurant.name} menuHref={menuHref} avatar={avatar} />
+          </div>
         </header>
-        <main>{children}</main>
+        <main>
+          {lead && <p className="ap-purpose">{lead}</p>}
+          {children}
+        </main>
       </div>
+      {/* Celular: 4 botões fixos embaixo. Mais fica aceso também nas telas que moram dentro dele. */}
+      <nav className="ap-bottom" aria-label="Menu principal">
+        {BOTTOM_NAV.map((n) => {
+          const here = n.href === active;
+          const on = n.href === "/painel/mais" ? IN_MAIS.has(active) : here;
+          const count = badge(n.href);
+          return (
+            <Link key={n.href} href={n.href} className={on ? "on" : undefined} aria-current={here ? "page" : on ? "true" : undefined}>
+              <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+                <path d={n.icon} />
+              </svg>
+              <span>{n.label}</span>
+              {count > 0 && <span className="ap-badge">{count}</span>}
+            </Link>
+          );
+        })}
+      </nav>
       <TopButton />
       {!!count && <VideoSync restaurantId={restaurant.id} pending={count} />}
     </div>
+  );
+}
+
+function SideLink({ item, on, badge }: { item: NavItem; on: boolean; badge: number }) {
+  return (
+    <Link href={item.href} className={on ? "on" : undefined} aria-current={on ? "page" : undefined}>
+      <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+        <path d={item.icon} />
+      </svg>
+      {item.label}
+      {badge > 0 && <span className="ap-badge">{badge}</span>}
+    </Link>
   );
 }
 

@@ -170,12 +170,3 @@
     align-items: start;
   }
 }
-
-/* Linha "para que serve", logo abaixo do título. */
-.ap .ag-lead {
-  max-width: 820px;
-  margin: 0 0 16px;
-  color: #666666;
-  font-size: 15px;
-  line-height: 1.45;
-}

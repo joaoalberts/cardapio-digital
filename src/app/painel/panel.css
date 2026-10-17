@@ -170,6 +170,36 @@
   & nav a.on .icon {
     color: var(--gold);
   }
+  /* Menu em grupos (Durante o serviço, Cardápio, Salão, Conta): título pequeno em cinza claro, que no fundo
+     preto passa no contraste AA (o #666666 do resto do painel não passaria aqui). */
+  & .ap-navgroup {
+    display: grid;
+    gap: 8px;
+  }
+  & .ap-navgroup + .ap-navgroup {
+    margin-top: 8px;
+  }
+  & .ap-navtitle {
+    padding: 0 8px;
+    color: var(--side-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  /* O avatar no topo e a barra de baixo são só do celular. */
+  & .ap-top-rest,
+  & .ap-bottom {
+    display: none;
+  }
+  /* Linha "para que serve", logo abaixo do título de cada tela. */
+  & .ap-purpose {
+    max-width: 820px;
+    margin: 0 0 16px;
+    color: #666666;
+    font-size: 15px;
+    line-height: 1.45;
+  }
 
   & .ap-main {
     min-width: 0;
@@ -1174,42 +1204,145 @@
   @media (max-width: 760px) {
     & .ap-app {
       grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto;
     }
-    /* No celular a barra lateral vira o topo: marca e restaurante numa linha, menu numa faixa. */
+    /* No celular a barra lateral some: o topo fica com o título e o avatar, e o menu vira a barra de baixo. */
     & aside {
-      position: static;
-      height: auto;
-      padding: 12px 0 10px;
-      gap: 10px;
-    }
-    & .ap-brand {
-      padding: 0 16px 10px;
-    }
-    & .ap-rest {
-      padding: 0 8px 10px;
-    }
-    & aside nav {
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      padding: 0 12px;
-      scrollbar-width: none;
-    }
-    & .ap-app aside nav a {
-      flex: none;
-      width: auto;
-      padding: 8px 12px;
-      gap: 8px;
+      display: none;
     }
     & .ap-top {
-      height: 48px;
-      padding: 0 16px;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      height: 56px;
+      padding: 0 8px 0 16px;
+      justify-content: space-between;
+      gap: 12px;
     }
+    & .ap-top h1 {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    & .ap-top-rest {
+      display: block;
+      position: relative;
+    }
+    & .ap-top .ap-rest {
+      border: 0;
+      padding: 0;
+    }
+    & .ap-top .ap-rest-btn {
+      width: auto;
+      min-width: 44px;
+      min-height: 44px;
+      padding: 4px;
+      justify-content: center;
+    }
+    /* O nome sai da vista, mas continua sendo o nome do botão para quem usa leitor de tela. */
+    & .ap-top .ap-rest-btn span {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    & .ap-top .caret {
+      display: none;
+    }
+    & .ap-top .ap-rest-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      width: min(240px, calc(100vw - 32px));
+      padding: 10px;
+      border-radius: 8px;
+      background: var(--side);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+    }
+    & .ap-top .ap-rest-menu :is(a, button) {
+      min-height: 44px;
+    }
+    /* Barra de baixo: 4 botões de 48 px no mínimo, ícone em cima do texto, acima da área do gesto do iPhone. */
+    & .ap-bottom {
+      position: fixed;
+      z-index: 9;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0;
+      height: calc(64px + env(safe-area-inset-bottom, 0px));
+      padding: 0 0 env(safe-area-inset-bottom, 0px);
+      background: var(--card);
+      border-top: 1px solid var(--line);
+    }
+    & .ap-bottom a {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      min-height: 48px;
+      padding: 6px 4px;
+      border-radius: 0;
+      background: none;
+      color: var(--fg);
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+    }
+    & .ap-bottom a:hover {
+      background: none;
+    }
+    & .ap-bottom a span:not(.ap-badge) {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    & .ap-bottom .icon {
+      width: 22px;
+      height: 22px;
+    }
+    /* Ativo: ícone e traço dourados; o texto fica escuro, porque o dourado no branco não passa no AA em 12 px. */
+    & .ap-bottom a.on {
+      background: none;
+      box-shadow: none;
+    }
+    & .ap-bottom a.on .icon {
+      color: var(--gold-dark);
+    }
+    & .ap-bottom a.on::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 25%;
+      right: 25%;
+      height: 3px;
+      border-radius: 0 0 3px 3px;
+      background: var(--gold);
+    }
+    & .ap-bottom .ap-badge {
+      position: absolute;
+      top: 4px;
+      left: calc(50% + 6px);
+      margin: 0;
+    }
+    /* O botão de voltar ao topo e o aviso curto sobem acima da barra. */
+    & .ap-up {
+      right: 16px;
+      bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 16px);
+    }
+    & .ap-toast {
+      bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 16px);
+    }
+    /* A barra de Salvar (Aparência) fica logo acima da barra de baixo, que já cuida da área do gesto. */
     & .ap-bar {
       left: 0;
-      padding-block: 12px calc(12px + env(safe-area-inset-bottom, 0px));
+      bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+      padding-block: 12px;
     }
     & .ap-bar .msg,
     & .ap-lead,
@@ -1219,9 +1352,14 @@
     & .btn {
       flex: 1;
     }
+    /* Fim da página livre da barra de baixo (64 px + área do gesto), com um respiro. A Aparência ainda tem a
+       barra de Salvar e a faixa de fontes por cima: aí sobra o espaço das duas. */
     & main {
       padding-top: 16px;
-      padding-bottom: 260px;
+      padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 24px);
+    }
+    & main:has(.ap-bar) {
+      padding-bottom: calc(260px + 64px + env(safe-area-inset-bottom, 0px));
     }
     & .ap-seg button {
       padding: 5px 12px;
@@ -1237,7 +1375,7 @@
       z-index: 6;
       left: 0;
       right: 0;
-      bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+      bottom: calc(68px + 64px + env(safe-area-inset-bottom, 0px));
       display: flex;
       gap: 10px;
       overflow-x: auto;

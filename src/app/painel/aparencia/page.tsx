@@ -32,7 +32,7 @@ async function Aparencia() {
   const sampleText = menu?.categories[0]?.name ?? "Entradas";
 
   return (
-    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo }} active="/painel/aparencia" title="Aparência">
+    <PanelShell restaurant={{ id: r.id, name: r.name, slug: r.slug, logo }} active="/painel/aparencia" title="Aparência" lead="Cores, fonte e capa do cardápio.">
       <section className="ap-card">
         <div className="ap-card-head">
           <svg className="icon" viewBox="0 0 24 24" aria-hidden>
