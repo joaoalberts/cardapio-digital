@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import QRCode from "qrcode";
+import { QR_ECC, qrLink } from "@/lib/comunidade/qr";
 import { communityOff } from "@/lib/comunidade/off";
 import { getCommunityHead } from "@/lib/comunidade/server";
 import { getPublicMenu } from "@/lib/menu/data";
@@ -92,8 +93,8 @@ async function Telao({ params }: { params: PageProps<"/[slug]/telao">["params"] 
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
   const proto = h.get("x-forwarded-proto") ?? (/^(localhost|127\.0\.0\.1)(:|$)/.test(host) ? "http" : "https");
-  const link = `${proto}://${host}/${slug}?ref=telao`;
-  const qrSvg = await QRCode.toString(link, { type: "svg", margin: 0, errorCorrectionLevel: "M", color: { dark: "#1b1714", light: "#0000" } });
+  const link = qrLink(proto, host, slug, "telao");
+  const qrSvg = await QRCode.toString(link, { type: "svg", margin: 0, errorCorrectionLevel: QR_ECC, color: { dark: "#1b1714", light: "#0000" } });
 
   return (
     <div className={fontVariables}>

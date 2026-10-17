@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { OrderRow } from "@/lib/orders/service";
 import type { PricedLine } from "@/lib/orders/pricing";
-import { GOALS, goalNights, goalsFor, nightTotals, salesGoals, scoreboard } from "./scoreboard";
+import { GOALS, goalNights, goalsCut, goalsFor, nightTotals, salesGoals, scoreboard } from "./scoreboard";
 import type { TallyRow } from "./types";
 
 // Dia da Comunidade de 16/10 em São Paulo com day_start 05:00: 08:00Z do dia 16 às 08:00Z do 17.
@@ -275,5 +275,26 @@ describe("salesGoals (por noite e acumulado de 4 semanas)", () => {
     // Por mesa: R$ 90 contra R$ 100 = -10%, abaixo da meta. Contando por pedido daria
     // R$ 60 contra R$ 50 = +20% e "meta batida".
     expect(g.night.ticket).toEqual({ cents: 9000, baseline: 10_000, delta: -10, goal: 5, hit: false });
+  });
+});
+
+describe("goalsCut: o painel avisa quando o teto de leitura cortou o período", () => {
+  const g = goalNights("2026-10-16", TZ, "05:00"); // de 22/08 a 16/10
+  const orders = (oldest: string, k: number) =>
+    Array.from({ length: k }, (_, i) => order([line(1000)], { created_at: i === k - 1 ? oldest : "2026-10-16T23:00:00.000Z" }));
+  const tallies = (oldestDay: string, k: number) => Array.from({ length: k }, (_, i) => tally({ day: i === k - 1 ? oldestDay : "2026-10-16" }));
+  it("abaixo do teto, nada foi cortado", () => {
+    expect(goalsCut({ orders: orders("2026-10-01T23:00:00.000Z", 3), ordersCap: 5, tallies: tallies("2026-10-01", 3), tallyCap: 5 }, g)).toBeNull();
+  });
+  it("no teto, mas a leitura já passou do começo do período: nada cortado", () => {
+    expect(goalsCut({ orders: orders("2026-08-20T23:00:00.000Z", 5), ordersCap: 5, tallies: tallies("2026-08-21", 5), tallyCap: 5 }, g)).toBeNull();
+  });
+  it("pedidos no teto dentro do período: conta completa a partir da noite seguinte à mais velha lida", () => {
+    // 01/10 às 20h em São Paulo cai na noite de 01/10; a primeira inteira é a de 02/10
+    expect(goalsCut({ orders: orders("2026-10-01T23:00:00.000Z", 5), ordersCap: 5, tallies: [], tallyCap: 5 }, g)).toBe("2026-10-02");
+  });
+  it("funil no teto dentro do período: a partir do dia seguinte ao mais velho lido; vale o corte mais recente", () => {
+    expect(goalsCut({ orders: [], ordersCap: 5, tallies: tallies("2026-09-30", 5), tallyCap: 5 }, g)).toBe("2026-10-01");
+    expect(goalsCut({ orders: orders("2026-10-01T23:00:00.000Z", 5), ordersCap: 5, tallies: tallies("2026-10-05", 5), tallyCap: 5 }, g)).toBe("2026-10-06");
   });
 });

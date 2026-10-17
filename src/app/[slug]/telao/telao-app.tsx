@@ -7,7 +7,7 @@ import {
 import {
   backoff, clockSkew, houseHighlight, localTime, PAIR_RENEW_GRACE_MS, pairCodeDue, pairCodeRecord, pollChime, pollOutcome,
   pollTiming, priceInfo, questionText, ringText, savedPairCode, soleLeader, TV_POLL_MS, tvAccent, tvFeatSlides, tvLongQuestion,
-  tvOrder, tvReloadDue, tvScreen, tvSlow, type SavedPairCode, type TvScreen, type TvSlide,
+  tvBgSize, tvOrder, tvReloadDue, tvScreen, tvSlow, type SavedPairCode, type TvScreen, type TvSlide,
 } from "@/lib/comunidade/client-logic";
 import { ct, ctf } from "@/lib/comunidade/i18n";
 import { sha256Hex } from "@/lib/comunidade/sha256";
@@ -269,9 +269,7 @@ function usePairing(slug: string): PairView {
 
 // ---------- Dados (leitura pública da CDN) ----------
 
-// closedSeen: quando esta TV viu a enquete atual fechada pela primeira vez (relógio do
-// servidor), para o "Deu X" contar os 45 s mesmo quando o painel fecha antes da hora.
-type TvData = { state: PublicState; skew: number; closedSeen: number | null };
+type TvData = { state: PublicState; skew: number };
 
 function useTvData(slug: string, active: boolean) {
   const [data, setData] = useState<TvData | null>(null);
@@ -282,7 +280,6 @@ function useTvData(slug: string, active: boolean) {
     let alive = true;
     let busy = false;
     let fails = 0;
-    let seen: { id: string; at: number } | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const schedule = (ms: number) => {
       clearTimeout(timer);
@@ -307,12 +304,9 @@ function useTvData(slug: string, active: boolean) {
           if (!isState(s)) throw new Error("estado inválido");
           fails = 0;
           const skew = clockSkew(s.now, Date.now());
-          if (s.poll?.closed) {
-            if (seen?.id !== s.poll.id) seen = { id: s.poll.id, at: Date.now() + skew };
-          } else seen = null;
           if (alive) {
             setGone(false);
-            setData({ state: s, skew, closedSeen: seen?.at ?? null });
+            setData({ state: s, skew });
           }
         }
       } catch {
@@ -423,7 +417,7 @@ function LiveTelao({ slug, lang, house, qrSvg, qrLink, menu }: { slug: string; l
   const paused = failures > 0;
   // Relógio do servidor que anda por segundo (anel do tempo e o fim dos 45 s do "Deu").
   const now = useClock(!!state && !paused, state ? Date.parse(state.now) : 0, data?.skew ?? 0);
-  const screen: TvScreen | "wait" = gone ? "off" : state ? tvScreen(state, data!.closedSeen, now) : "wait";
+  const screen: TvScreen | "wait" = gone ? "off" : state ? tvScreen(state, now) : "wait";
   const poll = state?.poll ?? null;
   const pollOpen = screen === "poll";
 
@@ -662,20 +656,36 @@ function Poster(p: PosterProps) {
 
 const slideKey = (s: TvSlide) => (s.kind === "post" ? `post-${s.post.id}` : `hl-${s.item_id}`);
 
-// Fundo: a foto da vez desenhada num canvas de 64×36 e esticada (o navegador suaviza, sem
-// filter). Foto de outro domínio deixa o canvas "sujo", o que só impede ler os pixels: para
-// mostrar, tanto faz.
+// Fundo: a foto da vez desenhada num canvas pequeno no formato da tela (64 px no lado maior:
+// 64×36 deitada, 36×64 em pé) e esticado (o navegador suaviza, sem filter). Foto de outro
+// domínio deixa o canvas "sujo", o que só impede ler os pixels: para mostrar, tanto faz.
 function TinyBg({ photos, on }: { photos: Photo[]; on: string | null }) {
+  const size = useBgSize();
   return (
     <div className="tl-bgb" aria-hidden>
       {photos.map((ph) => (
-        <TinyCanvas key={ph.key} src={ph.src} on={ph.key === on} />
+        <TinyCanvas key={ph.key} src={ph.src} on={ph.key === on} size={size} />
       ))}
     </div>
   );
 }
 
-function TinyCanvas({ src, on }: { src: string; on: boolean }) {
+// Formato da tela, refeito quando a TV gira ou a janela muda de tamanho.
+function useBgSize() {
+  const [size, setSize] = useState(() => tvBgSize(0, 0));
+  useEffect(() => {
+    const read = () => {
+      const next = tvBgSize(window.innerWidth, window.innerHeight);
+      setSize((cur) => (cur.w === next.w && cur.h === next.h ? cur : next));
+    };
+    read();
+    window.addEventListener("resize", read);
+    return () => window.removeEventListener("resize", read);
+  }, []);
+  return size;
+}
+
+function TinyCanvas({ src, on, size }: { src: string; on: boolean; size: { w: number; h: number } }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const cv = ref.current;
@@ -685,7 +695,7 @@ function TinyCanvas({ src, on }: { src: string; on: boolean }) {
     img.onload = () => {
       const ctx = alive ? cv.getContext("2d") : null;
       if (!ctx || !img.naturalWidth) return;
-      // "cover": recorta a foto na proporção 16:9 do canvas.
+      // "cover": recorta a foto na proporção do canvas (a da tela).
       const k = Math.max(cv.width / img.naturalWidth, cv.height / img.naturalHeight);
       const w = cv.width / k;
       const h = cv.height / k;
@@ -695,8 +705,8 @@ function TinyCanvas({ src, on }: { src: string; on: boolean }) {
     return () => {
       alive = false;
     };
-  }, [src]);
-  return <canvas ref={ref} width={64} height={36} className={on ? "on" : undefined} />;
+  }, [src, size.w, size.h]);
+  return <canvas ref={ref} width={size.w} height={size.h} className={on ? "on" : undefined} />;
 }
 
 // ---------- Enquete aberta ----------

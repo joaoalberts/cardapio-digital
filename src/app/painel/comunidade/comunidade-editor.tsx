@@ -58,6 +58,8 @@ export type EditorData = {
   tvs: { id: string; label: string; seen: string }[];
   score: { orders: number; lines: number; cents: number; funnel: Record<FunnelKey, number>; tables: { qr: number; open: number; pct: number }; polls: number };
   goals: { night: Goals; month: Goals };
+  // Primeira noite contada inteira quando o teto de leitura cortou o período ("DD/MM"); senão null.
+  goalsFrom: string | null;
 };
 
 type Res = { error?: string };
@@ -759,7 +761,7 @@ function ScoreCard({ data }: { data: EditorData }) {
         <b>{brl(s.cents)}</b> em pedidos com &quot;Pedir também&quot;
       </p>
 
-      <Goals goals={data.goals} />
+      <Goals goals={data.goals} from={data.goalsFrom} />
 
       <p className="cp-tiles-h">A noite em números</p>
       <div className="cp-tiles">
@@ -848,7 +850,7 @@ function Mark({ hit }: { hit: boolean | null }) {
   return <em className={`cp-goal-mark ${hit ? "hit" : "miss"}`}>{hit ? "✓ atingiu" : "não atingiu"}</em>;
 }
 
-function Goals({ goals }: { goals: EditorData["goals"] }) {
+function Goals({ goals, from }: { goals: EditorData["goals"]; from: string | null }) {
   return (
     <div className="cp-goals">
       <p className="cp-tiles-h">Metas</p>
@@ -883,6 +885,11 @@ function Goals({ goals }: { goals: EditorData["goals"] }) {
       <p className="cp-note">
         O ticket de hoje é comparado com o mesmo dia da semana nas 4 semanas anteriores; o de 4 semanas, com as 4 semanas de antes.
       </p>
+      {from && (
+        <p className="cp-note">
+          Período cortado: o painel lê no máximo 5.000 pedidos e 5.000 registros do funil, então as metas só contam inteiras a partir de {from}.
+        </p>
+      )}
     </div>
   );
 }

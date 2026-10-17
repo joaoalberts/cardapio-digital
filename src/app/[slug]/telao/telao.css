@@ -108,7 +108,7 @@
   grid-template-areas: "mast side" "body side";
 }
 
-/* fundo: a foto da líder em 64×36 px (canvas), esticada; o desfoque sai sem filter */
+/* fundo: a foto da líder num canvas de 64 px no lado maior, no formato da tela (64×36 deitada, 36×64 em pé), esticada; o desfoque sai sem filter */
 .tl-bgb {
   position: absolute;
   inset: 0;

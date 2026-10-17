@@ -293,6 +293,30 @@ export function balloonPath(w: number, h: number, r: number, tw: number, th: num
   return `M${r} 0H${w - r}A${r} ${r} 0 0 1 ${w} ${r}V${h - r}A${r} ${r} 0 0 1 ${w - r} ${h}H${c + tw / 2}L${c + 3} ${h + th - 2}Q${c} ${h + th} ${c - 3} ${h + th - 2}L${c - tw / 2} ${h}H${r}A${r} ${r} 0 0 1 0 ${h - r}V${r}A${r} ${r} 0 0 1 ${r} 0Z`;
 }
 
+// ---------- Grupo de opções (radiogroup) ----------
+
+// Setas do teclado num radiogroup (padrão do WAI-ARIA): direita/baixo avançam, esquerda/cima
+// voltam, dando a volta nas pontas; Home e End vão às pontas. Devolve o novo índice, ou null
+// quando a tecla não é de navegação (ou o grupo está vazio).
+export function radioStep(index: number, count: number, key: string): number | null {
+  if (count <= 0) return null;
+  const i = index >= 0 && index < count ? index : -1;
+  switch (key) {
+    case "ArrowRight":
+    case "ArrowDown":
+      return (i + 1) % count;
+    case "ArrowLeft":
+    case "ArrowUp":
+      return i < 0 ? count - 1 : (i - 1 + count) % count;
+    case "Home":
+      return 0;
+    case "End":
+      return count - 1;
+    default:
+      return null;
+  }
+}
+
 // ---------- Story ----------
 
 // O que a folha "Compartilhar no story" oferece (ids para a rota do cartão):
@@ -306,7 +330,10 @@ export function storyChoices(
 ): { poll: string | null; post: string | null } {
   if (!s?.enabled) return { poll: null, post: null };
   const p = s.poll;
-  const poll = p && p.has_votes && (p.closed || !!o.mine || !o.canVote) ? p.id : null;
+  // Com a enquete aberta, o meu voto (otimista, de myVote) já conta: o "Postar" aparece logo
+  // depois de votar, sem esperar a CDN trazer has_votes (até 12 s no primeiro voto).
+  const votes = p && (p.has_votes || (!p.closed && !!o.mine));
+  const poll = p && votes && (p.closed || !!o.mine || !o.canVote) ? p.id : null;
   const ok = s.mural.filter((x) => o.hasItem(x.item_id));
   const post =
     ok.find((x) => x.id === o.post) ?? (o.highlightId ? ok.find((x) => x.item_id === o.highlightId) : undefined) ?? ok[0] ?? null;
@@ -335,26 +362,36 @@ export function backoff(failures: number): number {
 // O que o telão mostra (ficha v2, telas 18 a 32): nada da Comunidade se ela está desligada
 // (ou sem estado); as barras com a enquete aberta; "Deu X" por 45 s depois que ela fecha com
 // uma vencedora (empate e sem votos não coroam ninguém); senão o destaque da casa.
-// closedSeen: quando esta TV viu a enquete fechada pela primeira vez (relógio do servidor).
+// Os 45 s contam da hora em que a enquete fechou (no servidor), nunca da hora em que esta TV
+// a viu fechada: a TV que recarrega depois não mostra o "Deu X" de novo.
 export const TV_WIN_MS = 45_000;
 export type TvScreen = "off" | "poll" | "win" | "feat";
-export function tvScreen(s: PublicState | null, closedSeen: number | null, nowMs: number): TvScreen {
+export function tvScreen(s: PublicState | null, nowMs: number): TvScreen {
   if (!s || !s.enabled) return "off";
   const p = s.poll;
   if (p && !p.closed) return "poll";
   if (p && pollOutcome(p).kind === "win") {
-    const end = tvClosedAt(p, closedSeen);
+    const end = tvClosedAt(p);
     if (nowMs >= end && nowMs - end < TV_WIN_MS) return "win";
   }
   return "feat";
 }
 
-// Quando a enquete fechou: no fim marcado; fechada antes pelo painel, a hora em que a TV a viu
-// fechada (a leitura pública não traz o closed_at). O que vier antes.
-export function tvClosedAt(p: { ends_at: string }, closedSeen: number | null): number {
+// Quando a enquete fechou: o fim marcado ou o closed_at (a casa encerrou antes), o que vier antes.
+export function tvClosedAt(p: { ends_at: string; closed_at?: string | null }): number {
   const end = Date.parse(p.ends_at);
-  if (closedSeen === null || !Number.isFinite(closedSeen)) return end;
-  return Number.isFinite(end) ? Math.min(end, closedSeen) : closedSeen;
+  const closed = p.closed_at ? Date.parse(p.closed_at) : NaN;
+  if (!Number.isFinite(closed)) return end;
+  return Number.isFinite(end) ? Math.min(end, closed) : closed;
+}
+
+// Tamanho do canvas do fundo do telão: o formato da tela, com 64 px no lado maior (deitada
+// 16:9 dá 64×36; em pé, 36×64). Assim a foto é recortada como "cover" na proporção certa e
+// não estica em listras na TV em pé. Sem medida (0 ou NaN), o 64×36 de sempre.
+export function tvBgSize(width: number, height: number): { w: number; h: number } {
+  if (!(width > 0) || !(height > 0) || !Number.isFinite(width) || !Number.isFinite(height)) return { w: 64, h: 36 };
+  const short = (n: number) => Math.max(1, Math.round((64 * n) / Math.max(width, height)));
+  return width >= height ? { w: 64, h: short(height) } : { w: short(width), h: 64 };
 }
 
 // Cor da casa no telão: só hexadecimal passa (o valor vai para o style); senão o dourado do

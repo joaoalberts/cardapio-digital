@@ -1,6 +1,7 @@
 // Retenção diária da Comunidade (cron em /api/cron/comunidade, 06h em São Paulo).
 // - votos: 1 dia só, renova toda manhã (Decisão do João, 16/10). Sai todo voto criado antes
-//   do início do dia da Comunidade atual (day_start no fuso do restaurante, padrão 05:00).
+//   do início do dia da Comunidade atual (day_start no fuso do restaurante, padrão 05:00);
+//   com day_start depois das 06h, o cron da manhã corta em "agora" (voteCutoff).
 //   Antes, o resultado final da enquete encerrada vai para community_polls.result, que o
 //   estado público e o story passam a usar. Voto de enquete ainda aberta fica até ela encerrar;
 // - tally (funil) com mais de 90 dias;
@@ -10,7 +11,7 @@
 // O plano é puro e testado; a varredura recebe o banco e o armazenamento de fora.
 // Data vazia ou ilegível nunca conta como vencida: na dúvida, a linha fica.
 import { createHash, timingSafeEqual } from "node:crypto";
-import { DAY_START_DEFAULT, communityDay, dayBounds, pollPhase } from "./clock";
+import { DAY_START_DEFAULT, pollPhase, voteCutoff } from "./clock";
 import { pollResult } from "./public-state";
 import type { PollResult, PollRow, PostRow, TallyRow, TvRow, VoteRow } from "./types";
 import { toHead, toPoll } from "./votes";
@@ -49,8 +50,9 @@ export type RetentionPlan = {
   tvs: string[];
 };
 
-// Início do dia da Comunidade atual de cada restaurante; sem relógio conhecido (restaurante
-// apagado), 05:00 em São Paulo.
+// Corte dos votos de cada restaurante (voteCutoff: a virada do dia atual ou, de manhã com
+// day_start depois das 06h, agora); sem relógio conhecido (restaurante apagado), 05:00 em
+// São Paulo.
 function dayStartOf(clocks: RestaurantClock[], now: Date): (rid: string) => number {
   const memo = new Map<string, number>();
   const byId = new Map(clocks.map((c) => [c.id, c]));
@@ -61,9 +63,9 @@ function dayStartOf(clocks: RestaurantClock[], now: Date): (rid: string) => numb
       const tz = c?.timezone || DEFAULT_TZ;
       const ds = c?.day_start || DAY_START_DEFAULT;
       try {
-        from = dayBounds(communityDay(now, tz, ds), tz, ds).from.getTime();
+        from = voteCutoff(now, tz, ds).getTime();
       } catch {
-        from = dayBounds(communityDay(now, DEFAULT_TZ, DAY_START_DEFAULT), DEFAULT_TZ, DAY_START_DEFAULT).from.getTime();
+        from = voteCutoff(now, DEFAULT_TZ, DAY_START_DEFAULT).getTime();
       }
       memo.set(rid, from);
     }
@@ -74,7 +76,7 @@ function dayStartOf(clocks: RestaurantClock[], now: Date): (rid: string) => numb
 // Os ids (uid) a apagar e os resultados a gravar antes. "Mais de N dias" é estrito: com
 // exatamente N dias, ainda fica. TV pendente revogada fica: a marca de revogada é o que
 // recusa aquele segredo de novo.
-// Votos: sai o criado antes da virada do dia do restaurante dele (na virada exata, fica).
+// Votos: sai o criado antes do corte do restaurante dele (voteCutoff; no corte exato, fica).
 // A enquete do voto (mesmo id e restaurante) decide: aberta ou agendada, o voto fica;
 // encerrada sem result, grava o result contado com todos os votos dela (os de depois da
 // virada também); apagada, o voto sai sem result.

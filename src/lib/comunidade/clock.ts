@@ -71,6 +71,24 @@ export function dayBounds(day: string, timezone: string, dayStart: string): { fr
   return { from: zonedToUtc(day, start, timezone), to: zonedToUtc(addDays(day, 1), start, timezone) };
 }
 
+// A manhã em que o cron apaga os votos da noite (06h, a hora do cron em São Paulo).
+export const MORNING = "06:00";
+
+// Até onde o cron apaga os votos (o voto criado antes do corte sai, se a enquete dele já
+// encerrou). Em geral é a virada do dia atual da Comunidade. Mas com day_start depois das
+// 06h, às 06h o dia ainda não virou e a virada atual é a de ontem: o voto da noite passada
+// ficaria até a manhã seguinte (quase 2 dias). Então, de manhã (a partir das 06h no fuso) e
+// antes da virada de hoje, a noite já acabou e o corte é agora. De madrugada, antes das 06h,
+// a noite ainda corre e vale só a virada.
+export function voteCutoff(now: Date, timezone: string, dayStart: string): Date {
+  const day = communityDay(now, timezone, dayStart);
+  const { from } = dayBounds(day, timezone, dayStart);
+  const z = zoned(now.getTime(), timezone);
+  const turned = day === ymd(z.y, z.mo, z.d);
+  if (turned || localNow(timezone, now).min < startMin(MORNING)) return from;
+  return new Date(Math.max(from.getTime(), now.getTime()));
+}
+
 const ms = (s: string | null | undefined) => (s ? Date.parse(s) : NaN);
 
 // Fim efetivo: o encerramento da casa, se veio antes do fim agendado.

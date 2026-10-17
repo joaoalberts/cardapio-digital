@@ -154,3 +154,29 @@ export function salesGoals(orders: OrderRow[], tallies: TallyRow[], n: ReturnTyp
     month: goalsFor(totals(n.month), totals(n.prevMonth)),
   };
 }
+
+// O painel lê os pedidos e o funil uma vez só, dos mais novos aos mais velhos, com teto
+// (uma consulta por dia das 56 noites custaria 56 chamadas ao NocoDB ou mais; Decisão da
+// revisão dos achados baixos, 16/10). Quando o teto corta o período das metas, devolve a
+// primeira noite contada inteira ("AAAA-MM-DD"), para o painel avisar; senão, null.
+export function goalsCut(
+  read: { orders: OrderRow[]; ordersCap: number; tallies: TallyRow[]; tallyCap: number },
+  n: ReturnType<typeof goalNights>,
+): string | null {
+  const nights = [...n.prevMonth, ...n.month].sort((a, b) => a.from.getTime() - b.from.getTime());
+  const first = nights[0];
+  let cut: string | null = null;
+  const later = (day: string | undefined) => {
+    if (day && (!cut || day > cut)) cut = day;
+  };
+  if (read.orders.length >= read.ordersCap) {
+    const oldest = Math.min(...read.orders.map((o) => ms(o.created_at)).filter(Number.isFinite));
+    // A noite da linha mais velha pode ter ficado pela metade: conta inteira a partir da seguinte.
+    if (Number.isFinite(oldest) && oldest > first.from.getTime()) later(nights.find((b) => b.from.getTime() > oldest)?.day ?? addDays(n.tonight.day, 1));
+  }
+  if (read.tallies.length >= read.tallyCap) {
+    const days = read.tallies.map((t) => t.day).filter((d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+    if (days.length && days[0] >= first.day) later(addDays(days[0], 1));
+  }
+  return cut;
+}

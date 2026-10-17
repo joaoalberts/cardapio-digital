@@ -61,6 +61,7 @@ function closedPoll(winnerItem: string | null): PublicPoll {
     starts_at: "2026-10-16T22:00:00Z",
     ends_at: "2026-10-16T22:30:00Z",
     closed: true,
+    closed_at: null,
     has_votes: true,
     winner: "a",
   };

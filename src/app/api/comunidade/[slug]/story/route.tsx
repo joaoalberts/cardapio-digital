@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import { NextResponse, type NextRequest } from "next/server";
 import QRCode from "qrcode";
+import { QR_ECC, qrLink } from "@/lib/comunidade/qr";
 import { communityOff } from "@/lib/comunidade/off";
 import { getCommunityContent, getCommunityHead } from "@/lib/comunidade/server";
 import {
@@ -41,6 +42,9 @@ import { readLocalFile, storageDriver } from "@/lib/storage";
 // aviso de copyright vai também na tabela "name" de cada arquivo:
 // - IMFellEnglish-Regular.ttf = ofl/imfellenglish/IMFeENrm28P.ttf (commit 90abd17b),
 //   © 2010 Igino Marini, nome reservado "IM FELL English Roman".
+// - IMFellEnglish-Italic.ttf = ofl/imfellenglish/IMFeENit28P.ttf (commit 90abd17b),
+//   © 2007 Igino Marini, nome reservado "IM FELL English Italic" (a pergunta da enquete).
+//   A licença é a mesma OFL-imfellenglish.txt da pasta ofl/imfellenglish.
 // - Karla-Bold.ttf = ofl/karla/static/Karla-Bold.ttf, versão 2.002 (commit 568985db),
 //   © 2019 The Karla Project Authors. A pasta static saiu do repositório em 2021, quando
 //   ficou só a fonte variável, que o next/og desenha sempre no peso padrão.
@@ -91,15 +95,17 @@ const deps: StoryDeps = {
 
 // ---------- Fontes ----------
 
-type Font = { name: string; data: Buffer; weight: 400 | 700; style: "normal" };
+type Font = { name: string; data: Buffer; weight: 400 | 700; style: "normal" | "italic" };
 let fonts: Promise<Font[]> | null = null;
 function loadFonts(): Promise<Font[]> {
   fonts ??= Promise.all([
     readFile(join(process.cwd(), "src/app/api/comunidade/[slug]/story/IMFellEnglish-Regular.ttf")),
+    readFile(join(process.cwd(), "src/app/api/comunidade/[slug]/story/IMFellEnglish-Italic.ttf")),
     readFile(join(process.cwd(), "src/app/api/comunidade/[slug]/story/Karla-Bold.ttf")),
   ]).then(
-    ([fell, karla]): Font[] => [
+    ([fell, fellItalic, karla]): Font[] => [
       { name: "IM Fell", data: fell, weight: 400, style: "normal" },
+      { name: "IM Fell", data: fellItalic, weight: 400, style: "italic" },
       { name: "Karla", data: karla, weight: 700, style: "normal" },
     ],
     (e) => {
@@ -200,7 +206,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
   // O QR leva ao cardápio sem mesa, pelo mesmo endereço por onde a arte foi pedida.
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host;
   const proto = request.headers.get("x-forwarded-proto") ?? (/^(localhost|127\.0\.0\.1)(:|$)/.test(host) ? "http" : "https");
-  const link = `${proto}://${host}/${slug}?ref=story`;
+  const link = qrLink(proto, host, slug, "story");
 
   try {
     const photoUrl = src.kind === "poll" ? src.photo : src.post.photo_path;
@@ -214,7 +220,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       ...thumbIds.map((id) => artImage(src.kind === "poll" ? (src.thumbs[id] ?? null) : null, 116, 116, "jpeg")),
     ]);
     const thumbs = Object.fromEntries(thumbIds.map((id, i) => [id, thumbImgs[i]]));
-    const qr = QRCode.create(link, { errorCorrectionLevel: "M" });
+    const qr = QRCode.create(link, { errorCorrectionLevel: QR_ECC });
     const art = (
       <Art src={src} photo={photo} logo={logo} thumbs={thumbs} qr={{ size: qr.modules.size, d: qrPath(qr.modules.size, (r, c) => !!qr.modules.get(r, c)) }} />
     );
@@ -304,7 +310,7 @@ function Art({ src, photo, logo, thumbs, qr }: ArtProps) {
       {/* Resultado (ou a foto da casa): termina em y ~1300 e cresce para cima. */}
       <div style={{ position: "absolute", left: SIDE, right: SIDE, bottom: H - 1300, display: "flex", flexDirection: "column" }}>
         <div style={{ fontSize: 32, color: accent }}>{t.kicker}</div>
-        {t.question && <div style={{ marginTop: 12, fontFamily: "IM Fell", fontWeight: 400, fontSize: 40, lineHeight: 1.1, color: MUTED }}>{t.question}</div>}
+        {t.question && <div style={{ marginTop: 12, fontFamily: "IM Fell", fontWeight: 400, fontStyle: "italic", fontSize: 40, lineHeight: 1.1, color: MUTED }}>{t.question}</div>}
         <div style={{ marginTop: 6, fontFamily: "IM Fell", fontWeight: 400, fontSize: titleSize, lineHeight: 0.98 }}>{t.title}</div>
         {poll && leadOpt && (
           <div style={{ display: "flex", alignItems: "center", marginTop: 30 }}>

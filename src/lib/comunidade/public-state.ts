@@ -1,7 +1,7 @@
 // Estado público da Comunidade: a resposta única, igual para todo mundo, que a CDN serve
 // ao celular e ao telão. Montado campo a campo, para nunca levar contagem de votos,
 // device_id, table_id, post oculto nem dado do telão além do "tem telão".
-import { communityDay, currentPoll, dayBounds, nextPoll, pollPhase } from "./clock";
+import { communityDay, currentPoll, dayBounds, nextPoll, pollPhase, voteCutoff } from "./clock";
 import { effectiveVotes, percentages } from "./tally";
 import type {
   CommunityHead,
@@ -128,20 +128,21 @@ export function publicPoll(p: PollRow, votes: VoteRow[], now: Date): PublicPoll 
     starts_at: p.starts_at,
     ends_at: p.ends_at,
     closed,
+    closed_at: closed && p.closed_at && Number.isFinite(ms(p.closed_at)) ? p.closed_at : null,
     has_votes: r.has_votes,
     winner: closed ? r.winner : null,
   };
 }
 
-// Enquete encerrada, sem result e que começou antes da virada do dia atual da Comunidade:
+// Enquete encerrada, sem result e que começou antes do corte do cron (voteCutoff: a virada
+// do dia atual da Comunidade, ou agora de manhã com day_start depois das 06h):
 // a retenção da manhã apaga os votos dela criados antes da virada logo depois de gravar o
 // result, e a agenda em cache (de cada instância) pode seguir sem ele. Contar os votos que
 // sobraram daria um resultado errado ("Deu C 100%"), então quem mostra a enquete lê a linha
 // direto do banco. Enquete que começou hoje ainda tem todos os votos: segue o cache.
 export function needsFreshResult(p: PollRow, head: CommunityHead, now: Date): boolean {
   if (p.result || pollPhase(p, now) !== "closed") return false;
-  const { from } = dayBounds(communityDay(now, head.timezone, head.day_start), head.timezone, head.day_start);
-  return ms(p.starts_at) < from.getTime();
+  return ms(p.starts_at) < voteCutoff(now, head.timezone, head.day_start).getTime();
 }
 
 function publicPost(p: PostRow): PublicPost {

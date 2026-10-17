@@ -1,8 +1,8 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- miniatura do prato, já no tamanho certo */
 
-import { useEffect, useRef, useState } from "react";
-import { halfPartners, sizeChoices } from "@/lib/comunidade/client-logic";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { halfPartners, radioStep, sizeChoices } from "@/lib/comunidade/client-logic";
 import { ct } from "@/lib/comunidade/i18n";
 import type { Origin } from "@/lib/comunidade/types";
 import { formatPrice, thumbSrc } from "@/lib/menu/media";
@@ -47,6 +47,15 @@ export function SizesSheet({
     return () => from?.focus?.({ preventScroll: true });
   }, []);
 
+  // Setas mudam a opção e levam o foco junto (o grupo tem um só item na ordem do Tab).
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const next = radioStep(sizes.findIndex((s) => s.label === cur?.label), sizes.length, e.key);
+    if (next === null) return;
+    e.preventDefault();
+    setPick(sizes[next].label);
+    e.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus({ preventScroll: true });
+  };
+
   const add = () => {
     if (!cur) return;
     o.add({ item: item.id, option: cur.label, half: null, qty: 1, note: "", ...(origin ?? {}) }, null, { quiet: true });
@@ -68,7 +77,7 @@ export function SizesSheet({
           </div>
         </div>
         <p className="cmu-sk">{ct(from === "mural" ? "sizesLeadMural" : "sizesLeadPalco", L)}</p>
-        <div className="cmu-so" role="radiogroup" aria-label={ct("sizesAria", L)}>
+        <div className="cmu-so" role="radiogroup" aria-label={ct("sizesAria", L)} onKeyDown={onKey}>
           {sizes.map((sz) => (
             <button
               key={sz.label ?? "-"}

@@ -124,27 +124,55 @@ describe("retentionPlan: prazos", () => {
   });
 
   it("a virada é a do restaurante do voto (fuso e day_start); sem restaurante conhecido, 05:00 em São Paulo", () => {
-    // R2 vira às 07:00: às 06:00 ainda é o dia que começou ontem às 07:00 (10:00Z de ontem).
-    const r2From = now - 23 * HOUR;
-    const pollR2 = poll(U(51), { restaurant_id: R2, starts_at: iso(r2From - 3 * HOUR), ends_at: iso(r2From - 2 * HOUR) });
-    const r2Old = vote(noco(r2From - MIN), { restaurant_id: R2, poll_id: pollR2.id });
-    const r2Kept = vote(noco(r2From + MIN), { restaurant_id: R2, poll_id: pollR2.id });
     // R1 em Lisboa (vira às 05:00 de lá = 04:00Z): o voto das 05:00Z já é de hoje.
     const lisbon = vote(noco(now - 4 * HOUR), { poll_id: P_DONE });
+    const lisbonOld = vote(noco(now - 6 * HOUR), { poll_id: P_DONE });
     const R3 = U(3);
     const pollR3 = poll(U(52), { restaurant_id: R3 });
     const orphanOld = vote(noco(DAY_FROM - MIN), { restaurant_id: R3, poll_id: pollR3.id });
     const orphanKept = vote(noco(DAY_FROM + MIN), { restaurant_id: R3, poll_id: pollR3.id });
     const plan = retentionPlan({
       ...empty,
-      polls: [poll(P_DONE, { starts_at: iso(now - 6 * HOUR), ends_at: iso(now - 3 * HOUR) }), pollR2, pollR3],
-      clocks: [
-        { id: R1, timezone: "Europe/Lisbon", day_start: "05:00" },
-        { id: R2, timezone: "America/Sao_Paulo", day_start: "07:00" },
-      ],
-      votes: [r2Old, r2Kept, lisbon, orphanOld, orphanKept],
+      polls: [poll(P_DONE, { starts_at: iso(now - 7 * HOUR), ends_at: iso(now - 3 * HOUR) }), pollR3],
+      clocks: [{ id: R1, timezone: "Europe/Lisbon", day_start: "05:00" }],
+      votes: [lisbon, lisbonOld, orphanOld, orphanKept],
     });
-    expect(plan.votes).toEqual([r2Old.id, orphanOld.id]);
+    expect(plan.votes).toEqual([lisbonOld.id, orphanOld.id]);
+  });
+
+  it("day_start antes das 06h: o corte é a virada de hoje (o voto de depois dela fica)", () => {
+    // R2 vira às 05:30 em São Paulo (08:30Z): às 06:00 o dia de hoje já começou.
+    const from = now - 30 * MIN;
+    const p = poll(U(51), { restaurant_id: R2, starts_at: iso(from - 3 * HOUR), ends_at: iso(from + 10 * MIN) });
+    const old = vote(noco(from - MIN), { restaurant_id: R2, poll_id: p.id });
+    const kept = vote(noco(from + MIN), { restaurant_id: R2, poll_id: p.id });
+    const plan = retentionPlan({
+      ...empty,
+      polls: [p],
+      clocks: [{ id: R2, timezone: "America/Sao_Paulo", day_start: "05:30" }],
+      votes: [old, kept],
+    });
+    expect(plan.votes).toEqual([old.id]);
+  });
+
+  it("day_start depois das 06h: o voto da noite de ontem sai na manhã do cron, não um dia depois", () => {
+    // R2 vira às 07:00: às 06:00 o dia que começou ontem às 07:00 (10:00Z) ainda não virou,
+    // mas a noite acabou. Enquete de ontem às 21h; o voto das 21:10 sai hoje cedo.
+    const r2From = now - 23 * HOUR;
+    const night = poll(U(51), { restaurant_id: R2, starts_at: iso(now - 9 * HOUR), ends_at: iso(now - 8 * HOUR) });
+    const early = vote(noco(r2From - MIN), { restaurant_id: R2, poll_id: night.id });
+    const lastNight = vote(noco(now - 9 * HOUR + 10 * MIN), { restaurant_id: R2, poll_id: night.id });
+    // enquete que ainda está aberta segura os votos dela
+    const still = poll(U(53), { restaurant_id: R2, starts_at: iso(now - 30 * MIN), ends_at: iso(now + 30 * MIN) });
+    const open = vote(noco(now - 20 * MIN), { restaurant_id: R2, poll_id: still.id });
+    const plan = retentionPlan({
+      ...empty,
+      polls: [night, still],
+      clocks: [{ id: R2, timezone: "America/Sao_Paulo", day_start: "07:00" }],
+      votes: [early, lastNight, open],
+    });
+    expect(plan.votes).toEqual([early.id, lastNight.id]);
+    expect(plan.results.map((r) => r.poll_id)).toEqual([night.id]);
   });
 
   it("antes de apagar, grava o resultado final da enquete encerrada, contado com todos os votos dela", () => {

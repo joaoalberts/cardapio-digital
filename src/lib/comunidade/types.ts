@@ -80,6 +80,9 @@ export type PublicPoll = {
   starts_at: string;
   ends_at: string;
   closed: boolean;
+  // Hora em que a casa encerrou antes do fim marcado (só na encerrada; senão null). O telão
+  // conta os 45 s do "Deu X" a partir dela, e não da hora em que viu a enquete fechada.
+  closed_at: string | null;
   has_votes: boolean;
   winner: OptionId | null;
 };

@@ -5,8 +5,8 @@ import {
   minuteClock, muralLayout, orderableNow, pairCodeDue, pairCodeRecord, pollDelay, pollTiming, questionText, refFrom,
   relativeTime, savedPairCode, shownPcts, POLL_OFF_MS,
   balloonPath, buyFlow, cmuReturnDue, halfPartners, lowerFirst, pollOutcome, priceInfo, ringText, sizeChoices, soleLeader, stageCover,
-  backoff, pollChime, TV_POLL_MS, TV_RELOAD_MS, tvReloadDue, storyChoices,
-  TV_WIN_MS, tvAccent, tvClosedAt, tvFeatSlides, tvLongQuestion, tvOrder, tvScreen, tvSlow,
+  backoff, pollChime, radioStep, TV_POLL_MS, TV_RELOAD_MS, tvReloadDue, storyChoices,
+  TV_WIN_MS, tvAccent, tvBgSize, tvClosedAt, tvFeatSlides, tvLongQuestion, tvOrder, tvScreen, tvSlow,
 } from "./client-logic";
 import type { PublicOption, PublicPoll, PublicPost, PublicState } from "./types";
 
@@ -313,7 +313,7 @@ function tvState(over: Partial<PublicState> = {}): PublicState {
 function tvPoll(over: Partial<PublicPoll> = {}): PublicPoll {
   return {
     id: "p1", template: "dessert", question: "", starts_at: "2026-10-16T22:50:00Z", ends_at: "2026-10-16T23:10:00Z",
-    closed: false, has_votes: true, winner: null,
+    closed: false, closed_at: null, has_votes: true, winner: null,
     options: [{ id: "a", label: "A", item_id: null, pct: 60 }, { id: "b", label: "B", item_id: null, pct: 40 }],
     ...over,
   };
@@ -339,40 +339,44 @@ describe("tvScreen: o que o telão mostra", () => {
   const now = NOW.getTime(); // 23:00Z; a enquete de tvPoll termina às 23:10Z
   const closedWin = tvPoll({ closed: true, winner: "a", ends_at: "2026-10-16T22:59:30Z" }); // fechou há 30 s
   it("desligada, ou sem estado: nada da Comunidade na tela", () => {
-    expect(tvScreen(null, null, now)).toBe("off");
-    expect(tvScreen(tvState({ enabled: false, poll: tvPoll() }), null, now)).toBe("off");
+    expect(tvScreen(null, now)).toBe("off");
+    expect(tvScreen(tvState({ enabled: false, poll: tvPoll() }), now)).toBe("off");
   });
   it("enquete aberta: barras, com ou sem votos", () => {
-    expect(tvScreen(tvState({ poll: tvPoll() }), null, now)).toBe("poll");
-    expect(tvScreen(tvState({ poll: tvPoll({ has_votes: false }) }), null, now)).toBe("poll");
+    expect(tvScreen(tvState({ poll: tvPoll() }), now)).toBe("poll");
+    expect(tvScreen(tvState({ poll: tvPoll({ has_votes: false }) }), now)).toBe("poll");
   });
   it("encerrada com vencedora: \"Deu\" por 45 s contados do fim", () => {
     expect(TV_WIN_MS).toBe(45_000);
-    expect(tvScreen(tvState({ poll: closedWin }), null, now)).toBe("win");
-    expect(tvScreen(tvState({ poll: closedWin }), null, Date.parse("2026-10-16T22:59:30Z") + TV_WIN_MS - 1)).toBe("win");
-    expect(tvScreen(tvState({ poll: closedWin }), null, Date.parse("2026-10-16T22:59:30Z") + TV_WIN_MS)).toBe("feat");
+    expect(tvScreen(tvState({ poll: closedWin }), now)).toBe("win");
+    expect(tvScreen(tvState({ poll: closedWin }), Date.parse("2026-10-16T22:59:30Z") + TV_WIN_MS - 1)).toBe("win");
+    expect(tvScreen(tvState({ poll: closedWin }), Date.parse("2026-10-16T22:59:30Z") + TV_WIN_MS)).toBe("feat");
   });
-  it("fechada antes da hora pelo painel: conta de quando a TV viu fechada", () => {
-    const early = tvPoll({ closed: true, winner: "a" }); // ends_at 23:10Z ainda no futuro
-    expect(tvScreen(tvState({ poll: early }), now - 10_000, now)).toBe("win");
-    expect(tvScreen(tvState({ poll: early }), now - TV_WIN_MS, now)).toBe("feat");
-    // sem a hora em que viu: não inventa 45 s
-    expect(tvScreen(tvState({ poll: early }), null, now)).toBe("feat");
+  it("fechada antes da hora pelo painel: conta do closed_at do servidor", () => {
+    const at = (ms: number) => new Date(ms).toISOString();
+    // ends_at 23:10Z ainda no futuro
+    expect(tvScreen(tvState({ poll: tvPoll({ closed: true, winner: "a", closed_at: at(now - 10_000) }) }), now)).toBe("win");
+    expect(tvScreen(tvState({ poll: tvPoll({ closed: true, winner: "a", closed_at: at(now - TV_WIN_MS) }) }), now)).toBe("feat");
+    // TV que recarrega 10 min depois do fechamento: não repete o "Deu X"
+    expect(tvScreen(tvState({ poll: tvPoll({ closed: true, winner: "a", closed_at: at(now - 10 * 60_000) }) }), now)).toBe("feat");
+    // sem closed_at nem fim no passado: não inventa 45 s
+    expect(tvScreen(tvState({ poll: tvPoll({ closed: true, winner: "a" }) }), now)).toBe("feat");
   });
   it("empate, sem votos, sem enquete ou fora do horário: destaque da casa", () => {
     const tie = tvPoll({ closed: true, winner: "a", ends_at: "2026-10-16T22:59:50Z", options: [
       { id: "a", label: "A", item_id: null, pct: 50 }, { id: "b", label: "B", item_id: null, pct: 50 }] });
-    expect(tvScreen(tvState({ poll: tie }), null, now)).toBe("feat");
-    expect(tvScreen(tvState({ poll: tvPoll({ closed: true, has_votes: false, ends_at: "2026-10-16T22:59:50Z" }) }), null, now)).toBe("feat");
-    expect(tvScreen(tvState(), null, now)).toBe("feat");
-    expect(tvScreen(tvState({ open: false }), null, now)).toBe("feat");
+    expect(tvScreen(tvState({ poll: tie }), now)).toBe("feat");
+    expect(tvScreen(tvState({ poll: tvPoll({ closed: true, has_votes: false, ends_at: "2026-10-16T22:59:50Z" }) }), now)).toBe("feat");
+    expect(tvScreen(tvState(), now)).toBe("feat");
+    expect(tvScreen(tvState({ open: false }), now)).toBe("feat");
   });
-  it("tvClosedAt: o fim marcado ou a hora em que a TV viu fechada, o que vier antes", () => {
+  it("tvClosedAt: o fim marcado ou o closed_at, o que vier antes", () => {
     const p = tvPoll({ closed: true });
-    expect(tvClosedAt(p, null)).toBe(Date.parse("2026-10-16T23:10:00Z"));
-    expect(tvClosedAt(p, now)).toBe(now);
-    expect(tvClosedAt(tvPoll({ closed: true, ends_at: "2026-10-16T22:00:00Z" }), now)).toBe(Date.parse("2026-10-16T22:00:00Z"));
-    expect(Number.isNaN(tvClosedAt(tvPoll({ ends_at: "lixo" }), null))).toBe(true);
+    expect(tvClosedAt(p)).toBe(Date.parse("2026-10-16T23:10:00Z"));
+    expect(tvClosedAt({ ...p, closed_at: "2026-10-16T23:00:00Z" })).toBe(now);
+    expect(tvClosedAt(tvPoll({ closed: true, ends_at: "2026-10-16T22:00:00Z", closed_at: "2026-10-16T22:30:00Z" }))).toBe(Date.parse("2026-10-16T22:00:00Z"));
+    expect(tvClosedAt(tvPoll({ ends_at: "lixo", closed_at: "2026-10-16T22:30:00Z" }))).toBe(Date.parse("2026-10-16T22:30:00Z"));
+    expect(Number.isNaN(tvClosedAt(tvPoll({ ends_at: "lixo" })))).toBe(true);
   });
 });
 
@@ -477,8 +481,13 @@ describe("storyChoices (o que a folha do story oferece)", () => {
     expect(storyChoices(tvState({ poll: tvPoll({ closed: true, winner: "a" }) }), base).poll).toBe("p1");
   });
 
+  it("logo depois do primeiro voto (o estado ainda diz sem votos): o meu voto já conta", () => {
+    expect(storyChoices(tvState({ poll: tvPoll({ has_votes: false }) }), { ...base, mine: "a" }).poll).toBe("p1");
+  });
+
   it("enquete sem votos não vira arte (encerrada sem votos mostra o destaque, sem compartilhar)", () => {
-    expect(storyChoices(tvState({ poll: tvPoll({ has_votes: false }) }), { ...base, mine: "a" }).poll).toBeNull();
+    expect(storyChoices(tvState({ poll: tvPoll({ has_votes: false }) }), base).poll).toBeNull();
+    expect(storyChoices(tvState({ poll: tvPoll({ closed: true, has_votes: false }) }), { ...base, mine: "a" }).poll).toBeNull();
     expect(storyChoices(tvState({ poll: tvPoll({ closed: true, has_votes: false }) }), base).poll).toBeNull();
     expect(storyChoices(tvState(), base).poll).toBeNull();
   });
@@ -620,5 +629,36 @@ describe("capa do Palco e textos curtos", () => {
     expect(d.startsWith("M24 0H238")).toBe(true);
     expect(d).toContain("Q131 119"); // ponta em x = 131, y = 107 + 12
     expect(d.endsWith("Z")).toBe(true);
+  });
+});
+
+describe("radioStep: setas do teclado no grupo de tamanhos", () => {
+  it("direita e baixo avançam; esquerda e cima voltam; dão a volta nas pontas", () => {
+    expect(radioStep(0, 3, "ArrowRight")).toBe(1);
+    expect(radioStep(1, 3, "ArrowDown")).toBe(2);
+    expect(radioStep(2, 3, "ArrowRight")).toBe(0);
+    expect(radioStep(1, 3, "ArrowLeft")).toBe(0);
+    expect(radioStep(0, 3, "ArrowUp")).toBe(2);
+  });
+  it("Home e End vão às pontas; outra tecla, ou grupo vazio, não mexe", () => {
+    expect(radioStep(1, 3, "Home")).toBe(0);
+    expect(radioStep(1, 3, "End")).toBe(2);
+    expect(radioStep(1, 3, "Enter")).toBeNull();
+    expect(radioStep(0, 0, "ArrowRight")).toBeNull();
+    expect(radioStep(-1, 3, "ArrowRight")).toBe(0);
+  });
+});
+
+describe("tvBgSize: o canvas do fundo no formato da tela", () => {
+  it("deitada 16:9: 64×36; em pé 9:16: 36×64 (sem esticar a foto)", () => {
+    expect(tvBgSize(1920, 1080)).toEqual({ w: 64, h: 36 });
+    expect(tvBgSize(1080, 1920)).toEqual({ w: 36, h: 64 });
+  });
+  it("outros formatos guardam a proporção com 64 no lado maior; tela sem medida volta ao 64×36", () => {
+    expect(tvBgSize(1000, 1000)).toEqual({ w: 64, h: 64 });
+    expect(tvBgSize(768, 1024)).toEqual({ w: 48, h: 64 });
+    expect(tvBgSize(0, 0)).toEqual({ w: 64, h: 36 });
+    expect(tvBgSize(Number.NaN, 500)).toEqual({ w: 64, h: 36 });
+    expect(tvBgSize(5000, 10)).toEqual({ w: 64, h: 1 });
   });
 });

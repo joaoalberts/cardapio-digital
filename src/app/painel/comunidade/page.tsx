@@ -5,7 +5,7 @@ import * as db from "@/lib/db/nocodb";
 import { localTime, questionText, relativeTime } from "@/lib/comunidade/client-logic";
 import { communityDay, dayBounds, pollPhase } from "@/lib/comunidade/clock";
 import { communityOff } from "@/lib/comunidade/off";
-import { goalNights, salesGoals, scoreboard } from "@/lib/comunidade/scoreboard";
+import { goalNights, goalsCut, salesGoals, scoreboard } from "@/lib/comunidade/scoreboard";
 import type { PollRow, TallyRow } from "@/lib/comunidade/types";
 import { toContent, toHead } from "@/lib/comunidade/votes";
 import { getPublicMenu } from "@/lib/menu/data";
@@ -22,9 +22,10 @@ import "./comunidade.css";
 export const metadata: Metadata = { title: "Comunidade" };
 
 // Pedidos e linhas do funil lidos para o placar e as metas (8 semanas: as 4 do acumulado e as
-// 4 de comparação), dos mais novos aos mais velhos, com teto: o filtro do NocoDB aqui só faz
-// igualdade, então o recorte por data é em memória. Acima do teto, as semanas mais antigas
-// contam menos (a comparação fica a favor da Comunidade; anotar se acontecer).
+// 4 de comparação), dos mais novos aos mais velhos, numa leitura só e com teto: o filtro do
+// NocoDB aqui só faz igualdade, então o recorte por data é em memória. Filtrar o funil por
+// day seria uma consulta por dia (56 ou mais chamadas por abertura do painel), por isso não.
+// Acima do teto, as semanas mais antigas contam menos e o painel avisa (goalsCut).
 const ORDERS_READ = 5000;
 const TALLY_READ = 5000;
 const POSTS_READ = 100;
@@ -167,7 +168,9 @@ async function Comunidade() {
   const score = scoreboard(orders, tallies.filter((t) => t.day === day), bounds);
   // Metas (Decisão do João, 16/10): a noite contra os 4 mesmos dias da semana anteriores e
   // as 4 semanas contra as 4 de antes.
-  const goals = salesGoals(orders, tallies, goalNights(day, tz, head.day_start));
+  const nights = goalNights(day, tz, head.day_start);
+  const goals = salesGoals(orders, tallies, nights);
+  const cut = goalsCut({ orders, ordersCap: ORDERS_READ, tallies, tallyCap: TALLY_READ }, nights);
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
 
@@ -191,6 +194,7 @@ async function Comunidade() {
     tvs,
     score: { ...score, polls: pollsToday },
     goals,
+    goalsFrom: cut ? `${cut.slice(8, 10)}/${cut.slice(5, 7)}` : null,
   };
 
   return (
