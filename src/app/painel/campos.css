@@ -1,0 +1,215 @@
+/* Painel: peças de formulário das telas TVs e Agora (avisos, campos, interruptor, Confirm).
+   Segue o visual do painel (DGuests): cartões brancos, títulos finos, botões dourados. Classes
+   cp- escopadas em .ap .cp. Anima só transform e opacity. */
+.ap .cp {
+  --pline: #dedede;
+  --pmuted: #8b8b8b;
+
+  & .cp-off {
+    margin: 0 0 18px;
+    padding: 12px 14px;
+    border-radius: 6px;
+    background: rgba(226, 134, 47, 0.12);
+    color: #8a4f12;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  & .cp-lead {
+    margin: 0 0 14px;
+    color: var(--pmuted);
+    font-size: 14px;
+    max-width: 70ch;
+  }
+  & .cp-lead a {
+    color: var(--gold-dark);
+    font-weight: 600;
+  }
+  & .cp-url {
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    margin-top: 8px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    background: #f7f7f8;
+    font-size: 13.5px;
+    overflow-wrap: anywhere;
+  }
+  & .cp-empty {
+    margin: 0 0 14px;
+    color: var(--pmuted);
+    font-size: 14px;
+  }
+
+  /* Interruptor */
+  & .cp-sw-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 4px 0 16px;
+    border-bottom: 1px solid #f0f0f0;
+    margin-bottom: 14px;
+  }
+  & .cp-sw-row > div {
+    flex: 1;
+    display: grid;
+    line-height: 1.3;
+  }
+  & .cp-sw-row b {
+    font-size: 15.5px;
+    font-weight: 700;
+  }
+  & .cp-sw-row small {
+    font-size: 13px;
+    color: var(--pmuted);
+  }
+  & .cp-sw {
+    position: relative;
+    width: 50px;
+    height: 30px;
+    border-radius: 15px;
+    background: #d5d5d8;
+    flex: none;
+    overflow: hidden;
+  }
+  & .cp-sw::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--gold);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  & .cp-sw i {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: transform 0.3s cubic-bezier(0.3, 1.3, 0.5, 1);
+  }
+  & .cp-sw[aria-checked="true"]::before {
+    opacity: 1;
+  }
+  & .cp-sw[aria-checked="true"] i {
+    transform: translateX(20px);
+  }
+  & .cp-sw:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  /* Campos */
+  & .cp-fld {
+    display: grid;
+    gap: 6px;
+    margin-top: 16px;
+    max-width: 560px;
+  }
+  & .cp-fld > span {
+    font-size: 13px;
+    font-weight: 600;
+    color: #6b6b6b;
+  }
+  & .cp-in {
+    display: flex;
+    align-items: center;
+    min-height: 42px;
+    border: 1px solid #d9d9d9;
+    border-radius: 4px;
+    padding: 0 12px;
+    font-size: 15px;
+    background: #fff;
+    min-width: 0;
+  }
+  & .cp-in :is(input, select) {
+    border: 0;
+    outline: 0;
+    font: inherit;
+    color: inherit;
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    height: 40px;
+    background: none;
+    padding: 0;
+  }
+  & .cp-in:focus-within {
+    outline: 2px solid var(--gold);
+    outline-offset: -1px;
+  }
+  & .cp-code input {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+  & .cp-code input::placeholder {
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    font-size: 15px;
+    color: #b5b5b5;
+  }
+
+  & .btn .icon {
+    width: 17px;
+    height: 17px;
+    margin-right: 8px;
+  }
+  & .cp-link {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gold-dark);
+    padding: 4px 0;
+  }
+  & .cp-link.danger {
+    color: var(--red);
+  }
+  & .cp-link:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  & .cp-acts {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px 12px;
+    font-size: 13px;
+  }
+  & .cp-acts.asking > span {
+    color: #4a4a4a;
+  }
+  & .cp-pairok {
+    margin: 12px 0 0;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #4d7f22;
+    animation: cp-rise 0.3s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  }
+}
+
+@keyframes cp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ap .cp *,
+  .ap .cp *::before,
+  .ap .cp *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

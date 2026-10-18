@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- logo da casa já vem no tamanho certo, como no telão */
 
 import { useEffect, useRef, type CSSProperties } from "react";
-import { tvBgSize } from "@/lib/comunidade/client-logic";
+import { tvBgSize } from "@/lib/tv/client-logic";
 import type { ClientClip, Cursor, HouseClip, Program } from "@/lib/apareca/schedule";
 import { clipInProgram, MUX_STREAM, muxHls, muxMp4, pickPlayable, playBody, uuid4, type Pick } from "@/lib/apareca/tv-stage";
 import { nextDelay } from "@/lib/apareca/tv-layout";
@@ -151,7 +151,7 @@ export class StageEngine {
       this.emit();
       return;
     }
-    // Volta da enquete: continua o que estava na tela, se ainda vale; senão começa de novo.
+    // Volta do pôster: continua o que estava na tela, se ainda vale; senão começa de novo.
     const s = this.front >= 0 ? this.slots[this.front] : null;
     const v = this.front >= 0 ? this.vids[this.front] : null;
     if (s && v && s.phase === "playing" && !v.ended && clipInProgram(this.program, s.kind, s.clip.id)) {

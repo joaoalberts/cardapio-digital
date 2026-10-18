@@ -1,6 +1,6 @@
 // Mesa lembrada no celular por 4 h (decisão A5 do João): quem leu o QR da mesa e reabre o
 // cardápio sem o ?mesa= continua na mesma mesa. O servidor valida a mesa de novo a cada
-// pedido e voto, então isto só evita ler o QR outra vez; não dá acesso a nada.
+// pedido, então isto só evita ler o QR outra vez; não dá acesso a nada.
 
 // Mesmo formato do Table de order-context.tsx.
 export type Table = { code: string; label: string };
@@ -35,7 +35,7 @@ export function readTableMemory(raw: string | null, now: number): Table | null {
   }
 }
 
-// Mesa lembrada que o servidor recusou (voto ou pedido com code "table": desativada ou de
+// Mesa lembrada que o servidor recusou (pedido com code "table": desativada ou de
 // outro restaurante): sai da memória, para a próxima abertura não voltar com ela.
 export function forgetTableMemory(storage: Pick<Storage, "removeItem"> | null | undefined, slug: string) {
   try {

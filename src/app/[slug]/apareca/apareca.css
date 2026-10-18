@@ -69,20 +69,6 @@
   letter-spacing: 0.01em;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
-/* Balão compacto (tela baixa) ocupa a linha do topo: o convite vira só o ícone, na coluna da
-   direita, embaixo do ⓘ (a logo fica no centro, longe). */
-.cm .hero:has(.cmu-bal-c) .apa-inv {
-  top: calc(var(--safe-top) + 70px);
-  left: auto;
-  right: 16px;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  justify-content: center;
-}
-.cm .hero:has(.cmu-bal-c) .apa-inv-t {
-  display: none;
-}
 @keyframes apa-in {
   from {
     opacity: 0;

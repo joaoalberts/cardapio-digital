@@ -5,13 +5,13 @@ import { aparecaOff } from "@/lib/apareca/off";
 import { programFor } from "@/lib/apareca/schedule";
 import { getAparecaHead, getHouseVideos, readSnapshot, type StoreDeps } from "@/lib/apareca/store";
 import { flushHouseIfDue, heartbeat, programGate, type AparecaTvDeps } from "@/lib/apareca/tv";
-import { readBodyCapped } from "@/lib/comunidade/http";
-import { QR_ECC, qrLink } from "@/lib/comunidade/qr";
+import { readBodyCapped } from "@/lib/http";
+import { QR_ECC, qrLink } from "@/lib/tv/qr";
 import * as db from "@/lib/db/nocodb";
 import { mediaUrl } from "@/lib/menu/media";
 import { isValidSlug } from "@/lib/slug";
 
-// Programação do Apareça para uma TV pareada pela Comunidade. POST com o segredo no cabeçalho
+// Programação do Apareça para uma TV pareada na tela TVs. POST com o segredo no cabeçalho
 // x-telao (nunca em cookie nem na URL); só vale no restaurante do slug. 401: segredo que não é
 // de uma TV pareada deste restaurante (ou revogada), só conferido com o Apareça no ar (programGate);
 // 404: slug sem restaurante. Cada consulta é
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest, { params }: Ctx) {
     // O mesmo host pelo qual a TV abriu, como no telão.
     const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
     const proto = request.headers.get("x-forwarded-proto") ?? (/^(localhost|127\.0\.0\.1)(:|$)/.test(host) ? "http" : "https");
-    const qr = await qrSvg(qrLink(proto, host, slug, "telao"));
+    const qr = await qrSvg(qrLink(proto, host, slug));
 
     // Recurso fora do ar: nada muda para ninguém, nem o sinal de vida nem o tally (spec).
     if (!gate.enabled) {

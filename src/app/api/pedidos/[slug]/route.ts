@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { parseJson, readBodyCapped } from "@/lib/comunidade/http";
+import { parseJson, readBodyCapped } from "@/lib/http";
 import * as db from "@/lib/db/nocodb";
 import { getPublicMenu } from "@/lib/menu/data";
 import { isValidSlug } from "@/lib/slug";
 import { createOrder, listDeviceOrders, type Deps } from "@/lib/orders/service";
 
 // Pedido do celular do cliente. O cardápio em português é a base: a cozinha lê os nomes nele.
-// O corpo (que pode trazer a origem da Comunidade) é lido em fluxo e cortado em 20.000 bytes:
+// O corpo é lido em fluxo e cortado em 20.000 bytes:
 // 413 acima disso, 400 com content-length malformado ou texto que não é UTF-8.
 const deps: Deps = { db, getMenu: (slug) => getPublicMenu(slug, "pt-BR") };
 const STATUS = { invalid: 400, not_found: 404, table: 403, disabled: 403, closed: 409, lines: 409 } as const;

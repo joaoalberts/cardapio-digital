@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { sha256Hex } from "@/lib/comunidade/tv";
+import { sha256Hex } from "@/lib/tv/pair";
 import { DEFAULT_CONFIG } from "./config";
 import { programFor } from "./schedule";
 import {
@@ -61,7 +61,7 @@ const cfg = (over: Partial<AparecaConfig> = {}): AparecaConfig => ({
 });
 const headOf = (over: Partial<AparecaHead> = {}): AparecaHead => ({
   id: RID, slug: "forno", name: "Forno", timezone: "America/Sao_Paulo", opening_hours: null, allowed: true,
-  ai_allowed: false, enabled: true, community_enabled: true, config: cfg(), logo_path: null, brand_color: null,
+  ai_allowed: false, enabled: true, config: cfg(), logo_path: null, brand_color: null,
   instagram: null, ...over,
 });
 
@@ -354,7 +354,7 @@ describe("correção 1", () => {
   });
 
   it("tocou com o Apareça fora do ar não grava nada", async () => {
-    for (const head of [headOf({ enabled: false }), headOf({ allowed: false }), headOf({ community_enabled: false })]) {
+    for (const head of [headOf({ enabled: false }), headOf({ allowed: false })]) {
       resetTvMemory();
       const s = await setup({ head });
       const r = await playFromTv(s.deps, "forno", SECRET_A, { video: V1, play: P(1) });
@@ -480,7 +480,7 @@ describe("revisão final", () => {
   }
 
   it("A3: recurso desligado → { enabled: false } sem nenhuma leitura de community_tvs", async () => {
-    for (const head of [headOf({ enabled: false }), headOf({ allowed: false }), headOf({ community_enabled: false })]) {
+    for (const head of [headOf({ enabled: false }), headOf({ allowed: false })]) {
       resetTvMemory();
       const s = await setup({ head });
       const read = spy(s.deps);

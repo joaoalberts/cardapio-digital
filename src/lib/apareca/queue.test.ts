@@ -1,8 +1,8 @@
 // Posição na fila e tempo estimado que o celular mostra em "Seu vídeo está na fila!".
 import { describe, expect, it } from "vitest";
-import type { PollRow, TvRow } from "@/lib/comunidade/types";
+import type { TvRow } from "@/lib/tv/types";
 import { DEFAULT_CONFIG } from "./config";
-import { estimateWait, pollLeftMs, queuePosition, tvsIn } from "./queue";
+import { estimateWait, queuePosition, tvsIn } from "./queue";
 import type { VideoRow } from "./types";
 
 const Z1 = "00000000-0000-4000-8000-0000000000a1";
@@ -59,55 +59,35 @@ describe("queuePosition", () => {
 describe("estimateWait", () => {
   const rule = DEFAULT_CONFIG.rule; // depois de cada institucional, até 3 de clientes
 
-  it("posição 1, regra padrão, enquete com 4 min restantes: pelo menos 4 min", () => {
-    const ms = estimateWait({ position: 1, rule, houseS: [30], pollLeftMs: 4 * 60_000, tvs: 1 });
-    expect(ms).toBeGreaterThanOrEqual(4 * 60_000);
-  });
-
-  it("posição 1 sem enquete: logo (antes de um institucional inteiro)", () => {
-    expect(estimateWait({ position: 1, rule, houseS: [30], pollLeftMs: 0, tvs: 1 })).toBeLessThan(30_000);
+  it("posição 1: logo (antes de um institucional inteiro)", () => {
+    expect(estimateWait({ position: 1, rule, houseS: [30], tvs: 1 })).toBeLessThan(30_000);
   });
 
   it("posição 5 com clients_max 3 soma um institucional no meio", () => {
-    const a = estimateWait({ position: 5, rule: { ...rule, clients_max: 3 }, houseS: [20, 40], pollLeftMs: 0, tvs: 1 });
-    const b = estimateWait({ position: 5, rule: { ...rule, clients_max: 10 }, houseS: [20, 40], pollLeftMs: 0, tvs: 1 });
+    const a = estimateWait({ position: 5, rule: { ...rule, clients_max: 3 }, houseS: [20, 40], tvs: 1 });
+    const b = estimateWait({ position: 5, rule: { ...rule, clients_max: 10 }, houseS: [20, 40], tvs: 1 });
     expect(a - b).toBe(30_000); // um bloco de 1 institucional, com a média de 30 s
     expect(b).toBe(4 * 6_000); // 4 clipes de 6 s na frente
   });
 
   it("house_every 2 conta dois institucionais por bloco", () => {
-    const one = estimateWait({ position: 4, rule: { kind: "intercalar", house_every: 1, clients_max: 3 }, houseS: [30], pollLeftMs: 0, tvs: 1 });
-    const two = estimateWait({ position: 4, rule: { kind: "intercalar", house_every: 2, clients_max: 3 }, houseS: [30], pollLeftMs: 0, tvs: 1 });
+    const one = estimateWait({ position: 4, rule: { kind: "intercalar", house_every: 1, clients_max: 3 }, houseS: [30], tvs: 1 });
+    const two = estimateWait({ position: 4, rule: { kind: "intercalar", house_every: 2, clients_max: 3 }, houseS: [30], tvs: 1 });
     expect(two - one).toBe(30_000);
   });
 
   it("várias TVs dividem a fila; 0 TV conta como 1; sem institucionais não soma bloco", () => {
-    const one = estimateWait({ position: 7, rule, houseS: [30], pollLeftMs: 0, tvs: 1 });
-    const two = estimateWait({ position: 7, rule, houseS: [30], pollLeftMs: 0, tvs: 2 });
+    const one = estimateWait({ position: 7, rule, houseS: [30], tvs: 1 });
+    const two = estimateWait({ position: 7, rule, houseS: [30], tvs: 2 });
     expect(two).toBe(Math.round(one / 2));
-    expect(estimateWait({ position: 7, rule, houseS: [30], pollLeftMs: 0, tvs: 0 })).toBe(one);
-    expect(estimateWait({ position: 4, rule, houseS: [], pollLeftMs: 0, tvs: 1 })).toBe(3 * 6_000);
+    expect(estimateWait({ position: 7, rule, houseS: [30], tvs: 0 })).toBe(one);
+    expect(estimateWait({ position: 4, rule, houseS: [], tvs: 1 })).toBe(3 * 6_000);
   });
 
   it("entradas tortas não viram NaN nem negativo", () => {
-    const ms = estimateWait({ position: Number.NaN, rule, houseS: [Number.NaN, -5], pollLeftMs: -10, tvs: Number.NaN });
+    const ms = estimateWait({ position: Number.NaN, rule, houseS: [Number.NaN, -5], tvs: Number.NaN });
     expect(Number.isFinite(ms)).toBe(true);
     expect(ms).toBeGreaterThanOrEqual(0);
-  });
-});
-
-describe("pollLeftMs", () => {
-  const now = new Date("2026-10-16T20:00:00.000Z");
-  const poll = (p: Partial<PollRow>): PollRow =>
-    ({ id: "p", restaurant_id: "r", template: "custom", question: "?", options: [], starts_at: "2026-10-16T19:50:00.000Z",
-      ends_at: "2026-10-16T20:04:00.000Z", closed_at: null, created_at: "", ...p }) as PollRow;
-
-  it("enquete aberta: o que falta para acabar", () => {
-    expect(pollLeftMs([poll({})], now)).toBe(4 * 60_000);
-  });
-  it("sem enquete aberta: 0", () => {
-    expect(pollLeftMs([], now)).toBe(0);
-    expect(pollLeftMs([poll({ starts_at: "2026-10-16T21:00:00.000Z", ends_at: "2026-10-16T21:10:00.000Z" })], now)).toBe(0);
   });
 });
 

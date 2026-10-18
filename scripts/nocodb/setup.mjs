@@ -37,11 +37,11 @@ export const TABLES = {
     text("phone"), text("address"), text("instagram"), text("facebook"), text("wifi_name"),
     text("wifi_password"), json("payment_methods"), bool("show_hours"),
     bool("show_payments"), bool("orders_enabled"),
-    // Comunidade: interruptor (vazio = desligada), a hora em que vira o dia ("HH:MM", vazio =
-    // "05:00") e o modo simples do telão (vazio = desligado; a TV ainda liga sozinha se engasgar).
-    bool("community_enabled"), text("community_day_start"), bool("community_tv_simple"),
-    // Apareça na TV: apareca_allowed e apareca_ai_allowed são do João (super admin); apareca_enabled é do dono
-    // (exige Comunidade ligada); apareca_config guarda modo, regra, zonas, horário e retenção.
+    // Modo simples do telão (vazio = desligado; a TV ainda liga sozinha se engasgar). O nome antigo fica
+    // para as TVs já configuradas seguirem iguais.
+    bool("community_tv_simple"),
+    // Apareça na TV: apareca_allowed e apareca_ai_allowed são do João (super admin); apareca_enabled é do dono;
+    // apareca_config guarda modo, regra, zonas, horário e retenção.
     bool("apareca_allowed"), bool("apareca_ai_allowed"), bool("apareca_enabled"), json("apareca_config"), created,
   ],
   members: [text("restaurant_id"), text("user_id"), text("role"), created],
@@ -81,28 +81,11 @@ export const TABLES = {
     id, text("restaurant_id"), text("user_id"), text("subject"), text("whatsapp"),
     long("message"), created,
   ],
-  // Comunidade (Palco + Mural). device_id, table_id, tables_qr e tables_open nunca saem por rota pública.
-  community_polls: [
-    id, text("restaurant_id"), text("template"), long("question"), json("options"),
-    date("starts_at"), date("ends_at"), date("closed_at"), created,
-    // Resultado final ({a,b,c: %, has_votes, winner}), gravado pelo cron antes de apagar os votos.
-    json("result"),
-  ],
-  community_votes: [
-    id, text("restaurant_id"), text("poll_id"), text("option_id"), text("device_id"), text("table_id"), created,
-  ],
-  community_posts: [
-    id, text("restaurant_id"), text("item_id"), text("photo_path"), text("thumb_path"), text("source"),
-    text("status"), bool("on_tv"), date("hidden_at"), created,
-  ],
-  // O telão guarda o segredo; aqui fica só o SHA-256 dele.
+  // TVs do salão (telão). O telão guarda o segredo; aqui fica só o SHA-256 dele. O nome antigo da tabela
+  // fica para as TVs já conectadas seguirem funcionando.
   community_tvs: [
     id, text("restaurant_id"), text("label"), text("pair_code"), date("pair_expires_at"), text("secret_hash"),
     date("paired_at"), date("last_seen_at"), bool("revoked"), created,
-  ],
-  // Funil somado em memória e gravado em lote (uma linha por instância a cada >= 30 s com movimento).
-  community_tally: [
-    id, text("restaurant_id"), text("day"), json("counts"), json("tables_qr"), json("tables_open"), created,
   ],
   // Apareça na TV: vídeo de 6 s do cliente. device_id, table_id, mux_upload_id e ai_reason nunca saem por rota
   // pública; mux_playback_id só sai com status = approved. A linha e o asset do Mux vencem em expires_at.

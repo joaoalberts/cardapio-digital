@@ -3,12 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useOrder } from "../order/order-context";
 
-// Convite "Apareça na TV!" na capa do cardápio, na linha dos botões do topo, logo acima do
-// balão da Comunidade. Só aparece com mesa válida (lida agora ou lembrada) e com o recurso
-// ligado e aberto (GET público, uma consulta). Desligado, fechado, pausado ou com erro: não
-// renderiza nada, e o cardápio fica igual ao de antes.
-// Com o balão na versão compacta (ele ocupa a linha do topo), o convite vira só o ícone, na
-// coluna da direita (CSS, .hero:has(.cmu-bal-c)).
+// Convite "Apareça na TV!" na capa do cardápio, na linha dos botões do topo. Só aparece com
+// mesa válida (lida agora ou lembrada) e com o recurso ligado e aberto (GET público, uma
+// consulta). Desligado, fechado, pausado ou com erro: não renderiza nada, e o cardápio fica
+// igual ao de antes.
 
 type Head = { enabled?: unknown; open?: unknown };
 

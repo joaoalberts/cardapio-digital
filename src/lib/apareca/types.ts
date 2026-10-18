@@ -34,9 +34,9 @@ export type AparecaTallyRow = {
 };
 export type AparecaHead = {
   id: string; slug: string; name: string; timezone: string; opening_hours: OpeningHours | null;
-  allowed: boolean; ai_allowed: boolean; enabled: boolean; community_enabled: boolean; config: AparecaConfig;
+  allowed: boolean; ai_allowed: boolean; enabled: boolean; config: AparecaConfig;
   logo_path: string | null; brand_color: string | null; instagram: string | null;
 };
 export type FeatureState =
   | { on: true }
-  | { on: false; why: "off" | "not_allowed" | "disabled" | "no_community" | "closed" | "paused" };
+  | { on: false; why: "off" | "not_allowed" | "disabled" | "closed" | "paused" };

@@ -1,7 +1,7 @@
 // Rotas do cliente sem o Next: envio (aceite, mesa, horário, teto, limites), "meu vídeo"
 // (estados, Mux consultado com calma, vencido apagado) e download. Banco, Mux e relógio falsos.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createLimiter } from "@/lib/comunidade/limiter";
+import { createLimiter } from "@/lib/limiter";
 import { DEFAULT_CONFIG } from "./config";
 import type { AparecaConfig, AparecaHead, VideoRow } from "./types";
 
@@ -58,7 +58,7 @@ let seq = 100;
 function mkHead(config: Partial<AparecaConfig> = {}, p: Partial<AparecaHead> = {}): AparecaHead {
   return {
     id: RID, slug: SLUG, name: "Casa da Ana", timezone: "America/Sao_Paulo", opening_hours: null, allowed: true, ai_allowed: false,
-    enabled: true, community_enabled: true, config: { ...DEFAULT_CONFIG, ...config }, logo_path: null, brand_color: null, instagram: null, ...p,
+    enabled: true, config: { ...DEFAULT_CONFIG, ...config }, logo_path: null, brand_color: null, instagram: null, ...p,
   };
 }
 
@@ -177,7 +177,6 @@ describe("startSubmission: recusas", () => {
     ["chave geral", () => ({ off: () => true }), {}],
     ["não liberado pelo João", () => ({}), { allowed: false }],
     ["desligado pelo dono", () => ({}), { enabled: false }],
-    ["sem Comunidade", () => ({}), { community_enabled: false }],
   ])("%s → off", async (_n, over, h) => {
     head = mkHead({}, h as Partial<AparecaHead>);
     const { d, createUpload } = mk(over());

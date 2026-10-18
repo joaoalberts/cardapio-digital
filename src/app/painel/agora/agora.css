@@ -1,17 +1,13 @@
-/* Painel: tela "Agora". Reaproveita a fila do Apareça (.app-fila: faixas, aviso sonoro, vídeos) e as peças da
-   Comunidade (.cp: Nova enquete, foto de prato, Confirm); aqui só o que é da tela. Contraste AA: cinza #666666 no
+/* Painel: tela "Agora". Reaproveita a fila do Apareça (.app-fila: faixas, aviso sonoro, vídeos) e os campos
+   do painel (.cp); aqui só o que é da tela. Contraste AA: cinza #666666 no
    branco (5,7:1) e no fundo do painel (5,1:1), dourado escuro #7a5218 no branco (6,9:1), verde #2f6b1f no branco
    (6,4:1), texto #1a1a1a no dourado (5,8:1). Toque mínimo de 44 px. Cabe em 375 px sem rolagem lateral. Nada anima aqui além do que já vem da fila. */
 .ap .ag {
   max-width: 820px;
 
-  /* Contraste AA só nesta tela (a Comunidade fica como está). "&.cp" sobe a especificidade acima de .ap .cp e
-     .ap .btn.primary, que valem para a Comunidade; o .danger ("Sim, encerrar") continua vermelho. */
+  /* Contraste AA só nesta tela. "&.cp" sobe a especificidade acima de .ap .cp. */
   &.cp {
     --pmuted: #666666;
-  }
-  &.cp .btn.cp-new {
-    color: #1a1a1a;
   }
   &.cp .cp-link:not(.danger) {
     color: #7a5218;
@@ -21,8 +17,7 @@
   }
 
   & > .ap-card,
-  & > .ag-empty,
-  & > .ag-short {
+  & > .ag-empty {
     margin-top: 18px;
   }
   & > .ap-card:first-child,
@@ -118,70 +113,5 @@
     margin-bottom: 0;
     color: #666666;
     font-size: 15px;
-  }
-
-  /* Enquete no ar */
-  & .ag-q {
-    margin: 0 0 4px;
-    font-size: 17px;
-    font-weight: 600;
-    color: #1a1a1a;
-    overflow-wrap: anywhere;
-  }
-  & .ag-meta {
-    margin: 0 0 6px;
-    color: #666666;
-    font-size: 14px;
-  }
-  & .ag-poll .cp-acts {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px 14px;
-  }
-  & .ag-poll .cp-link {
-    min-height: 44px;
-    font-size: 15px;
-  }
-
-  /* Atalhos: dois botões grandes */
-  & .ag-short {
-    display: grid;
-    gap: 12px;
-  }
-  & .ag-short .cp-new,
-  & .ag-photo > summary {
-    width: 100%;
-    min-height: 52px;
-    height: auto;
-    margin-top: 0;
-    font-size: 16px;
-    font-weight: 600;
-  }
-  & .ag-photo > summary {
-    list-style: none;
-    cursor: pointer;
-  }
-  & .ag-photo > summary::-webkit-details-marker {
-    display: none;
-  }
-  & .ag-photo[open] {
-    padding-bottom: 4px;
-  }
-  & .ag-photo .cp-send {
-    margin-top: 12px;
-    padding: 16px;
-    border-radius: 8px;
-    background: #fff;
-  }
-  & .ag-photo .cp-send .cp-new {
-    min-height: 48px;
-  }
-}
-
-@media (min-width: 761px) {
-  .ap .ag .ag-short {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
   }
 }

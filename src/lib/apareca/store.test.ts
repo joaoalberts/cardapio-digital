@@ -451,14 +451,14 @@ describe("getAparecaHead", () => {
       {
         uid: RID, id: RID, slug: "casa", name: "Casa", timezone: "America/Sao_Paulo", show_hours: false,
         opening_hours: [], apareca_allowed: true, apareca_ai_allowed: false, apareca_enabled: true,
-        community_enabled: true, apareca_config: { retention_h: 2, plays: 9 }, logo_path: null, brand_color: "#f00",
+        apareca_config: { retention_h: 2, plays: 9 }, logo_path: null, brand_color: "#f00",
         instagram: "casa",
       },
     ];
     const head = await S.getAparecaHead("CASA");
     expect(h.db.first).toHaveBeenCalledWith("restaurants", { slug: "casa" });
     expect(head).toMatchObject({
-      id: RID, slug: "casa", name: "Casa", allowed: true, ai_allowed: false, enabled: true, community_enabled: true,
+      id: RID, slug: "casa", name: "Casa", allowed: true, ai_allowed: false, enabled: true,
       opening_hours: null, brand_color: "#f00", instagram: "casa",
     });
     expect(head?.config.retention_h).toBe(6);

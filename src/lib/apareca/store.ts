@@ -2,7 +2,7 @@ import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
 import * as nocodb from "@/lib/db/nocodb";
 import { SLUG_PATTERN } from "@/lib/slug";
-import { toHead } from "@/lib/comunidade/votes";
+import { toTvHead } from "@/lib/tv/head";
 import { serverNow } from "./clock";
 import { parseConfig } from "./config";
 import { resolveStuck } from "./moderation";
@@ -39,10 +39,10 @@ export type StoreDeps = {
 type Raw = Record<string, unknown>;
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 
-// Linha de restaurants → cabeça do Apareça. Nome, fuso, horário e Comunidade seguem a mesma
-// leitura da Comunidade (toHead); os interruptores vazios contam como desligados.
+// Linha de restaurants → cabeça do Apareça. Nome, fuso e horário seguem a mesma leitura do
+// telão (toTvHead); os interruptores vazios contam como desligados.
 function toAparecaHead(r: Raw | null): AparecaHead | null {
-  const c = toHead(r);
+  const c = toTvHead(r);
   if (!r || !c) return null;
   return {
     id: c.id,
@@ -53,7 +53,6 @@ function toAparecaHead(r: Raw | null): AparecaHead | null {
     allowed: r.apareca_allowed === true,
     ai_allowed: r.apareca_ai_allowed === true,
     enabled: r.apareca_enabled === true,
-    community_enabled: c.enabled,
     config: parseConfig(r.apareca_config),
     logo_path: c.logo_path,
     brand_color: c.brand_color,

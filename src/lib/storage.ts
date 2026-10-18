@@ -69,7 +69,7 @@ export async function removeFiles(paths: (string | null | undefined)[]) {
   }).catch(() => undefined);
 }
 
-// Variante estrita, para a retenção da Comunidade: só termina quando os arquivos saíram, para
+// Variante estrita, para limpezas que apagam a linha do banco: só termina quando os arquivos saíram, para
 // a linha do banco não sumir deixando um arquivo órfão. No Blob, confere a resposta e lança
 // no erro (rede, HTTP fora de 2xx ou sem BLOB_READ_WRITE_TOKEN); no driver local, lança se o
 // unlink falhar, menos quando o arquivo já não existe (ENOENT). Caminhos que não são deste

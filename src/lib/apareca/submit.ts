@@ -1,6 +1,6 @@
 import "server-only";
-import { sharedLimiter, type Limiter } from "@/lib/comunidade/limiter";
-import type { PollRow, TvRow } from "@/lib/comunidade/types";
+import { sharedLimiter, type Limiter } from "@/lib/limiter";
+import type { TvRow } from "@/lib/tv/types";
 import type * as nocodb from "@/lib/db/nocodb";
 import { serverNow } from "./clock";
 import { featureState } from "./config";
@@ -8,7 +8,7 @@ import { tetoUsd, uploadGate } from "./cost";
 import { onAssetReady } from "./moderation";
 import { mp4Url, type AssetInfo, type assetInfo, type createAparecaUpload } from "./mux-video";
 import { cleanName } from "./name";
-import { estimateWait, pollLeftMs, queuePosition, tvsIn } from "./queue";
+import { estimateWait, queuePosition, tvsIn } from "./queue";
 import { expiresAt, isExpired, isStuckUpload } from "./retention";
 import { forgetSnapshot, readSnapshot, type StoreDb, type StoreDeps } from "./store";
 import type { AparecaHead, VideoRow } from "./types";
@@ -18,7 +18,7 @@ import type { AparecaHead, VideoRow } from "./types";
 // da linha de dining_tables. Nenhuma resposta leva device_id, table_id, zona, ai_reason,
 // motivo de reprovação nem ids do Mux: o "meu vídeo" devolve só o estado público (MyStatus).
 
-export type PublicHead = { enabled: boolean; open: boolean; why: "off" | "not_allowed" | "disabled" | "no_community" | "closed" | "paused" | null };
+export type PublicHead = { enabled: boolean; open: boolean; why: "off" | "not_allowed" | "disabled" | "closed" | "paused" | null };
 export type StartResult =
   | { ok: true; id: string; upload_url: string; expires_at: string }
   | { ok: false; code: "invalid" | "not_found" | "off" | "table" | "closed" | "paused" | "too_many" | "name" | "consent" | "mux" };
@@ -49,11 +49,11 @@ export type SubmitDeps = {
   off?: () => boolean;
   origin: string;
   // Opcionais (padrões entre parênteses): IP de quem chama ("anon"), limitadores (compartilhados
-  // no processo), durações dos institucionais ([]) e enquetes/TVs da Comunidade (sem enquete, 1 TV).
+  // no processo), durações dos institucionais ([]) e TVs do restaurante (1 TV).
   ip?: string;
   limits?: SubmitLimits;
   houseS?: (rid: string) => Promise<number[]>;
-  community?: (rid: string) => Promise<{ polls: PollRow[]; tvs: TvRow[] }>;
+  tvs?: (rid: string) => Promise<TvRow[]>;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -360,23 +360,22 @@ async function settleUpload(d: SubmitDeps, head: AparecaHead, v: VideoRow, now: 
   return ready;
 }
 
-async function waitFor(d: SubmitDeps, head: AparecaHead, v: VideoRow, videos: VideoRow[], now: Date) {
+async function waitFor(d: SubmitDeps, head: AparecaHead, v: VideoRow, videos: VideoRow[]) {
   const known = new Set(head.config.zones.map((z) => z.id));
   const zoneOf = (x: VideoRow) => (x.zone_id && known.has(x.zone_id) ? x.zone_id : null);
   const line = [...videos.filter((x) => x.id !== v.id), v].map((x) => ({ ...x, zone_id: zoneOf(x) }));
   const zone = zoneOf(v);
   const position = queuePosition(line, v.id, zone);
   if (position === null) return { position: null, eta_ms: null };
-  const [houseS, community] = await Promise.all([
+  const [houseS, tvs] = await Promise.all([
     d.houseS?.(head.id).catch(() => []) ?? Promise.resolve([]),
-    d.community?.(head.id).catch(() => null) ?? Promise.resolve(null),
+    d.tvs?.(head.id).catch(() => null) ?? Promise.resolve(null),
   ]);
   const eta_ms = estimateWait({
     position,
     rule: head.config.rule,
     houseS,
-    pollLeftMs: community ? pollLeftMs(community.polls, now) : 0,
-    tvs: community ? tvsIn(community.tvs, head.config, zone) : 1,
+    tvs: tvs ? tvsIn(tvs, head.config, zone) : 1,
   });
   return { position, eta_ms };
 }
@@ -416,7 +415,7 @@ export async function myStatus(
   switch (v.status) {
     case "pending":
     case "ai_review":
-      return { state: "review", ...(await waitFor(d, head, v, found.videos, now)), first_shown_at: null, download: null };
+      return { state: "review", ...(await waitFor(d, head, v, found.videos)), first_shown_at: null, download: null };
     case "approved": {
       const download = v.mux_playback_id && (await mp4Ready(d, v, now)) ? downloadPath(head.slug, v.id) : null;
       // A TV avisa o "tocou" no INÍCIO do clipe e já sobe plays: com plays_target 1, plays >= alvo
@@ -425,7 +424,7 @@ export async function myStatus(
         return { state: "on_tv", position: null, eta_ms: null, first_shown_at: v.first_shown_at, download };
       }
       if (v.plays >= v.plays_target) return { state: "shown", position: null, eta_ms: null, first_shown_at: v.first_shown_at, download };
-      return { state: "queue", ...(await waitFor(d, head, v, found.videos, now)), first_shown_at: null, download };
+      return { state: "queue", ...(await waitFor(d, head, v, found.videos)), first_shown_at: null, download };
     }
     default:
       return NOT_SHOWN; // rejected, removed, failed: sem motivo

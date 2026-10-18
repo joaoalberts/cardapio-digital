@@ -24,26 +24,26 @@ afterEach(() => {
 
 describe("contador de chamadas", () => {
   it("sem NOCODB_COUNT não conta nem cria nada no globalThis", () => {
-    countCall("GET", "community_votes");
+    countCall("GET", "items");
     expect(COUNTER_KEY in g).toBe(false);
     expect(readCalls()).toBeNull();
   });
 
   it("só NOCODB_COUNT=1 liga (outros valores não)", () => {
     process.env.NOCODB_COUNT = "true";
-    countCall("GET", "community_votes");
+    countCall("GET", "items");
     expect(COUNTER_KEY in g).toBe(false);
     expect(readCalls()).toBeNull();
   });
 
   it("com NOCODB_COUNT=1 soma o total e por método + tabela", () => {
     process.env.NOCODB_COUNT = "1";
-    countCall("GET", "community_votes");
-    countCall("GET", "community_votes");
-    countCall("POST", "community_tally");
+    countCall("GET", "items");
+    countCall("GET", "items");
+    countCall("POST", "dining_tables");
     const c = readCalls();
     expect(c?.total).toBe(3);
-    expect(c?.byKey).toEqual({ "GET community_votes": 2, "POST community_tally": 1 });
+    expect(c?.byKey).toEqual({ "GET items": 2, "POST dining_tables": 1 });
     expect(typeof c?.since).toBe("string");
   });
 
@@ -71,18 +71,18 @@ describe("nocodb.ts conta cada pedido HTTP ao NocoDB", () => {
     process.env.NOCODB_COUNT = "1";
     process.env.NOCODB_API_TOKEN = "teste";
     const fetchStub = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url.includes("/meta/bases/")) return ok({ list: [{ id: "t1", title: "community_votes", table_name: "community_votes" }] });
+      if (url.includes("/meta/bases/")) return ok({ list: [{ id: "t1", title: "items", table_name: "items" }] });
       if ((init?.method ?? "GET") === "GET") return ok({ list: [{ Id: 1, uid: "a" }], pageInfo: { isLastPage: true } });
       return ok([{ Id: 2 }]);
     });
     vi.stubGlobal("fetch", fetchStub);
-    await db.list("community_votes", { poll_id: "x" });
-    await db.insertOne("community_votes", { poll_id: "x" });
+    await db.list("items", { poll_id: "x" });
+    await db.insertOne("items", { poll_id: "x" });
     const c = readCalls();
     // A lista de tabelas pode já estar em memória de outro teste; conta só o que foi pedido.
     expect(c?.total).toBe(fetchStub.mock.calls.length);
-    expect(c?.byKey["GET community_votes"]).toBe(1);
-    expect(c?.byKey["POST community_votes"]).toBe(1);
+    expect(c?.byKey["GET items"]).toBe(1);
+    expect(c?.byKey["POST items"]).toBe(1);
   });
 
   it("sem NOCODB_COUNT os pedidos saem e nada é contado", async () => {
@@ -91,11 +91,11 @@ describe("nocodb.ts conta cada pedido HTTP ao NocoDB", () => {
       "fetch",
       vi.fn(async (url: string) =>
         url.includes("/meta/bases/")
-          ? ok({ list: [{ id: "t1", title: "community_votes", table_name: "community_votes" }] })
+          ? ok({ list: [{ id: "t1", title: "items", table_name: "items" }] })
           : ok({ list: [], pageInfo: { isLastPage: true } }),
       ),
     );
-    await db.list("community_votes", {});
+    await db.list("items", {});
     expect(COUNTER_KEY in g).toBe(false);
   });
 });

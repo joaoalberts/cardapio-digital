@@ -6,16 +6,10 @@ import { latestOnly, NOTICE_MS, noticeOn, noticeText, WARN_TEXT, type Notice, ty
 import type { AgoraResult } from "@/lib/painel/agora";
 import { approveVideo, rejectVideo, removeFromTv } from "../apareca/actions";
 import { OnTvNow, PendingVideos } from "../apareca/fila";
-import { closePoll } from "../comunidade/actions";
-import { Confirm } from "../comunidade/confirm";
-import { HousePhotoSend, type HousePhotoData } from "../comunidade/house-photo";
-import { NewPoll } from "../comunidade/poll-maker";
-import { ICONS, Icon } from "../comunidade/shared";
 import { loadAgora } from "./actions";
 
-// Tela "Agora", a da noite: só o que pede um toque agora, na ordem do spec (avisos, Montar a casa, vídeos
-// para aprovar, enquete no ar, Na TV agora, atalhos). Cada bloco só aparece com conteúdo. Uma consulta só
-// (loadAgora: fila + enquete + TVs) a cada 10 s, com a aba visível, como a Fila de antes; o aviso sonoro
+// Tela "Agora", a da noite: só o que pede um toque agora (avisos, Montar a casa, vídeos para aprovar,
+// Na TV agora). Cada bloco só aparece com conteúdo. Uma consulta só (loadAgora: fila + TVs) a cada 10 s, com a aba visível, como a Fila de antes; o aviso sonoro
 // de vídeo novo funciona com a tela aberta em qualquer bloco.
 
 const POLL_MS = 10_000;
@@ -23,17 +17,15 @@ const LOAD_FAIL = "Não foi possível atualizar a tela. Confira a internet.";
 const QUEUE_FAIL = "Não foi possível atualizar os vídeos. Confira a internet.";
 const SAVE_FAIL = "Não foi possível salvar. Confira a internet.";
 
-const minutesLeft = (iso: string, now: number) => Math.max(0, Math.ceil((Date.parse(iso) - now) / 60_000));
-
 export function AgoraLive({
-  rid, isOwner, initial, initialOk, aparecaOff, maker, setup,
+  rid, initial, initialOk, aparecaOff, setup,
 }: {
-  rid: string; isOwner: boolean; initial: AgoraResult; initialOk: boolean; aparecaOff: boolean; maker: HousePhotoData; setup?: ReactNode;
+  rid: string; initial: AgoraResult; initialOk: boolean; aparecaOff: boolean; setup?: ReactNode;
 }) {
   const [data, setData] = useState(initial);
   // Cada resposta de consulta sobe loaded: é quando o aviso sonoro confere se chegou vídeo novo.
   const [loaded, setLoaded] = useState(0);
-  // router.refresh (enquete criada, foto enviada) traz uma leitura nova do servidor: vale como consulta.
+  // router.refresh traz uma leitura nova do servidor: vale como consulta.
   const [prev, setPrev] = useState(initial);
   if (initialOk && initial !== prev) {
     setPrev(initial);
@@ -151,37 +143,15 @@ export function AgoraLive({
     mark(id, false);
   };
 
-  const endPoll = async (id: string) => {
-    let error: string | undefined;
-    try {
-      error = (await closePoll(rid, id)).error;
-    } catch {
-      error = SAVE_FAIL;
-    }
-    queries.current.bump();
-    note({ type: "action", text: error ?? null, at: Date.now() });
-    if (error) return false;
-    setData((d) => ({ ...d, poll: null }));
-    void load();
-  };
-
-  const { queue, queueOk, poll, tvs, communityOn, aparecaAllowed } = data;
+  const { queue, queueOk, tvs, aparecaAllowed } = data;
   const items = queue.items;
   const silent = tvs.filter((t) => !t.status.on);
   const pending = items.some((i) => i.status === "pending");
   const onTv = items.some((i) => i.status === "approved");
-  const showPoll = communityOn && poll !== null;
 
   return (
     <div className="cp app-fila ag">
       {/* 1. Avisos que travam a noite */}
-      {!communityOn && (
-        <p className="app-band app-band-off" role="status">
-          A Comunidade está desligada: sem enquete, sem Mural e sem telão.{" "}
-          {/* O interruptor é só do dono. */}
-          {isOwner ? <Link href="/painel/comunidade">Abrir Comunidade</Link> : <b>Peça ao dono.</b>}
-        </p>
-      )}
       {aparecaAllowed && aparecaOff && (
         <p className="app-band app-band-stop" role="status">
           O Apareça na TV está desligado no sistema agora. Os clientes não conseguem enviar vídeo.
@@ -234,43 +204,12 @@ export function AgoraLive({
       )}
       {pending && setup}
 
-      {!pending && !onTv && !showPoll && (
+      {!pending && !onTv && (
         <p className="ag-empty">{aparecaAllowed ? "Tudo em dia. Quando um cliente enviar um vídeo, ele aparece aqui." : "Tudo em dia."}</p>
       )}
 
-      {/* 4. Enquete no ar */}
-      {showPoll && (
-        <section className="ap-card ag-poll" aria-labelledby="ag-h-poll">
-          <div className="ap-card-head">
-            <h2 id="ag-h-poll">Enquete no ar</h2>
-          </div>
-          <p className="ag-q">{poll.question}</p>
-          <p className="ag-meta">
-            {poll.votes !== null && `${poll.votes} ${poll.votes === 1 ? "voto" : "votos"} · `}
-            <span suppressHydrationWarning>termina em {minutesLeft(poll.endsAt, now)} min</span>
-          </p>
-          <Confirm key={poll.id} label="Encerrar" ask="Encerrar a enquete agora?" yes="Sim, encerrar" onYes={() => endPoll(poll.id)} />
-        </section>
-      )}
-
-      {/* 5. Na TV agora */}
+      {/* 4. Na TV agora */}
       {aparecaAllowed && <OnTvNow items={items} busy={busy} onRemove={remove} />}
-
-      {/* 6. Atalhos */}
-      <section className="ag-short" aria-label="Atalhos">
-        {communityOn && (
-          <div className="ag-short-poll">
-            <NewPoll data={maker} />
-          </div>
-        )}
-        <details className="ag-photo">
-          <summary className="btn outline">
-            <Icon d={ICONS.camera} />
-            Foto de prato
-          </summary>
-          <HousePhotoSend data={maker} />
-        </details>
-      </section>
     </div>
   );
 }

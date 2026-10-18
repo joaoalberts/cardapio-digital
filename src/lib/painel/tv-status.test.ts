@@ -20,7 +20,7 @@ describe("tvStatus", () => {
     expect(tvStatus(ago(119), NOW).text).toBe("sem sinal há 1 h");
     expect(tvStatus(ago(60), NOW).text).toBe("sem sinal há 1 h");
   });
-  it("o limite de 10 min é o da Comunidade", () => {
+  it("o limite é de 10 min", () => {
     expect(tvStatus(ago(9), NOW).on).toBe(true);
     expect(tvStatus(ago(10), NOW).on).toBe(false);
   });

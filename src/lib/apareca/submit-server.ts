@@ -1,7 +1,7 @@
 import "server-only";
 import { after } from "next/server";
-import { clientIp } from "@/lib/comunidade/http";
-import { getCommunityContent } from "@/lib/comunidade/server";
+import { clientIp } from "@/lib/http";
+import { getTvRows } from "@/lib/tv/server";
 import * as db from "@/lib/db/nocodb";
 import { aiAvailable, aiModel } from "./ai";
 import { estimateUsd } from "./cost";
@@ -59,9 +59,6 @@ export function routeDeps(request: Request): SubmitDeps {
       (await getHouseVideos(rid))
         .filter((h) => h.active && h.status === "ready" && (h.duration_ms ?? 0) > 0)
         .map((h) => (h.duration_ms ?? 0) / 1000),
-    community: async (rid) => {
-      const c = await getCommunityContent(rid);
-      return { polls: c.polls, tvs: c.tvs };
-    },
+    tvs: getTvRows,
   };
 }

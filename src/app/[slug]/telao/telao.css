@@ -1,7 +1,6 @@
-/* Telão da Comunidade (TV do salão), fase 1a, versão recomendada v2
-   (docs/prototipos/comunidade-v2/recomendada/README.md, telas 18 a 37).
-   Pôster vivo: a foto da líder grande à direita, o QR embaixo dela, a marca, a pergunta e as
-   barras à esquerda. Tudo sai de uma unidade só, --u = min(1vmin, 0,75vmax): a página ocupa a
+/* Telão (TV do salão).
+   Pôster vivo: a foto do destaque grande à direita, o QR embaixo dela, a marca e o destaque
+   da casa à esquerda. Tudo sai de uma unidade só, --u = min(1vmin, 0,75vmax): a página ocupa a
    tela inteira da TV, então é o mesmo que min(1cqmin, 0,75cqmax) da ficha (7,2 px em 720p,
    10,8 em 1080p e na TV em pé, 21,6 em 4K, 7,68 em 4:3). O arranjo muda com a forma da TV
    (deitada, quase quadrada e em pé) por media query de proporção, que TV antiga entende.
@@ -79,7 +78,7 @@
   outline: calc(var(--u) * 0.3) solid var(--accent);
   outline-offset: calc(var(--u) * 0.3);
 }
-/* palavras na fonte do tema da casa (pergunta, pratos, "Deu X", "Aponte a câmera") */
+/* palavras na fonte do tema da casa (destaque, "Aponte a câmera") */
 .tl .fd {
   font-family: var(--display);
   font-weight: var(--display-weight);
@@ -195,56 +194,6 @@ span.tl-logo {
   height: calc(var(--u) * 3.1);
   stroke: var(--accent);
 }
-
-/* relógio grande: o número dentro do anel limão */
-.tl-clock {
-  --rw: calc(var(--u) * 0.8);
-  position: relative;
-  flex: none;
-  margin-left: auto;
-  width: calc(var(--u) * 12);
-  height: calc(var(--u) * 12);
-  display: grid;
-  place-items: center;
-  text-align: center;
-  line-height: 1;
-  transition: --tl-ring 1s linear;
-}
-.tl-clock::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: conic-gradient(var(--o-lime) var(--tl-ring), rgba(247, 239, 230, 0.16) 0);
-  -webkit-mask-image: radial-gradient(farthest-side, transparent calc(100% - var(--rw) - 0.5px), #000 calc(100% - var(--rw)));
-  mask-image: radial-gradient(farthest-side, transparent calc(100% - var(--rw) - 0.5px), #000 calc(100% - var(--rw)));
-}
-.tl-clock b {
-  display: block;
-  font-size: calc(var(--u) * 4.6);
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-.tl-clock small {
-  display: block;
-  margin-top: calc(var(--u) * 0.2);
-  font-size: calc(var(--u) * 2.8);
-  font-weight: 600;
-  color: var(--muted);
-}
-.tl-rec {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: calc(var(--u) * 1.2);
-  height: calc(var(--u) * 6);
-  padding: 0 calc(var(--u) * 2.4);
-  border-radius: calc(var(--u) * 3);
-  background: rgba(247, 239, 230, 0.08);
-  font-size: calc(var(--u) * 2.8);
-  font-weight: 600;
-  white-space: nowrap;
-}
 .tl-spin {
   display: inline-block;
   flex: none;
@@ -299,37 +248,6 @@ span.tl-logo {
 @keyframes tl-kb {
   to {
     transform: scale(1.07);
-  }
-}
-/* reflexo molhado da oferta relâmpago: 3 passadas de 5 s no "Deu" */
-.tl-streak {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background: linear-gradient(
-    115deg,
-    transparent 22%,
-    rgba(255, 255, 255, 0.04) 36%,
-    rgba(255, 255, 255, 0.1) 46%,
-    rgba(255, 255, 255, 0.15) 50%,
-    rgba(255, 255, 255, 0.1) 54%,
-    rgba(255, 255, 255, 0.04) 64%,
-    transparent 78%
-  );
-  mix-blend-mode: overlay;
-  transform: translateX(-140%);
-}
-.k-win .tl-streak {
-  animation: tl-wet 5s 0.8s ease-in-out 3;
-}
-@keyframes tl-wet {
-  0% {
-    transform: translateX(-140%);
-  }
-  34%,
-  100% {
-    transform: translateX(140%);
   }
 }
 
@@ -397,8 +315,7 @@ span.tl-logo {
   padding: 0 calc(var(--u) * 6) calc(var(--u) * 5.2);
   min-width: 0;
 }
-.k-feat .tl-body,
-.k-win .tl-body {
+.k-feat .tl-body {
   align-self: center;
   padding-bottom: calc(var(--u) * 3);
 }
@@ -409,38 +326,6 @@ span.tl-logo {
   font-size: calc(var(--u) * 3);
   font-weight: 600;
   color: var(--accent);
-}
-.tl-dot {
-  position: relative;
-  flex: none;
-  width: calc(var(--u) * 1.2);
-  height: calc(var(--u) * 1.2);
-  border-radius: 50%;
-  background: var(--live);
-}
-.tl-dot::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: var(--live);
-  animation: tl-pulse 1.6s ease-out infinite;
-}
-.tl-dot.off {
-  background: rgba(247, 239, 230, 0.4);
-}
-.tl-dot.off::after {
-  display: none;
-}
-@keyframes tl-pulse {
-  from {
-    transform: scale(0.6);
-    opacity: 0.9;
-  }
-  to {
-    transform: scale(2.4);
-    opacity: 0;
-  }
 }
 .tl-q {
   margin-top: calc(var(--u) * 1.6);
@@ -453,120 +338,7 @@ span.tl-logo {
   font-size: calc(var(--u) * 6.6 * var(--display-scale));
 }
 
-/* barras: a líder sempre em primeiro; quando a liderança muda, sobe com FLIP (transform) */
-.tl-bars {
-  position: relative;
-  display: grid;
-  gap: calc(var(--u) * 1.6);
-  margin-top: calc(var(--u) * 3.2);
-}
-.tl-bar {
-  display: grid;
-  grid-template-columns: calc(var(--u) * 12) minmax(0, 1fr);
-  /* a linha é a altura da barra: a foto (qualquer proporção) não pode esticá-la */
-  grid-template-rows: minmax(0, 1fr);
-  gap: calc(var(--u) * 1.4);
-  height: calc(var(--u) * 12);
-  transition: transform 0.7s var(--ease), opacity 0.4s;
-}
-.tl-bar.noimg {
-  grid-template-columns: minmax(0, 1fr);
-}
-.tl-bar > img {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  object-fit: cover;
-  border-radius: calc(var(--u) * 2.4);
-}
-.tl-track {
-  position: relative;
-  overflow: hidden;
-  border-radius: calc(var(--u) * 2.4);
-  background: rgba(247, 239, 230, 0.06);
-  display: flex;
-  align-items: center;
-  gap: calc(var(--u) * 2);
-  padding: 0 calc(var(--u) * 3);
-}
-.tl-fill {
-  position: absolute;
-  inset: 0;
-  transform: translateX(calc((var(--p, 0) - 100) * 1%));
-  transition: transform 1.2s var(--ease);
-  background: linear-gradient(90deg, rgba(247, 239, 230, 0.05), rgba(247, 239, 230, 0.18));
-}
-/* ponta champanhe: só nos 20% de cima e de baixo, nunca cruza o nome */
-.tl-fill::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  width: calc(var(--u) * 0.3);
-  background: var(--champ);
-  opacity: 0.4;
-  -webkit-mask-image: var(--tick);
-  mask-image: var(--tick);
-}
-.tl-bar.lead .tl-fill {
-  background: linear-gradient(90deg, var(--accent-16), var(--accent-56) calc(100% - var(--u) * 3), var(--accent-70));
-}
-.tl-bar.lead .tl-fill::after {
-  opacity: 1;
-  width: calc(var(--u) * 0.45);
-}
-.tl-nm {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  font-size: calc(var(--u) * 5.6 * var(--display-scale));
-  line-height: 1.1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tl-pc {
-  position: relative;
-  font-size: calc(var(--u) * 7);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  color: rgba(247, 239, 230, 0.86);
-  white-space: nowrap;
-}
-.tl-bar.lead .tl-pc {
-  color: var(--accent);
-}
-.tl-pc small,
-.tl-big small {
-  font-size: 0.56em;
-  font-weight: 700;
-  margin-left: 0.04em;
-}
-.tl-vote {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--u) * 1.2);
-  margin-top: calc(var(--u) * 2.8);
-  font-size: calc(var(--u) * 3.2);
-  font-weight: 700;
-  color: var(--o-lime);
-}
-.tl-vote .tl-ico {
-  width: calc(var(--u) * 3.4);
-  height: calc(var(--u) * 3.4);
-}
-/* reconectando: o resto congela */
-.k-rec .tl-kick {
-  color: var(--muted);
-}
-.k-rec .tl-bars,
-.k-rec .tl-vote {
-  opacity: 0.8;
-}
-
-/* sem enquete (destaque da casa) e "Deu X" */
+/* destaque da casa */
 .k-feat .tl-q {
   font-size: calc(var(--u) * 12 * var(--display-scale));
   margin-top: calc(var(--u) * 1.2);
@@ -599,93 +371,6 @@ span.tl-logo {
   font-weight: 700;
   color: var(--o-lime);
   text-wrap: balance;
-}
-.tl-next {
-  display: flex;
-  align-items: flex-start;
-  gap: calc(var(--u) * 1.4);
-  margin-top: calc(var(--u) * 4.4);
-  padding-top: calc(var(--u) * 2.6);
-  font-size: calc(var(--u) * 2.9);
-  color: var(--muted);
-  background: linear-gradient(90deg, rgba(247, 239, 230, 0.16), transparent) top / 100% 1px no-repeat;
-}
-.tl-next .tl-ico {
-  width: calc(var(--u) * 3.2);
-  height: calc(var(--u) * 3.2);
-  margin-top: calc(var(--u) * 0.1);
-  stroke: var(--accent);
-}
-.tl-next b {
-  display: block;
-  margin-top: calc(var(--u) * 0.4);
-  color: var(--fg);
-  font-weight: 600;
-}
-.tl-pq {
-  margin-top: calc(var(--u) * 1.4);
-  font-style: italic;
-  font-size: calc(var(--u) * 3.6 * var(--display-scale));
-  color: var(--muted);
-}
-.k-win .tl-q {
-  font-size: calc(var(--u) * 10.6 * var(--display-scale));
-  margin-top: calc(var(--u) * 0.6);
-  line-height: 0.98;
-}
-.k-win .tl-price {
-  margin-top: calc(var(--u) * 2.8);
-}
-.k-win .tl-price b {
-  font-size: calc(var(--u) * 7);
-}
-.k-win .tl-price span {
-  flex-basis: 100%;
-}
-.tl-res {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--u) * 4);
-  margin-top: calc(var(--u) * 3);
-}
-.tl-big {
-  font-size: calc(var(--u) * 15);
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 0.86;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-}
-.tl-rest {
-  display: grid;
-  gap: calc(var(--u) * 1.2);
-  font-size: calc(var(--u) * 3.4);
-  color: var(--muted);
-  min-width: 0;
-}
-.tl-rest span {
-  display: flex;
-  align-items: center;
-  gap: calc(var(--u) * 1.4);
-  white-space: nowrap;
-}
-.tl-rest img {
-  width: calc(var(--u) * 5.2);
-  height: calc(var(--u) * 5.2);
-  border-radius: calc(var(--u) * 1.2);
-  object-fit: cover;
-  flex: none;
-}
-.tl-rest b {
-  color: var(--fg);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.tl-line {
-  height: calc(var(--u) * 0.2);
-  margin-top: calc(var(--u) * 3.4);
-  background: var(--sp-line);
-  opacity: 0.75;
 }
 .tl-enter {
   animation: tl-in 0.7s var(--ease) both;
@@ -734,22 +419,8 @@ span.tl-logo {
   .tl-q.long {
     font-size: calc(var(--u) * 6 * var(--display-scale));
   }
-  .tl-bar {
-    height: calc(var(--u) * 10.6);
-    grid-template-columns: calc(var(--u) * 10.6) minmax(0, 1fr);
-  }
-  .tl-nm {
-    font-size: calc(var(--u) * 5 * var(--display-scale));
-  }
-  .tl-pc {
-    font-size: calc(var(--u) * 6.2);
-  }
-  .k-feat .tl-q,
-  .k-win .tl-q {
+  .k-feat .tl-q {
     font-size: calc(var(--u) * 10 * var(--display-scale));
-  }
-  .tl-big {
-    font-size: calc(var(--u) * 12);
   }
 }
 
@@ -762,8 +433,7 @@ span.tl-logo {
     grid-template-rows: calc(var(--u) * 66) auto minmax(0, 1fr);
     grid-template-areas: "photo" "body" "qr";
   }
-  .tl-tv.k-feat,
-  .tl-tv.k-win {
+  .tl-tv.k-feat {
     grid-template-rows: calc(var(--u) * 92) auto minmax(0, 1fr);
   }
   .tl-bgb::after {
@@ -810,8 +480,7 @@ span.tl-logo {
     margin-top: calc(var(--u) * -22);
     padding: 0 calc(var(--u) * 6);
   }
-  .k-feat .tl-body,
-  .k-win .tl-body {
+  .k-feat .tl-body {
     margin-top: calc(var(--u) * -34);
     padding-bottom: 0;
   }
@@ -821,10 +490,6 @@ span.tl-logo {
   }
   .tl-q.long {
     font-size: calc(var(--u) * 7.2 * var(--display-scale));
-  }
-  .tl-bar {
-    height: calc(var(--u) * 12.5);
-    grid-template-columns: calc(var(--u) * 12.5) minmax(0, 1fr);
   }
   .tl-qr {
     grid-area: qr;
@@ -844,12 +509,8 @@ span.tl-logo {
   .tl-qc {
     font-size: calc(var(--u) * 3.6);
   }
-  .k-feat .tl-q,
-  .k-win .tl-q {
+  .k-feat .tl-q {
     font-size: calc(var(--u) * 13 * var(--display-scale));
-  }
-  .k-win .tl-big {
-    font-size: calc(var(--u) * 16);
   }
 }
 
@@ -930,41 +591,6 @@ span.tl-logo {
 .tl-wait .tl-spin {
   color: var(--muted);
 }
-
-/* ================= Som e depuração =================
-   O som precisa de um toque (o navegador exige). O botão só aparece quando alguém mexe no
-   controle, no mouse ou na tela, e some depois de alguns segundos. */
-.tl-sound {
-  position: absolute;
-  z-index: 6;
-  left: calc(var(--u) * 2);
-  bottom: calc(var(--u) * 1.6);
-  display: inline-flex;
-  align-items: center;
-  gap: calc(var(--u) * 1);
-  height: calc(var(--u) * 5);
-  padding: 0 calc(var(--u) * 2);
-  border-radius: calc(var(--u) * 2.5);
-  background: rgba(20, 14, 11, 0.74);
-  font-size: calc(var(--u) * 2.8);
-  font-weight: 600;
-  color: var(--muted);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s;
-}
-.tl-sound.show,
-.tl-sound:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-.tl-sound .tl-ico {
-  width: calc(var(--u) * 3);
-  height: calc(var(--u) * 3);
-}
-.tl-sound.on {
-  color: var(--o-lime);
-}
 .tl-debug {
   position: absolute;
   z-index: 6;
@@ -982,17 +608,11 @@ span.tl-logo {
   animation: none !important;
   transition: none !important;
 }
-.tl-plain .tl-streak {
-  display: none;
-}
 @media (prefers-reduced-motion: reduce) {
   .tl *,
   .tl *::before,
   .tl *::after {
     animation: none !important;
     transition: none !important;
-  }
-  .tl .tl-streak {
-    display: none;
   }
 }

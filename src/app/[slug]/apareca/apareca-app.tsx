@@ -101,7 +101,7 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
   const pending = useRef<{ id: string; upload_url: string; expires_at: string } | null>(null);
   const clipRef = useRef<Clip | null>(null);
 
-  // Device anônimo do cardápio (o mesmo do carrinho e da Comunidade) e o vídeo guardado.
+  // Device anônimo do cardápio (o mesmo do carrinho) e o vídeo guardado.
   useEffect(() => {
     let d = ls.get(DEVICE_KEY);
     if (!d || !UUID.test(d)) {
