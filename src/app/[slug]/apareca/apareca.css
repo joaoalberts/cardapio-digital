@@ -523,8 +523,8 @@ html:has(.apa) body {
 .apa-live[hidden] {
   display: none;
 }
-/* Prévia espelhada (como um espelho); o vídeo gravado não é espelhado. */
-.apa-live {
+/* Prévia da câmera frontal espelhada (como um espelho); a traseira e o vídeo gravado não. */
+.apa-live.is-mirror {
   transform: scaleX(-1);
 }
 .apa-wait {
@@ -560,8 +560,12 @@ html:has(.apa) body {
 .apa-x:active {
   transform: scale(0.94);
 }
-.apa-sound {
+.apa-sound,
+.apa-flip {
   margin-left: auto;
+}
+.apa-flip:disabled {
+  opacity: 0.4;
 }
 .apa-recdot {
   display: inline-flex;
@@ -688,6 +692,12 @@ html:has(.apa) body {
 }
 .apa-shoot:disabled {
   opacity: 0.4;
+}
+/* Durante a gravação o botão vira "parar": quadrado vermelho. */
+.apa-shoot.is-stop i {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
 }
 .apa-row {
   width: 100%;

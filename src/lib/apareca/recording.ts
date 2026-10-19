@@ -1,7 +1,8 @@
 // Gravação no celular (usada pela tela do cliente): formato, limites, câmera e mensagens.
 // Funções puras; quem chama passa o MediaRecorder.isTypeSupported e o userAgent.
 
-export const CLIP_MS = 6_000;
+export const CLIP_MS = 6_000; // máximo; o cliente pode parar antes
+export const MIN_CLIP_MS = 1_000; // o botão de parar só funciona depois disso
 export const MAX_BYTES = 8 * 1024 * 1024;
 export const REDO_MAX = 3;
 
@@ -28,10 +29,17 @@ export function inAppBrowser(ua: string): "instagram" | "whatsapp" | "facebook" 
   return null;
 }
 
-export const CAMERA_CONSTRAINTS: MediaStreamConstraints = {
-  video: { facingMode: "user", width: { ideal: 1080 }, height: { ideal: 1920 }, aspectRatio: { ideal: 9 / 16 } },
-  audio: true,
-};
+export type Facing = "user" | "environment";
+
+// facingMode como texto é só preferência: aparelho sem câmera traseira (computador) abre a que tiver.
+export function cameraConstraints(facing: Facing): MediaStreamConstraints {
+  return {
+    video: { facingMode: facing, width: { ideal: 1080 }, height: { ideal: 1920 }, aspectRatio: { ideal: 9 / 16 } },
+    audio: true,
+  };
+}
+
+export const CAMERA_CONSTRAINTS = cameraConstraints("user");
 
 // Erro do getUserMedia → problema que a tela explica. Sem navigator.mediaDevices (http fora
 // do localhost ou navegador antigo) o acesso vira TypeError, que cai em "unsupported".
@@ -46,14 +54,15 @@ export function recordingProblem(e: unknown): "denied" | "unsupported" | "no_cam
 export const PROBLEM_TEXT: Record<"denied" | "unsupported" | "no_camera" | "busy" | "in_app" | "too_big", string> = {
   denied: "Você não liberou a câmera. Toque no cadeado da barra de endereço, permita a câmera e tente de novo.",
   unsupported: "Este navegador não grava vídeo. Abra o cardápio no Safari (iPhone) ou no Chrome (Android).",
-  no_camera: "Não encontramos a câmera frontal deste aparelho.",
+  no_camera: "Não encontramos a câmera deste aparelho.",
   busy: "A câmera está sendo usada por outro aplicativo. Feche o outro aplicativo e tente de novo.",
   in_app: "Para gravar, abra este link no navegador: toque nos três pontinhos e escolha \"Abrir no navegador\".",
   too_big: "O vídeo ficou grande demais para enviar. Grave de novo.",
 };
 
 // ---------- Fluxo da tela do cliente (puro) ----------
-// intro (nome e aceite) → câmera → contagem 3, 2, 1 → gravando 6 s → revisão → enviando → fila.
+// intro (nome e aceite) → câmera → contagem 3, 2, 1 → gravando até 6 s → revisão → enviando → fila.
+// O cliente pode parar antes dos 6 s; abaixo de MIN_CLIP_MS a gravação é descartada e volta à câmera.
 // A revisão permite REDO_MAX regravações; depois disso o botão some (canRedo). Erro no envio volta
 // à revisão com o mesmo vídeo e o aviso (sendError). Um problema (câmera, tamanho) leva à tela de
 // problema; "tentar de novo" reabre a câmera ou, se o vídeo ficou grande, grava de novo sem gastar
@@ -92,7 +101,8 @@ export function flowNext(s: FlowState, e: FlowEvent): FlowState {
       if (s.step !== "countdown") return s;
       return s.count > 1 ? { ...s, count: s.count - 1 } : { ...s, step: "recording", count: 0 };
     case "elapsed":
-      if (s.step !== "recording" || e.ms < CLIP_MS) return s;
+      if (s.step !== "recording") return s;
+      if (e.ms < MIN_CLIP_MS) return { step: "camera", redos: s.redos, count: 0 };
       if (e.bytes > MAX_BYTES) return { ...s, step: "problem", problem: "too_big" };
       return { ...s, step: "review", sendError: false };
     case "redo":

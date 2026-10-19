@@ -71,7 +71,7 @@ export function AparecaInvite() {
 
   if (!open || !table) return null;
   return (
-    <a className="apa-inv" href={`/${slug}/apareca?mesa=${encodeURIComponent(table.code)}`} aria-label="Apareça na TV! Grave 6 segundos e apareça no telão">
+    <a className="apa-inv" href={`/${slug}/apareca?mesa=${encodeURIComponent(table.code)}`} aria-label="Apareça na TV! Grave até 6 segundos e apareça no telão">
       <span className="apa-inv-ic" aria-hidden>
         <TvIcon />
       </span>

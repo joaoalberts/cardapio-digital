@@ -268,10 +268,10 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
           <TvIcon />
         </div>
         <h1 className="fd">Apareça na TV!</h1>
-        <p className="apa-lead">Grave um vídeo de 6 segundos. Depois que a equipe aprovar, ele passa na TV da casa.</p>
+        <p className="apa-lead">Grave um vídeo de até 6 segundos. Depois que a equipe aprovar, ele passa na TV da casa.</p>
         <ol className="apa-steps">
           <li>
-            <b>1</b>Grave 6 s
+            <b>1</b>Grave até 6 s
           </li>
           <li>
             <b>2</b>A casa aprova

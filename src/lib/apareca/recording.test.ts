@@ -2,7 +2,7 @@
 // de app e os erros da câmera com texto claro em português.
 import { describe, expect, it } from "vitest";
 import {
-  CAMERA_CONSTRAINTS, canRedo, CLIP_MS, FLOW_START, flowNext, inAppBrowser, MAX_BYTES, pickMime, PROBLEM_TEXT, recordingProblem, REDO_MAX,
+  CAMERA_CONSTRAINTS, cameraConstraints, canRedo, CLIP_MS, FLOW_START, flowNext, inAppBrowser, MAX_BYTES, MIN_CLIP_MS, pickMime, PROBLEM_TEXT, recordingProblem, REDO_MAX,
   type FlowEvent, type FlowState,
 } from "./recording";
 
@@ -20,6 +20,13 @@ describe("constantes", () => {
     expect(v.height).toEqual({ ideal: 1920 });
     expect(v.aspectRatio).toEqual({ ideal: 9 / 16 });
     expect(CAMERA_CONSTRAINTS.audio).toBe(true);
+  });
+
+  it("câmera traseira com as mesmas medidas", () => {
+    const v = cameraConstraints("environment").video as MediaTrackConstraints;
+    expect(v.facingMode).toBe("environment");
+    expect(v.height).toEqual({ ideal: 1920 });
+    expect(cameraConstraints("environment").audio).toBe(true);
   });
 });
 
@@ -127,8 +134,13 @@ describe("flowNext (fluxo da tela do cliente)", () => {
     expect(s.step).toBe("review");
   });
 
-  it("antes dos 6 s continua gravando", () => {
-    expect(flowNext(at("recording"), { type: "elapsed", ms: 5_999, bytes: 10 }).step).toBe("recording");
+  it("parar antes dos 6 s vai para a revisão", () => {
+    expect(flowNext(at("recording"), { type: "elapsed", ms: 4_000, bytes: 10 }).step).toBe("review");
+    expect(flowNext(at("recording"), { type: "elapsed", ms: MIN_CLIP_MS, bytes: 10 }).step).toBe("review");
+  });
+
+  it("abaixo do mínimo descarta e volta à câmera sem gastar regravação", () => {
+    expect(flowNext(at("recording", { redos: 1 }), { type: "elapsed", ms: MIN_CLIP_MS - 1, bytes: 10 })).toEqual({ step: "camera", redos: 1, count: 0 });
   });
 
   it("blob acima de MAX_BYTES → problema too_big", () => {

@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState, type Dispatch } from "react";
 import {
-  CAMERA_CONSTRAINTS, canRedo, CLIP_MS, pickMime, recordingProblem, REDO_MAX, type FlowEvent, type FlowState,
+  cameraConstraints, canRedo, CLIP_MS, MIN_CLIP_MS, pickMime, recordingProblem, REDO_MAX, type Facing, type FlowEvent, type FlowState,
 } from "@/lib/apareca/recording";
 
-// Palco da gravação, em tela cheia: prévia da câmera frontal espelhada em 9:16 (sem moldura),
-// contagem 3, 2, 1, gravação de exatamente 6 s com a barra andando, revisão e envio.
-// O vídeo gravado não é espelhado: é o que vai para a TV. A miniatura (quadro do meio) é
-// desenhada num canvas aqui no aparelho e só serve para a tela da fila.
+// Palco da gravação, em tela cheia: prévia da câmera em 9:16 (sem moldura), com botão para
+// alternar entre a frontal (espelhada, como um espelho) e a traseira, contagem 3, 2, 1,
+// gravação de até 6 s com a barra andando (o cliente pode parar antes), revisão e envio.
+// O vídeo gravado não é espelhado: é o que vai para a TV. A miniatura é desenhada num canvas
+// aqui no aparelho e só serve para a tela da fila.
 
 export type Clip = { blob: Blob; url: string; mime: string; thumb: string | null };
 
@@ -56,6 +57,9 @@ export function Recorder({ flow, dispatch, clip, onClip, onSend, progress, sendM
   const stream = useRef<MediaStream | null>(null);
   const [liveOn, setLiveOn] = useState(false);
   const [muted, setMuted] = useState(true);
+  const [facing, setFacing] = useState<Facing>("user");
+  const rec = useRef<MediaRecorder | null>(null);
+  const [canStop, setCanStop] = useState(false);
   const step = flow.step;
   // A revisão e o envio usam o vídeo gravado: a câmera (e o microfone) desligam ao entrar na
   // revisão, para o iOS voltar o som ao alto-falante normal, e só reabrem com "Regravar".
@@ -72,7 +76,7 @@ export function Recorder({ flow, dispatch, clip, onClip, onSend, progress, sendM
       return;
     }
     media
-      .getUserMedia(CAMERA_CONSTRAINTS)
+      .getUserMedia(cameraConstraints(facing))
       .then((s) => {
         if (gone) return stopStream(s);
         stream.current = s;
@@ -92,7 +96,7 @@ export function Recorder({ flow, dispatch, clip, onClip, onSend, progress, sendM
       stream.current = null;
       setLiveOn(false);
     };
-  }, [needCamera, dispatch]);
+  }, [needCamera, facing, dispatch]);
 
   // Contagem: um "tick" por segundo, só com a câmera já mostrando a imagem (depois de
   // "Gravar de novo" a câmera reabre do zero).
@@ -102,7 +106,9 @@ export function Recorder({ flow, dispatch, clip, onClip, onSend, progress, sendM
     return () => clearTimeout(t);
   }, [step, flow.count, liveOn, dispatch]);
 
-  // Gravação: começa ao entrar em "recording", pega a miniatura aos 3 s e para sozinha aos 6 s.
+  // Gravação: começa ao entrar em "recording" e para sozinha aos 6 s ou quando o cliente toca em
+  // parar (liberado depois de MIN_CLIP_MS). A miniatura sai logo no início e é trocada pelo quadro
+  // do meio se a gravação chegar lá.
   useEffect(() => {
     if (step !== "recording") return;
     const s = stream.current;
@@ -111,9 +117,9 @@ export function Recorder({ flow, dispatch, clip, onClip, onSend, progress, sendM
       queueMicrotask(() => dispatch({ type: "problem", problem: "unsupported" }));
       return;
     }
-    let rec: MediaRecorder;
+    let r: MediaRecorder;
     try {
-      rec = new MediaRecorder(s, { mimeType: mime, videoBitsPerSecond: VIDEO_BPS });
+      r = new MediaRecorder(s, { mimeType: mime, videoBitsPerSecond: VIDEO_BPS });
     } catch {
       queueMicrotask(() => dispatch({ type: "problem", problem: "unsupported" }));
       return;
@@ -121,38 +127,55 @@ export function Recorder({ flow, dispatch, clip, onClip, onSend, progress, sendM
     const parts: Blob[] = [];
     let thumb: string | null = null;
     let live_ = true;
-    rec.ondataavailable = (e) => {
+    let started = 0;
+    r.ondataavailable = (e) => {
       if (e.data && e.data.size) parts.push(e.data);
     };
-    rec.onstop = () => {
+    r.onstop = () => {
       if (!live_) return;
-      const type = (rec.mimeType || mime).split(";")[0];
+      const ms = Math.min(CLIP_MS, Math.round(performance.now() - started));
+      if (ms < MIN_CLIP_MS) return dispatch({ type: "elapsed", ms, bytes: 0 });
+      const type = (r.mimeType || mime).split(";")[0];
       const blob = new Blob(parts, { type });
       onClip({ blob, url: URL.createObjectURL(blob), mime: type, thumb });
-      dispatch({ type: "elapsed", ms: CLIP_MS, bytes: blob.size });
+      dispatch({ type: "elapsed", ms, bytes: blob.size });
     };
-    rec.start(500);
-    const mid = setTimeout(() => {
-      if (live.current) thumb = grabThumb(live.current);
-    }, CLIP_MS / 2);
+    r.start(500);
+    started = performance.now();
+    rec.current = r;
+    const snap = () => {
+      if (live.current) thumb = grabThumb(live.current) ?? thumb;
+    };
+    const early = setTimeout(snap, MIN_CLIP_MS / 2);
+    const mid = setTimeout(snap, CLIP_MS / 2);
+    const allow = setTimeout(() => setCanStop(true), MIN_CLIP_MS);
+    // Pequena folga: o timer pode disparar alguns ms antes dos 6 s reais.
     const end = setTimeout(() => {
-      if (rec.state !== "inactive") rec.stop();
-    }, CLIP_MS);
+      if (r.state !== "inactive") r.stop();
+    }, CLIP_MS + 50);
     return () => {
       live_ = false;
+      clearTimeout(early);
       clearTimeout(mid);
+      clearTimeout(allow);
       clearTimeout(end);
-      if (rec.state !== "inactive") rec.stop();
+      rec.current = null;
+      setCanStop(false);
+      if (r.state !== "inactive") r.stop();
     };
   }, [step, dispatch, onClip]);
 
+  const stop = () => {
+    const r = rec.current;
+    if (canStop && r && r.state !== "inactive") r.stop();
+  };
   const redosLeft = REDO_MAX - flow.redos;
   const reviewing = step === "review" || step === "sending";
 
   return (
     <div className={`apa-stage is-${step}`}>
       <div className="apa-frame">
-        <video ref={live} className="apa-live" playsInline muted autoPlay aria-hidden hidden={reviewing} />
+        <video ref={live} className={`apa-live${facing === "user" ? " is-mirror" : ""}`} playsInline muted autoPlay aria-hidden hidden={reviewing} />
         {reviewing && clip && (
           <video key={clip.url} className="apa-rec" src={clip.url} playsInline autoPlay loop muted={muted} />
         )}
@@ -163,6 +186,20 @@ export function Recorder({ flow, dispatch, clip, onClip, onSend, progress, sendM
             <button className="apa-x" onClick={() => dispatch({ type: "cancel" })} aria-label="Cancelar e voltar">
               <svg viewBox="0 0 24 24" className="apa-ic" aria-hidden>
                 <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          )}
+          {step === "camera" && (
+            <button
+              className="apa-x apa-flip"
+              onClick={() => setFacing((f) => (f === "user" ? "environment" : "user"))}
+              disabled={!liveOn}
+              aria-label={facing === "user" ? "Usar a câmera traseira" : "Usar a câmera frontal"}
+            >
+              <svg viewBox="0 0 24 24" className="apa-ic" aria-hidden>
+                <path d="M4 8.5h3l1.6-2.2h6.8L17 8.5h3v10H4z" />
+                <path d="M9 12.2a3.2 3.2 0 015.6-1.4M15 14.6a3.2 3.2 0 01-5.6 1.2" />
+                <path d="M14.8 9.2v1.8H13M9.2 16.6v-1.8H11" />
               </svg>
             </button>
           )}
@@ -195,8 +232,16 @@ export function Recorder({ flow, dispatch, clip, onClip, onSend, progress, sendM
         <div className="apa-stage-bottom">
           {step === "camera" && (
             <>
-              <p className="apa-tip">Fique em pé, sorria e capriche: são só 6 segundos.</p>
-              <button className="apa-shoot" onClick={() => dispatch({ type: "ready" })} disabled={!liveOn} aria-label="Gravar 6 segundos">
+              <p className="apa-tip">Fique em pé, sorria e capriche: até 6 segundos.</p>
+              <button className="apa-shoot" onClick={() => dispatch({ type: "ready" })} disabled={!liveOn} aria-label="Gravar até 6 segundos">
+                <i aria-hidden />
+              </button>
+            </>
+          )}
+          {step === "recording" && (
+            <>
+              <p className="apa-tip">Toque para parar quando quiser.</p>
+              <button className="apa-shoot is-stop" onClick={stop} disabled={!canStop} aria-label="Parar a gravação">
                 <i aria-hidden />
               </button>
             </>

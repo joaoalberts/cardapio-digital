@@ -21,7 +21,7 @@ const API = "https://api.anthropic.com/v1/messages";
 const REASON_MAX = 500;
 
 export const AI_RULES = [
-  "Você modera vídeos de 6 segundos que clientes de um restaurante enviam para passar na TV do salão,",
+  "Você modera vídeos de até 6 segundos que clientes de um restaurante enviam para passar na TV do salão,",
   "vista por todos, inclusive crianças. Você recebe quadros do mesmo vídeo, um por segundo.",
   "Reprove se qualquer quadro tiver: nudez ou conteúdo sexual; gestos obscenos; violência;",
   "armas; drogas ou seu uso; discurso de ódio ou símbolos de ódio; texto ofensivo escrito na imagem;",
