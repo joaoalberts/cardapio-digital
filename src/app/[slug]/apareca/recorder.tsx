@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type Dispatch } from "react";
 import {
-  cameraConstraints, canRedo, CLIP_MS, MIN_CLIP_MS, pickMime, recordingProblem, REDO_MAX, type Facing, type FlowEvent, type FlowState,
+  cameraConstraints, canRedo, CLIP_MS, MIN_CLIP_MS, pickMime, recordingProblem, REDO_MAX, zoomReset, type Facing, type FlowEvent, type FlowState,
 } from "@/lib/apareca/recording";
 
 // Palco da gravação, em tela cheia: prévia da câmera em 9:16 (sem moldura), com botão para
@@ -19,6 +19,20 @@ const THUMB_H = 480;
 
 function stopStream(s: MediaStream | null) {
   s?.getTracks().forEach((t) => t.stop());
+}
+
+// Alguns aparelhos abrem a câmera com zoom; volta a 1x quando o navegador deixa ajustar.
+function unzoom(s: MediaStream) {
+  const t = s.getVideoTracks()[0];
+  if (!t || typeof t.getCapabilities !== "function") return;
+  try {
+    const cap = (t.getCapabilities() as { zoom?: { min?: number; max?: number } }).zoom;
+    const cur = (t.getSettings() as { zoom?: number }).zoom;
+    const z = zoomReset(cap, cur);
+    if (z !== null) t.applyConstraints({ advanced: [{ zoom: z } as MediaTrackConstraintSet] }).catch(() => {});
+  } catch {
+    // sem suporte: fica como o aparelho abriu
+  }
 }
 
 // Quadro atual do vídeo ao vivo, recortado em 9:16 (como object-fit: cover), em JPEG pequeno.
@@ -80,6 +94,7 @@ export function Recorder({ flow, dispatch, clip, onClip, onSend, progress, sendM
       .then((s) => {
         if (gone) return stopStream(s);
         stream.current = s;
+        unzoom(s);
         const v = live.current;
         if (v) {
           v.srcObject = s;

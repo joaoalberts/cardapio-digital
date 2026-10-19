@@ -2,7 +2,7 @@
 // de app e os erros da câmera com texto claro em português.
 import { describe, expect, it } from "vitest";
 import {
-  CAMERA_CONSTRAINTS, cameraConstraints, canRedo, CLIP_MS, FLOW_START, flowNext, inAppBrowser, MAX_BYTES, MIN_CLIP_MS, pickMime, PROBLEM_TEXT, recordingProblem, REDO_MAX,
+  CAMERA_CONSTRAINTS, cameraConstraints, canRedo, zoomReset, CLIP_MS, FLOW_START, flowNext, inAppBrowser, MAX_BYTES, MIN_CLIP_MS, pickMime, PROBLEM_TEXT, recordingProblem, REDO_MAX,
   type FlowEvent, type FlowState,
 } from "./recording";
 
@@ -22,11 +22,20 @@ describe("constantes", () => {
     expect(CAMERA_CONSTRAINTS.audio).toBe(true);
   });
 
-  it("câmera traseira com as mesmas medidas", () => {
+  it("câmera traseira no quadro nativo, sem forçar 9:16 (evita o zoom)", () => {
     const v = cameraConstraints("environment").video as MediaTrackConstraints;
     expect(v.facingMode).toBe("environment");
-    expect(v.height).toEqual({ ideal: 1920 });
+    expect(v.aspectRatio).toBeUndefined();
+    expect(v).toMatchObject({ width: { ideal: 1920 }, height: { ideal: 1080 } });
     expect(cameraConstraints("environment").audio).toBe(true);
+  });
+
+  it("zoomReset volta a 1x dentro do intervalo do aparelho", () => {
+    expect(zoomReset(undefined, 2)).toBeNull();
+    expect(zoomReset({ min: 1, max: 10 }, 2)).toBe(1);
+    expect(zoomReset({ min: 1, max: 10 }, 1)).toBeNull();
+    expect(zoomReset({ min: 0.5, max: 10 }, 0.5)).toBe(1);
+    expect(zoomReset({ min: 2, max: 10 }, 3)).toBe(2);
   });
 });
 

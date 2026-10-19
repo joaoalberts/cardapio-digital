@@ -32,11 +32,22 @@ export function inAppBrowser(ua: string): "instagram" | "whatsapp" | "facebook" 
 export type Facing = "user" | "environment";
 
 // facingMode como texto é só preferência: aparelho sem câmera traseira (computador) abre a que tiver.
+// Na traseira não pedimos 9:16: o celular recorta o sensor para caber e a imagem chega com zoom.
+// Pedimos o quadro nativo (16:9 deitado, que o celular em pé entrega em pé) e a tela recorta.
 export function cameraConstraints(facing: Facing): MediaStreamConstraints {
-  return {
-    video: { facingMode: facing, width: { ideal: 1080 }, height: { ideal: 1920 }, aspectRatio: { ideal: 9 / 16 } },
-    audio: true,
-  };
+  const video: MediaTrackConstraints =
+    facing === "user"
+      ? { facingMode: "user", width: { ideal: 1080 }, height: { ideal: 1920 }, aspectRatio: { ideal: 9 / 16 } }
+      : { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } };
+  return { video, audio: true };
+}
+
+// Zoom da câmera (Chrome no Android e Safari recente expõem): volta a 1x se abriu com zoom.
+// Fica dentro do intervalo do aparelho; sem suporte, retorna null e nada muda.
+export function zoomReset(cap: { min?: number; max?: number } | undefined, current: number | undefined): number | null {
+  if (!cap || typeof cap.min !== "number" || typeof cap.max !== "number") return null;
+  const target = Math.min(cap.max, Math.max(cap.min, 1));
+  return typeof current === "number" && Math.abs(current - target) < 0.01 ? null : target;
 }
 
 export const CAMERA_CONSTRAINTS = cameraConstraints("user");
