@@ -195,10 +195,12 @@ export async function confirmPair(d: TvDeps, restaurantId: string, code: string,
   }
 
   // O código no filtro: dois "Parear" ao mesmo tempo, o segundo não acha mais a linha.
+  // last_seen_at junto: a TV acabou de pedir este código, então está ligada (sem isso o painel
+  // mostraria "nunca ligada" até a próxima consulta da TV).
   const n = await d.db.update(
     "community_tvs",
     { uid: live[0].id, restaurant_id: restaurantId, pair_code: c },
-    { paired_at: iso(now), label: cleanLabel(label), pair_code: null },
+    { paired_at: iso(now), last_seen_at: iso(now), label: cleanLabel(label), pair_code: null },
   );
   return n ? { ok: true } : { ok: false, error: ERR_CODE };
 }

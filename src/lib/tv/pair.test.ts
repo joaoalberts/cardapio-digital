@@ -301,7 +301,7 @@ describe("confirmPair", () => {
   it("código válido grava paired_at e label e limpa o código", async () => {
     const s = setup({ rows: [await pending()] });
     expect(await confirmPair(s.deps, R1, "K7M3QX", "  TV do salão  ")).toEqual({ ok: true });
-    expect(s.tvs[0]).toMatchObject({ paired_at: iso(now), label: "TV do salão", pair_code: null, revoked: false });
+    expect(s.tvs[0]).toMatchObject({ paired_at: iso(now), last_seen_at: iso(now), label: "TV do salão", pair_code: null, revoked: false });
   });
 
   it("aceita o código digitado em minúsculas ou com espaços", async () => {
