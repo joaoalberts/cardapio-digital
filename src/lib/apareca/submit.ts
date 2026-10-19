@@ -21,7 +21,9 @@ import type { AparecaHead, VideoRow } from "./types";
 export type PublicHead = { enabled: boolean; open: boolean; why: "off" | "not_allowed" | "disabled" | "closed" | "paused" | null };
 export type StartResult =
   | { ok: true; id: string; upload_url: string; expires_at: string }
-  | { ok: false; code: "invalid" | "not_found" | "off" | "table" | "closed" | "paused" | "too_many" | "name" | "consent" | "mux" };
+  | { ok: false; code: "invalid" | "not_found" | "off" | "table" | "closed" | "paused" | "too_many" | "name" | "consent" }
+  // detail: só "mux <status HTTP>" ou "mux desligado", nunca o corpo da resposta, para a tela mostrar o motivo.
+  | { ok: false; code: "mux"; detail: string };
 export type MyStatus = {
   state: "sending" | "preparing" | "review" | "queue" | "on_tv" | "shown" | "not_shown" | "gone";
   position: number | null;
@@ -202,7 +204,8 @@ export async function startSubmission(d: SubmitDeps, slug: string, body: unknown
   } catch (e) {
     console.error("apareca: upload do Mux", String(e).slice(0, 300));
     giveBack();
-    return { ok: false, code: "mux" };
+    const m = /^mux (\d{3})\b/.exec(e instanceof Error ? e.message : "");
+    return { ok: false, code: "mux", detail: m ? `mux ${m[1]}` : "mux desligado" };
   }
 
   const expires = expiresAt(now, cfg.retention_h);

@@ -159,9 +159,13 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ mesa, device, name: nameVal, consent: true, consent_at: consentAt ?? new Date().toISOString() }),
         });
-        const j = (await r.json().catch(() => null)) as { ok?: boolean; code?: string; id?: string; upload_url?: string; expires_at?: string } | null;
+        const j = (await r.json().catch(() => null)) as
+          | { ok?: boolean; code?: string; detail?: string; id?: string; upload_url?: string; expires_at?: string }
+          | null;
         if (!r.ok || !j?.ok || !j.id || !j.upload_url || !j.expires_at) {
-          setSendMsg((j?.code && SEND_TEXT[j.code]) || SEND_FAIL);
+          // O motivo curto (código do servidor ou status HTTP) vai junto: é o que o suporte precisa para achar a causa.
+          const why = typeof j?.detail === "string" ? j.detail : (j?.code ?? `http ${r.status}`);
+          setSendMsg((j?.code && SEND_TEXT[j.code]) || `${SEND_FAIL} (${why.slice(0, 40)})`);
           dispatch({ type: "send_failed" });
           return;
         }
@@ -175,8 +179,9 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
       setThumb(c.thumb);
       setMine(m);
       dispatch({ type: "sent" });
-    } catch {
-      setSendMsg(SEND_FAIL);
+    } catch (e) {
+      // "put 4xx", "put rede" ou "put prazo": o vídeo não chegou ao Mux.
+      setSendMsg(`${SEND_FAIL} (${(e instanceof Error ? e.message : "erro").slice(0, 40)})`);
       dispatch({ type: "send_failed" });
     }
   }, [device, nameOk, nameVal, slug, mesa, consentAt]);

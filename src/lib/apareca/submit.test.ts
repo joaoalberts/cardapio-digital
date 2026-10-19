@@ -271,7 +271,7 @@ describe("startSubmission: recusas", () => {
     head = mkHead({ device_per_hour: 1 });
     const bad = mk();
     bad.createUpload.mockRejectedValueOnce(new Error("mux 500"));
-    expect(await startSubmission(bad.d, SLUG, body())).toEqual({ ok: false, code: "mux" });
+    expect(await startSubmission(bad.d, SLUG, body())).toEqual({ ok: false, code: "mux", detail: "mux 500" });
     expect(videos()).toHaveLength(0);
     expect((await startSubmission(bad.d, SLUG, body())).ok).toBe(true);
   });
