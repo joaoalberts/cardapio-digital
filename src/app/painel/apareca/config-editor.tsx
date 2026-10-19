@@ -3,17 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useOptimistic, useState, useTransition } from "react";
 import {
-  CLIENTS_MAX, DEVICE_PER_HOUR, NOT_ALLOWED, PLAYS_MAX, RETENTION_OPTIONS,
+  CLIENTS_MAX, NOT_ALLOWED, PLAYS_MAX, RETENTION_OPTIONS,
 } from "@/lib/apareca/panel-logic";
 import type { ModMode } from "@/lib/apareca/types";
 import { saveConfig, setAparecaEnabled } from "./actions";
 
 // Configurações do Apareça: interruptor (só o dono; some enquanto o João não liberar a casa),
-// modo de moderação (só os liberados), regra da programação, vezes que cada vídeo toca, limite
-// por celular, horário e prazo para apagar.
+// modo de moderação (só os liberados), regra da programação, vezes que cada vídeo toca,
+// horário e prazo para apagar.
 
 export type ConfigView = {
-  mode: ModMode; clients_max: number; plays: number; device_per_hour: number;
+  mode: ModMode; clients_max: number; plays: number;
   hours: { from: string; to: string } | null; retention_h: number;
 };
 
@@ -40,7 +40,6 @@ export function ConfigEditor({
   const [mode, setMode] = useState<ModMode>(modes.includes(cfg.mode) ? cfg.mode : "manual");
   const [clients, setClients] = useState(cfg.clients_max);
   const [plays, setPlays] = useState(cfg.plays);
-  const [perHour, setPerHour] = useState(cfg.device_per_hour);
   const [ownHours, setOwnHours] = useState(cfg.hours !== null);
   const [from, setFrom] = useState(cfg.hours?.from ?? "18:00");
   const [to, setTo] = useState(cfg.hours?.to ?? "23:00");
@@ -63,7 +62,6 @@ export function ConfigEditor({
         ...(mode !== cfg.mode ? { mode } : {}),
         rule: { kind: "intercalar", house_every: 1, clients_max: clients },
         plays: plays as 1 | 2 | 3,
-        device_per_hour: perHour,
         hours: ownHours ? { from, to } : null,
         retention_h: retention,
       }).catch(() => ({ error: SAVE_FAIL }));
@@ -139,17 +137,6 @@ export function ConfigEditor({
           {range(1, PLAYS_MAX).map((n) => (
             <option key={n} value={n}>
               {n === 1 ? "1 vez" : `${n} vezes`}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="app-fld">
-        <span>Vídeos por celular a cada hora</span>
-        <select value={perHour} onChange={(e) => setPerHour(Number(e.target.value))}>
-          {range(DEVICE_PER_HOUR.min, DEVICE_PER_HOUR.max).map((n) => (
-            <option key={n} value={n}>
-              {n === 1 ? "1 vídeo" : `${n} vídeos`}
             </option>
           ))}
         </select>

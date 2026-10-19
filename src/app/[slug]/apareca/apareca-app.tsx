@@ -189,6 +189,17 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
   const forget = useCallback(() => {
     ls.del(mineKey(slug));
   }, [slug]);
+  // Mandar outro vídeo: solta o anterior desta tela (ele segue na fila do servidor) e volta ao
+  // início com o nome já preenchido. O aceite é pedido de novo, um por vídeo.
+  const again = useCallback(() => {
+    ls.del(mineKey(slug));
+    onClip(null);
+    setThumb(null);
+    setConsentAt(null);
+    setSendMsg(null);
+    setMine(null);
+    dispatch({ type: "again" });
+  }, [slug, onClip]);
   // A vibração do "Olhe para a TV agora!" acontece uma vez só, mesmo depois de recarregar.
   const buzz = useCallback(() => {
     if (mine) ls.set(mineKey(slug), JSON.stringify({ ...mine, buzzed: true }));
@@ -215,7 +226,7 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
     return (
       <main className="apa-page">
         {head}
-        <Queue slug={slug} mine={mine} thumb={thumb} clip={clip} onGone={forget} onBuzz={buzz} back={back} />
+        <Queue slug={slug} mine={mine} thumb={thumb} clip={clip} onGone={forget} onBuzz={buzz} onAgain={again} back={back} />
       </main>
     );
   }
@@ -346,8 +357,11 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
 // ---------- Fila ----------
 
 function Queue({
-  slug, mine, thumb, clip, onGone, onBuzz, back,
-}: { slug: string; mine: Mine; thumb: string | null; clip: Clip | null; onGone: () => void; onBuzz: () => void; back: string }) {
+  slug, mine, thumb, clip, onGone, onBuzz, onAgain, back,
+}: {
+  slug: string; mine: Mine; thumb: string | null; clip: Clip | null;
+  onGone: () => void; onBuzz: () => void; onAgain: () => void; back: string;
+}) {
   const [st, setSt] = useState<Status | null>(null);
   const buzzed = useRef(mine.buzzed === true);
 
@@ -473,6 +487,9 @@ function Queue({
             Baixar meu vídeo
           </a>
         ) : null}
+        <button className="apa-btn apa-btn-2" onClick={onAgain}>
+          Gravar outro vídeo
+        </button>
         <a className="apa-btn apa-btn-2" href={back}>
           Voltar ao cardápio
         </a>

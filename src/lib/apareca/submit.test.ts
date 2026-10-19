@@ -75,14 +75,8 @@ function video(p: Partial<VideoRow> = {}): VideoRow {
 
 function limits(): SubmitLimits {
   const clock = () => now.getTime();
-  const byMax = new Map<number, ReturnType<typeof createLimiter>>();
   return {
     ip: createLimiter({ max: 60, windowMs: HOUR, now: clock }), // igual ao IP_PER_HOUR
-    device: (max) => {
-      let l = byMax.get(max);
-      if (!l) byMax.set(max, (l = createLimiter({ max, windowMs: HOUR, now: clock })));
-      return l;
-    },
     download: createLimiter({ max: 5, windowMs: HOUR, now: clock }),
     ipGlobal: createLimiter({ max: 120, windowMs: HOUR, now: clock }), // igual ao IP_PER_HOUR_GLOBAL
     reads: createLimiter({ max: READS_PER_HOUR, windowMs: HOUR, now: clock }),
@@ -219,24 +213,15 @@ describe("startSubmission: recusas", () => {
     expect(videos()).toHaveLength(0);
   });
 
-  it("3º envio do mesmo device na mesma hora → too_many (device_per_hour 2); uma hora depois, passa", async () => {
-    head = mkHead({ device_per_hour: 2 });
-    const { d } = mk();
-    expect((await startSubmission(d, SLUG, body())).ok).toBe(true);
-    now = new Date(T0.getTime() + 60_000);
-    expect((await startSubmission(d, SLUG, body())).ok).toBe(true);
-    now = new Date(T0.getTime() + 120_000);
-    expect(await startSubmission(d, SLUG, body())).toEqual({ ok: false, code: "too_many" });
-    expect(videos()).toHaveLength(2);
-    now = new Date(T0.getTime() + HOUR + 61_000);
-    expect((await startSubmission(d, SLUG, body())).ok).toBe(true);
-  });
-
-  it("o limite do device vale mesmo em outra instância (linhas do banco na última hora)", async () => {
-    head = mkHead({ device_per_hour: 2 });
+  it("sem limite por pessoa: o mesmo device manda vários vídeos seguidos", async () => {
+    head = mkHead({ device_per_hour: 1 }); // valor antigo salvo na config não limita mais
     tables.apareca_videos = [video({ created_at: "2026-10-16T21:30:00.000Z" }), video({ created_at: "2026-10-16T21:40:00.000Z" })];
     const { d } = mk();
-    expect(await startSubmission(d, SLUG, body())).toEqual({ ok: false, code: "too_many" });
+    for (let i = 0; i < 5; i++) {
+      now = new Date(T0.getTime() + i * 60_000);
+      expect((await startSubmission(d, SLUG, body())).ok).toBe(true);
+    }
+    expect(videos()).toHaveLength(7);
   });
 
   it("61º envio do mesmo IP no mesmo restaurante → too_many; o mesmo IP em outro restaurante não conta", async () => {

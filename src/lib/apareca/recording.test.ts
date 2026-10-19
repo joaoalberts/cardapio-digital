@@ -143,6 +143,11 @@ describe("flowNext (fluxo da tela do cliente)", () => {
     expect(s.step).toBe("review");
   });
 
+  it("depois de enviar, \"again\" volta ao início com as regravações zeradas", () => {
+    expect(flowNext(at("queue", { redos: 3 }), { type: "again" })).toEqual(FLOW_START);
+    expect(flowNext(at("review"), { type: "again" }).step).toBe("review");
+  });
+
   it("parar antes dos 6 s vai para a revisão", () => {
     expect(flowNext(at("recording"), { type: "elapsed", ms: 4_000, bytes: 10 }).step).toBe("review");
     expect(flowNext(at("recording"), { type: "elapsed", ms: MIN_CLIP_MS, bytes: 10 }).step).toBe("review");

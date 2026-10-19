@@ -93,7 +93,8 @@ export type FlowEvent =
   | { type: "send_failed" }
   | { type: "problem"; problem: ProblemKey }
   | { type: "retry" }
-  | { type: "cancel" };
+  | { type: "cancel" }
+  | { type: "again" };
 
 export const COUNTDOWN_FROM = 3;
 export const FLOW_START: FlowState = { step: "intro", redos: 0, count: 0 };
@@ -133,5 +134,9 @@ export function flowNext(s: FlowState, e: FlowEvent): FlowState {
     case "cancel":
       // Envio em andamento e fila não voltam: o vídeo já saiu (ou está saindo) do celular.
       return s.step === "sending" || s.step === "queue" || s.step === "intro" ? s : { step: "intro", redos: s.redos, count: 0 };
+    case "again":
+      // Outro vídeo depois de enviar: começa do zero, com as regravações de volta. Depois de
+      // recarregar a página a fila aparece com o fluxo ainda no intro, que também vale.
+      return s.step === "queue" || s.step === "intro" ? FLOW_START : s;
   }
 }
