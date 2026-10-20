@@ -104,7 +104,8 @@ export function BuyButton({
       }
       return;
     }
-    o.add({ item: item.id, option: flow.option, half: null, qty: 1, note: "", ...(origin ?? {}) }, null, { quiet: true });
+    // Com massas, vai a primeira (a folha da Comunidade não tem escolha de massa).
+    o.add({ item: item.id, option: flow.option, half: null, qty: 1, note: "", dough: item.doughs?.[0]?.label ?? null, ...(origin ?? {}) }, null, { quiet: true });
     // O carrinho da camada fica por cima do da capa: a foto voa até ele.
     const cart = btn.current?.closest(".cmu-layer")?.querySelector<HTMLElement>(".cmu-cart");
     if (btn.current && cart) void flyTo(btn.current, cart, thumbSrc(item));

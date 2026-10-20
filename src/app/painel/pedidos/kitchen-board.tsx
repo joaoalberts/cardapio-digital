@@ -183,7 +183,10 @@ export function KitchenBoard({ restaurantId, initial, enabled: enabled0 }: { res
                       {o.lines.map((l, i) => (
                         <li key={i}>
                           <b>{l.qty}×</b>
-                          {l.half_name ? `Meio a meio${l.option ? ` ${l.option}` : ""}` : `${l.name}${l.option ? ` ${l.option}` : ""}`}
+                          {l.half_name ? "Meio a meio" : l.name}
+                          {l.option ? ` ${l.option}` : ""}
+                          {/* Massa depois do tamanho: "Pizza Calabresa Grande · Massa fina". */}
+                          {l.dough ? ` · Massa ${l.dough.toLowerCase()}` : ""}
                           {l.special && <span className="kb-offer">Oferta</span>}
                           {l.half_name && (
                             <span className="kb-halves">

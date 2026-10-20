@@ -7,7 +7,7 @@ import { useOrder } from "./order-context";
 
 // Pé do story (layout aprovado pelo João em 15/10): preço à esquerda e quantidade à direita,
 // e embaixo a barra "Pedir agora". Prato simples entra direto no pedido com a quantidade
-// escolhida; pizza (Inteira/Metade) ou prato com tamanhos abre a folha de vidro.
+// escolhida; pizza (Inteira/Metade), prato com tamanhos ou com massa abre a folha de vidro.
 // Enquanto o cliente escolhe a outra metade, quem fala é a barrinha (pick-bar.tsx).
 export function StoryBuy({ item, price, kind }: { item: MenuItem; price: ReactNode; kind: string }) {
   const o = useOrder();
@@ -16,7 +16,7 @@ export function StoryBuy({ item, price, kind }: { item: MenuItem; price: ReactNo
   const can = o.enabled && !item.hide_price && !o.pick;
   if (!can) return <div className="buyrow">{price}</div>;
   const L = o.lang;
-  const simple = !item.price_options?.length && !item.half_half;
+  const simple = !item.price_options?.length && !item.half_half && !item.doughs?.length;
   const pedir = () => {
     if (simple) {
       o.add({ item: item.id, option: null, half: null, qty, note: "" }, go.current);

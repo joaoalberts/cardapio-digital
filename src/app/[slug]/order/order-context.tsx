@@ -19,7 +19,7 @@ import { flyTo } from "./fly";
 export type Table = { code: string; label: string };
 // origin: o prato veio do "Pedir também" da Comunidade; a folha leva a origem até o add.
 export type SheetState =
-  | { kind: "item"; item: MenuItem; focusNote: boolean; edit: CartLine | null; draft?: { option: string | null; note: string }; qty?: number; origin?: Origin }
+  | { kind: "item"; item: MenuItem; focusNote: boolean; edit: CartLine | null; draft?: { option: string | null; note: string; dough?: string | null }; qty?: number; origin?: Origin }
   | { kind: "cart"; tab: "cart" | "orders" }
   | null;
 export type FlashState = { id: number; label: string; text: string; img: string | null; tone: "added" | "ok" } | null;
@@ -30,6 +30,7 @@ export type PickState = {
   keep: MenuItem; // a metade que fica
   option: string | null;
   note: string;
+  dough?: string | null; // massa escolhida na folha; a pizza montada leva a mesma
   swap: { key: string; side: "item" | "half" } | null;
   fromSheet?: boolean; // troca começada na folha do prato (Editar > Observação): desistir volta a ela
   qty?: number; // quantidade escolhida no story
@@ -203,7 +204,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
 
   const itemById = useCallback((id: string) => index?.items.get(id)?.item, [index]);
   const unit = useCallback(
-    (l: Pick<CartLine, "item" | "option" | "half" | "claim_cents">) => {
+    (l: Pick<CartLine, "item" | "option" | "half" | "dough" | "claim_cents">) => {
       if (l.claim_cents != null) return l.claim_cents; // oferta relâmpago: o preço do registro
       if (!index) return null;
       const r = resolveLine(index, l);
@@ -297,8 +298,9 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
           mesa: table.code,
           device,
           ref: refAttempt.current,
-          lines: lines.map(({ item, option, half, qty, note, claim, origin, origin_ref, origin_at }) => ({
+          lines: lines.map(({ item, option, half, dough, qty, note, claim, origin, origin_ref, origin_at }) => ({
             item, option, half, qty, note,
+            ...(dough ? { dough } : {}),
             ...(claim ? { claim } : {}),
             // A origem da Comunidade vai junto; o servidor confere a janela e o restaurante.
             ...(origin && origin_ref && origin_at != null ? { origin, origin_ref, origin_at } : {}),
@@ -367,11 +369,11 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       if (line) {
         const next = p.swap.side === "item" ? { item: c.id, half: line.half } : { item: line.item, half: c.id };
         dirty.current = true;
-        setLines((cart) => replaceLine(cart, line.key, { ...next, option: p.option, qty: line.qty, note: p.note }));
+        setLines((cart) => replaceLine(cart, line.key, { ...next, option: p.option, qty: line.qty, note: p.note, ...(p.dough ? { dough: p.dough } : {}) }));
       }
       setEditing(true);
     } else {
-      add({ item: p.keep.id, option: p.option, half: c.id, qty: p.qty ?? 1, note: p.note, ...(p.origin ?? {}) });
+      add({ item: p.keep.id, option: p.option, half: c.id, qty: p.qty ?? 1, note: p.note, ...(p.dough ? { dough: p.dough } : {}), ...(p.origin ?? {}) });
     }
     setSheet({ kind: "cart", tab: "cart" });
   };
@@ -434,11 +436,11 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       setPick(null);
       // Desistiu da troca: volta ao pedido, ainda editando. Desistiu da meio a meio: volta à folha do prato.
       const editLine = p?.swap && p.fromSheet ? lines.find((l) => l.key === p.swap!.key) : undefined;
-      if (editLine) setSheet({ kind: "item", item: p!.keep, focusNote: false, edit: editLine, draft: { option: p!.option, note: p!.note } });
+      if (editLine) setSheet({ kind: "item", item: p!.keep, focusNote: false, edit: editLine, draft: { option: p!.option, note: p!.note, dough: p!.dough } });
       else if (p?.swap) {
         setEditing(true);
         setSheet({ kind: "cart", tab: "cart" });
-      } else if (p) setSheet({ kind: "item", item: p.keep, focusNote: false, edit: null, draft: { option: p.option, note: p.note }, ...(p.origin ? { origin: p.origin } : {}) });
+      } else if (p) setSheet({ kind: "item", item: p.keep, focusNote: false, edit: null, draft: { option: p.option, note: p.note, dough: p.dough }, ...(p.origin ? { origin: p.origin } : {}) });
     },
     canPair,
     pair,

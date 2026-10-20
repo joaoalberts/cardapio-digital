@@ -42,7 +42,7 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
   const swap = (l: CartLine, side: "item" | "half") => {
     const keepId = side === "item" ? l.half : l.item;
     const keep = keepId ? o.itemById(keepId) : undefined;
-    if (keep) o.startPick({ keep, option: l.option, note: l.note, swap: { key: l.key, side } });
+    if (keep) o.startPick({ keep, option: l.option, note: l.note, dough: l.dough, swap: { key: l.key, side } });
   };
 
   const line = (l: CartLine) => {
@@ -54,7 +54,9 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
     const qty = l.qty > 1 && !ed ? `${l.qty}× ` : "";
     const name = it?.name ?? l.claim_name ?? ""; // oferta desligada depois do toque: vale o nome do registro
     const label = other ? `½ ${it?.name ?? ""} + ½ ${other.name}` : name; // nome do prato nos rótulos dos botões
-    const sub = [l.option, other ? null : it?.half_half ? tr("oWhole", L) : l.qty === 1 ? tr("oUnit1", L) : tf("oUnits", L, { n: l.qty })].filter(Boolean).join(" · ");
+    // Massa depois do tamanho, em minúscula depois da palavra: "Grande · Massa fina".
+    const massa = l.dough ? `${tr("oDough", L)} ${l.dough.toLowerCase()}` : null;
+    const sub = [l.option, massa, other ? null : it?.half_half ? tr("oWhole", L) : l.qty === 1 ? tr("oUnit1", L) : tf("oUnits", L, { n: l.qty })].filter(Boolean).join(" · ");
     return (
       <li key={l.key} className={`o-line${u == null ? " gone" : ""}`}>
         <div className={`o-pic${other ? " split" : ""}`}>
@@ -69,7 +71,7 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
                 <span>{it?.name}{ed && <button className="o-swap" onClick={() => swap(l, "item")} aria-label={`${tr("oSwap", L)} ½ ${it?.name ?? ""}`}>{tr("oSwap", L)}</button>}</span>
                 <span>{other.name}{ed && <button className="o-swap" onClick={() => swap(l, "half")} aria-label={`${tr("oSwap", L)} ½ ${other.name}`}>{tr("oSwap", L)}</button>}</span>
               </span>
-              {l.option && <span className="o-det">{l.option}</span>}
+              {(l.option || massa) && <span className="o-det">{[l.option, massa].filter(Boolean).join(" · ")}</span>}
             </>
           ) : (
             <>
@@ -156,7 +158,7 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
                         {ord.lines.map((l, k) => (
                           <li key={k}>
                             {l.qty}× {l.half_name ? `½ ${l.name} + ½ ${l.half_name}` : l.name}
-                            {l.option ? ` (${l.option})` : ""}
+                            {detail(l.option, l.dough, L)}
                             {l.special && <Bolt />}
                           </li>
                         ))}
@@ -192,6 +194,13 @@ export function CartSheet({ tab }: { tab: "cart" | "orders" }) {
       )}
     </>
   );
+}
+
+// "Meus pedidos": tamanho e massa entre parênteses, tudo em minúscula na massa: "(Grande · massa fina)".
+// Pedidos de antes da massa não têm o campo.
+function detail(option: string | null, dough: string | null | undefined, L: string) {
+  const parts = [option, dough ? `${tr("oDough", L).toLowerCase()} ${dough.toLowerCase()}` : null].filter(Boolean);
+  return parts.length ? ` (${parts.join(" · ")})` : "";
 }
 
 // Raio pequeno em champanhe ao lado do nome: a linha veio de uma oferta relâmpago.

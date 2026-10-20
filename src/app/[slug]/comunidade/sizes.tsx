@@ -58,7 +58,7 @@ export function SizesSheet({
 
   const add = () => {
     if (!cur) return;
-    o.add({ item: item.id, option: cur.label, half: null, qty: 1, note: "", ...(origin ?? {}) }, null, { quiet: true });
+    o.add({ item: item.id, option: cur.label, half: null, qty: 1, note: "", dough: item.doughs?.[0]?.label ?? null, ...(origin ?? {}) }, null, { quiet: true });
     const cart = addBtn.current?.closest(".cmu-layer")?.querySelector<HTMLElement>(".cmu-cart");
     if (addBtn.current && cart) void flyTo(addBtn.current, cart, th);
     onClose();

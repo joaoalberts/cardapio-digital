@@ -83,7 +83,7 @@ export function ComunidadeLayer() {
     backTo.current = tab;
     setSizes(null);
     setOpen(false);
-    o.startPick({ keep: item, option, note: "", swap: null, qty: 1, ...(origin ? { origin } : {}) });
+    o.startPick({ keep: item, option, note: "", dough: item.doughs?.[0]?.label ?? null, swap: null, qty: 1, ...(origin ? { origin } : {}) });
   };
 
   // "Postar" (story): do Palco abre no resultado; da foto grande, nela. As abas da folha

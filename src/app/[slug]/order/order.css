@@ -411,3 +411,7 @@
 .cm .o-dish { font-family: var(--f-karla), system-ui, sans-serif; font-weight: 700; font-variation-settings: normal; text-transform: none; letter-spacing: -0.02em; }
 /* Total com a mesma cor do preço de cada item (pedido do João, 17/10). */
 .cm .o-total strong.o-fix { color: inherit; }
+/* Massa da pizza (protótipo aprovado, 19/10): o controle de duas massas é mais largo que
+   Inteira/Metade; o extra ("+ R$ 5") vai pequeno no botão da massa. */
+.cm .g-seg.two.massa { width: 200px; }
+.cm .g-seg .g-extra { margin-left: 4px; font-size: 10.5px; font-weight: 500; opacity: 0.75; }

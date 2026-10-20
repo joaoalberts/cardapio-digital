@@ -128,6 +128,7 @@ const STRINGS = {
   oAsk: L6(["Pedir", "Order", "Pedir", "Commander", "Ordina", "Bestellen"]),
   oHalfBtn: L6(["Metade", "Half", "Mitad", "Moitié", "Metà", "Hälfte"]),
   oPizza: L6(["Pizza", "Pizza", "Pizza", "Pizza", "Pizza", "Pizza"]),
+  oDough: L6(["Massa", "Crust", "Masa", "Pâte", "Impasto", "Teig"]),
   oOtherHalf: L6(["Outra metade", "Other half", "Otra mitad", "Autre moitié", "Altra metà", "Andere Hälfte"]),
   oPick: L6(["Escolher", "Choose", "Elegir", "Choisir", "Scegli", "Wählen"]),
   oPickNav: L6(["Navegue até o outro sabor", "Browse to the other flavor", "Ve hasta el otro sabor", "Allez jusqu'à l'autre saveur", "Vai all'altro gusto", "Blättern Sie zur anderen Sorte"]),
