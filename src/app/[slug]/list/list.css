@@ -1,0 +1,629 @@
+/* Cardápio em lista: visual aprovado pelo João em 19/10 (protótipo docs/prototipos/lista,
+   âncora #ref.faixa-2, prints em prints/aprovado-19-10). Valores copiados do protótipo.
+   A lista mora dentro do .cm (carrinho, fontes, idioma); as classes que o menu.css também usa
+   (.logo, .status, .hint, .round, .glass) vão com ".cm .cm-list" para ganhar dele sem depender
+   da ordem dos arquivos. Escreva só backdrop-filter (o Lightning CSS cuida do prefixo). */
+
+html:has(.cm .cm-list),
+html:has(.cm .cm-list) body {
+  background: #140d0a;
+}
+
+.cm-list {
+  --fg: #fff7f0;
+  --muted: #bfb3a9; /* texto de apoio: 4,6:1 sobre a parte mais clara do fundo */
+  min-height: 100dvh;
+  background: #140d0a;
+  color: var(--fg);
+  line-height: normal;
+
+  & *,
+  & *::before,
+  & *::after {
+    box-sizing: border-box;
+  }
+
+  & .wrap {
+    max-width: 945px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  /* ---------- Capa: a foto no alto, se desfazendo no fundo ---------- */
+  & .cover-wrap {
+    position: relative;
+  }
+  & .cover {
+    position: relative;
+    height: 330px;
+    overflow: hidden;
+    background: #000;
+    mask: linear-gradient(#000 35%, transparent 96%);
+  }
+  & .cover img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  & .cover::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, transparent 30%, transparent 55%, rgba(20, 13, 10, 0.5) 100%);
+  }
+  & .cover-top {
+    position: absolute;
+    z-index: 6; /* acima do .langcatch (5), que fecha a coluna de bandeiras */
+    top: calc(var(--safe-top) + 14px);
+    left: 16px;
+    right: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  /* Sem foto de capa: só o fundo; os botões descem para o fluxo e o perfil sobe. */
+  & .cover-wrap.bare .cover-top {
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+    padding: calc(var(--safe-top) + 14px) 16px 0;
+  }
+  & .cover-r {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  & .pill-btn {
+    flex: none;
+    height: 44px;
+    padding: 0 16px 0 12px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  /* ---------- Perfil: logo, nome, status, endereço e a busca larga ---------- */
+  & .profile {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 104px minmax(0, 1fr);
+    gap: 16px;
+    align-items: center;
+    margin-top: -262px;
+  }
+  & .profile.nologo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  & .cover-wrap.bare + .wrap .profile {
+    margin-top: 24px;
+  }
+  & .who {
+    min-width: 0;
+    padding-bottom: 4px;
+  }
+  & .who h1 {
+    margin: 0;
+    font-size: calc(30px * var(--display-scale));
+    line-height: 1.05;
+    text-shadow: 0 2px 18px rgba(0, 0, 0, 0.5);
+  }
+  & .address {
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: rgba(255, 247, 240, 0.82);
+  }
+  & .address .icon {
+    flex: none;
+    width: 16px;
+    height: 16px;
+  }
+  & .actions {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 8px;
+    margin-top: 22px;
+  }
+  & .search-pill {
+    flex: 1;
+    min-width: 0;
+    height: 54px;
+    padding: 0 22px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px) saturate(1.5);
+    color: var(--muted);
+    font-size: 16px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  & .search-pill .icon {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    color: var(--fg);
+  }
+
+  /* ---------- Títulos ("Categorias" e as faixas das categorias) ---------- */
+  & .sec-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 40px 0 0;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(255, 240, 225, 0.16);
+  }
+  & .sec-title h2 {
+    margin: 0;
+    font-size: calc(26px * var(--display-scale));
+    line-height: 1.1;
+    font-weight: var(--display-weight);
+  }
+  & .sec-title small {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--fg);
+    font-size: 14.5px;
+  }
+  & .sec-title small .icon {
+    width: 18px;
+    height: 18px;
+  }
+  & .cats-title {
+    margin: 34px 0 14px;
+  }
+
+  /* ---------- Categorias em círculos ---------- */
+  & .cats {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 -16px;
+    padding: 0 12px 4px;
+    mask: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 28px), transparent);
+  }
+  & .cats::-webkit-scrollbar {
+    display: none;
+  }
+  & .cat {
+    flex: none;
+    width: 92px;
+    display: grid;
+    justify-items: center;
+    align-content: start;
+    gap: 10px;
+    padding: 4px 0;
+  }
+  & .cat .ring {
+    display: block;
+    width: 80px;
+    height: 80px;
+    padding: 3px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.12);
+  }
+  & .cat .ring > * {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    display: grid;
+    place-items: center;
+  }
+  /* Categoria sem foto: a inicial sobre a cor do restaurante. */
+  & .cat .mono {
+    background: var(--brand);
+    color: var(--on-brand);
+    font-size: calc(26px * var(--display-scale));
+  }
+  & .cat .name {
+    font-size: 14px;
+    line-height: 1.25;
+    font-weight: 500;
+    color: var(--fg);
+    text-align: center;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  /* A ativa: borda na cor do restaurante e um traço embaixo do nome (sem ativa, a primeira). */
+  & .cat.on .ring,
+  & .cats:not(:has(.on)) .cat:first-child .ring {
+    border-color: var(--brand);
+  }
+  & .cat.on .name,
+  & .cats:not(:has(.on)) .cat:first-child .name {
+    font-weight: 600;
+  }
+  & .cat.on .name::after,
+  & .cats:not(:has(.on)) .cat:first-child .name::after {
+    content: "";
+    display: block;
+    width: 30px;
+    height: 3px;
+    margin: 8px auto 0;
+    border-radius: 2px;
+    background: var(--brand);
+  }
+
+  /* ---------- Faixa de cada categoria (faixa 2), com o brilho que passa ---------- */
+  & .cat-sec .sec-title {
+    position: relative;
+    overflow: hidden;
+    margin: 32px -16px 0;
+    padding: 9px 16px;
+    border-top: 1px solid color-mix(in srgb, var(--brand) 35%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--brand) 20%, transparent);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--brand) 18%, transparent), color-mix(in srgb, var(--brand) 6%, transparent));
+  }
+  & .cat-sec .sec-title > * {
+    position: relative;
+    z-index: 1;
+  }
+  & .cat-sec .sec-title h2 {
+    font-size: calc(24px * var(--display-scale));
+  }
+  & .cat-sec .sec-title::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 45%;
+    pointer-events: none;
+    background: linear-gradient(100deg, transparent, color-mix(in srgb, var(--brand) 30%, rgba(255, 240, 220, 0.18)), transparent);
+    transform: translateX(-120%);
+    animation: faixa-brilho 3.6s ease-in-out infinite;
+  }
+  & .cat-sec:nth-of-type(2n) .sec-title::before {
+    animation-delay: 1.2s;
+  }
+  & .cat-sec:nth-of-type(3n) .sec-title::before {
+    animation-delay: 2.1s;
+  }
+
+  /* ---------- Pratos: só nome e preço, numa linha, separados por traço fino ---------- */
+  & .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  & .subgroup {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    margin: 28px 0 4px;
+  }
+  & .grid > .subgroup:first-child {
+    margin-top: 22px;
+  }
+  & .subgroup span {
+    color: var(--brand-text);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  & .trow {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: baseline;
+    align-content: center; /* no computador a linha estica até a vizinha de coluna */
+    padding: 17px 0;
+    border-bottom: 1px solid rgba(255, 240, 225, 0.1);
+    text-align: left;
+    transition: background-color 0.15s;
+  }
+  & .trow:active {
+    background: rgba(255, 240, 225, 0.04);
+  }
+  & .grid > .trow:first-child {
+    margin-top: 6px;
+  }
+  & .grid > .trow:last-child {
+    border-bottom: 0;
+  }
+  & .trow .nm {
+    font-size: calc(18.5px * var(--display-scale));
+    line-height: 1.15;
+    font-weight: 500;
+  }
+  & .trow .price {
+    color: var(--brand-text);
+    font-size: 17px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-align: right;
+  }
+  & .trow .price .ate {
+    margin-right: 6px;
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 400;
+  }
+  & .trow .price s {
+    margin-right: 6px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  & .end {
+    height: 120px;
+  }
+}
+
+/* Nome do prato mais leve que o título da categoria; na Moderna, um pouco mais largo. */
+.cm[data-font="moderno"] .cm-list .trow .nm {
+  font-variation-settings: "wdth" 85, "opsz" 24;
+  letter-spacing: 0;
+}
+
+/* ---------- Classes que o menu.css também usa: zeradas aqui ---------- */
+.cm .cm-list {
+  & .glass {
+    background: rgba(18, 12, 10, 0.55);
+    border: 1px solid rgba(247, 239, 230, 0.16);
+    backdrop-filter: blur(16px) saturate(1.4);
+  }
+  & .round {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: #fff;
+  }
+  & .o-cartbtn .icon {
+    width: 22px;
+    height: 22px;
+    filter: none;
+  }
+  & .logo {
+    display: block;
+    width: 104px;
+    height: 104px;
+    border-radius: 50%;
+    overflow: hidden;
+    clip-path: none;
+    background: #f6efe6;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+  }
+  & .logo img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+  }
+  & .status {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    backdrop-filter: none;
+    color: var(--muted);
+    font-size: 14.5px;
+    font-weight: 400;
+    white-space: normal;
+    text-align: left;
+    animation: none;
+  }
+  & .status b {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #f0948a;
+    font-weight: 600;
+  }
+  & .status b.is-open {
+    color: #7fd49b;
+  }
+  & .status b::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* Dica única: "Toque no produto para ver foto e a descrição". */
+  & .hint {
+    position: relative;
+    z-index: auto;
+    inset: auto;
+    transform: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 30px 0 0;
+    padding: 12px 6px 12px 14px;
+    overflow: hidden;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--brand) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--brand) 38%, transparent);
+    backdrop-filter: none;
+    color: var(--fg);
+    font-size: 14px;
+    line-height: 1.35;
+    letter-spacing: normal;
+    white-space: normal;
+    pointer-events: auto;
+    animation: none;
+  }
+  & .hint .hi {
+    position: relative;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--brand);
+    color: var(--on-brand);
+  }
+  & .hint .hi .icon {
+    width: 19px;
+    height: 19px;
+  }
+  & .hint b {
+    color: var(--brand-text);
+    font-weight: 600;
+  }
+  & .hint .x {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    margin-left: auto;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+  }
+  & .hint .x .icon {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* Efeito da dica: anel que pulsa no ícone e um brilho que atravessa o cartão. */
+.cm-list .hint .hi::after {
+  content: "";
+  box-sizing: border-box;
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--brand);
+  animation: hint-ring 2.4s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+}
+.cm-list .hint::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 240, 220, 0.14), transparent);
+  animation: hint-shine 4.5s ease-in-out 1s infinite;
+}
+@keyframes hint-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  70%,
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+@keyframes hint-shine {
+  0% {
+    transform: translateX(0);
+  }
+  45%,
+  100% {
+    transform: translateX(360%);
+  }
+}
+@keyframes faixa-brilho {
+  0% {
+    transform: translateX(-120%);
+  }
+  70%,
+  100% {
+    transform: translateX(260%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cm-list .cat-sec .sec-title::before,
+  .cm-list .hint .hi::after,
+  .cm-list .hint::before {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* ---------- Computador (≥ 720 px): capa com cantos, perfil numa linha, pratos em 2 colunas ---------- */
+@media (min-width: 720px) {
+  .cm-list {
+    & .cover-wrap {
+      max-width: 945px;
+      margin: 20px auto 0;
+      padding: 0 16px;
+    }
+    & .cover {
+      height: 380px;
+      border-radius: 28px;
+    }
+    & .cover-top {
+      left: 32px;
+      right: 32px;
+    }
+    & .cover-wrap.bare .cover-top {
+      left: auto;
+      right: auto;
+      padding: calc(var(--safe-top) + 14px) 0 0;
+    }
+    & .profile {
+      margin-top: -250px;
+      grid-template-columns: 128px minmax(0, 1fr) 380px;
+      padding-left: 24px;
+    }
+    & .profile.nologo {
+      grid-template-columns: minmax(0, 1fr) 380px;
+    }
+    & .actions {
+      grid-column: auto;
+      margin-top: 0;
+      align-self: center;
+      padding-bottom: 6px;
+    }
+    & .search-pill {
+      width: 100%;
+    }
+    & .cats {
+      margin: 0;
+      padding: 0 0 4px;
+      mask: none;
+    }
+    & .cat-sec .sec-title {
+      margin: 32px 0 0;
+      border-radius: 14px;
+    }
+    & .grid {
+      grid-template-columns: 1fr 1fr;
+      column-gap: 16px;
+    }
+  }
+  .cm .cm-list .logo {
+    width: 128px;
+    height: 128px;
+  }
+}

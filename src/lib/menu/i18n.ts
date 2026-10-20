@@ -155,6 +155,37 @@ const STRINGS = {
     "Tocca per avanzare · scorri per cambiare",
     "Tippen zum Weiter · wischen zum Wechseln",
   ]),
+  // Cardápio em lista (19/10). Em listHint, o trecho entre {b} e {/b} sai em negrito na cor do restaurante.
+  listCats: L6(["Categorias", "Categories", "Categorías", "Catégories", "Categorie", "Kategorien"]),
+  listSearch: L6(["Buscar no cardápio", "Search the menu", "Buscar en la carta", "Rechercher dans la carte", "Cerca nel menù", "Speisekarte durchsuchen"]),
+  listHint: L6([
+    "Toque no produto para {b}ver foto{/b} e a descrição.",
+    "Tap a dish to {b}see the photo{/b} and description.",
+    "Toca un plato para {b}ver la foto{/b} y la descripción.",
+    "Touchez un plat pour {b}voir la photo{/b} et la description.",
+    "Tocca un piatto per {b}vedere la foto{/b} e la descrizione.",
+    "Tippe auf ein Gericht für {b}Foto{/b} und Beschreibung.",
+  ]),
+  listHintClose: L6(["Fechar dica", "Close tip", "Cerrar consejo", "Fermer l’astuce", "Chiudi suggerimento", "Hinweis schließen"]),
+  item: L6(["item", "item", "plato", "plat", "piatto", "Gericht"]),
+  viewStories: L6(["Stories", "Stories", "Stories", "Stories", "Stories", "Stories"]),
+  backToList: L6(["Lista", "List", "Lista", "Liste", "Lista", "Liste"]),
+  searchEmpty: L6([
+    "Nada encontrado para “{q}”.",
+    "Nothing found for “{q}”.",
+    "No se encontró nada para “{q}”.",
+    "Rien trouvé pour « {q} ».",
+    "Nessun risultato per “{q}”.",
+    "Nichts gefunden für „{q}“.",
+  ]),
+  searchCount: L6([
+    "Resultados para “{q}”: {n}",
+    "Results for “{q}”: {n}",
+    "Resultados para “{q}”: {n}",
+    "Résultats pour « {q} » : {n}",
+    "Risultati per “{q}”: {n}",
+    "Ergebnisse für „{q}“: {n}",
+  ]),
 };
 
 export type StringKey = keyof typeof STRINGS;

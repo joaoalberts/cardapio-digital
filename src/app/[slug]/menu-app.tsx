@@ -19,6 +19,7 @@ import { Flag } from "./flag";
 import { OrderProvider, useOrder } from "./order/order-context";
 import { OrderLayer } from "./order/order-layer";
 import { VideoDebug } from "./video-debug";
+import { MenuList } from "./list/menu-list";
 import { StoryBuy } from "./order/story-actions";
 import { SpecialStory } from "./order/special-story";
 import {
@@ -195,6 +196,14 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   const [homeTab, setHomeTab] = useState(0);
   const [infoOpen, setInfoOpen] = useState(false);
   const [status, setStatus] = useState<StatusLabel | null>(null);
+  // provisório (Tarefa 7 substitui): #lista na URL mostra a lista nova no lugar da capa.
+  const [provList, setProvList] = useState(false);
+  useEffect(() => {
+    const read = () => setProvList(location.hash === "#lista");
+    read();
+    addEventListener("hashchange", read);
+    return () => removeEventListener("hashchange", read);
+  }, []);
 
   const viewerRef = useRef<HTMLDivElement>(null);
   const panelEls = useRef<(HTMLDivElement | null)[]>([]);
@@ -1010,49 +1019,51 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   const logo = sizedSrc(mediaUrl(restaurant.logo_path), THUMB_W);
   const near = (i: number) => view.open && (Math.abs(i - view.cur) <= 1 || Math.abs(i - view.target) <= 1);
   const style = { "--accent": restaurant.brand_color ?? undefined } as CSSProperties;
+  // Seletor de bandeiras: o mesmo na capa e na lista.
+  const langPicker = languages.length > 1 && (
+    // Bandeira atual; tocou, abre a coluna com as outras. Escolheu, troca o idioma.
+    <div className={`langpick${view.langOpen ? " open" : ""}`}>
+      <button
+        className="flagbtn cur"
+        onClick={() => update({ langOpen: !viewRef.current.langOpen })}
+        aria-expanded={view.langOpen}
+        aria-label={`${t("lang")}: ${LANG_NAME[lang] ?? lang}`}
+      >
+        <span className="flag">
+          <Flag code={flagCode} />
+        </span>
+      </button>
+      {view.langOpen &&
+        languages
+          .filter((l) => l !== lang)
+          .map((l, k) => (
+            <button
+              key={l}
+              className="flagbtn"
+              style={{ "--k": k } as CSSProperties}
+              lang={l}
+              aria-label={LANG_NAME[l] ?? l}
+              onClick={() => {
+                update({ langOpen: false });
+                void changeLang(l, true);
+              }}
+            >
+              <span className="flag">
+                <Flag code={LANG_FLAG[l] ?? "xx"} />
+              </span>
+            </button>
+          ))}
+    </div>
+  );
 
   return (
     <div className={`cm${relang ? " relang" : ""}`} data-font={previewFont ?? (isFontTheme(restaurant.font_theme) ? restaurant.font_theme : DEFAULT_FONT_THEME)} style={style}>
-      <main className="home" aria-hidden={view.open}>
+      <main className="home" aria-hidden={view.open} hidden={provList}>
         <div className="hero-top">
           <button className="round" onClick={() => openViewer(0, true)} aria-label={t("viewList")} disabled={!cats.length}>
             <ListIcon />
           </button>
-          {languages.length > 1 && (
-            // Bandeira atual; tocou, abre a coluna com as outras. Escolheu, troca o idioma.
-            <div className={`langpick${view.langOpen ? " open" : ""}`}>
-              <button
-                className="flagbtn cur"
-                onClick={() => update({ langOpen: !viewRef.current.langOpen })}
-                aria-expanded={view.langOpen}
-                aria-label={`${t("lang")}: ${LANG_NAME[lang] ?? lang}`}
-              >
-                <span className="flag">
-                  <Flag code={flagCode} />
-                </span>
-              </button>
-              {view.langOpen &&
-                languages
-                  .filter((l) => l !== lang)
-                  .map((l, k) => (
-                    <button
-                      key={l}
-                      className="flagbtn"
-                      style={{ "--k": k } as CSSProperties}
-                      lang={l}
-                      aria-label={LANG_NAME[l] ?? l}
-                      onClick={() => {
-                        update({ langOpen: false });
-                        void changeLang(l, true);
-                      }}
-                    >
-                      <span className="flag">
-                        <Flag code={LANG_FLAG[l] ?? "xx"} />
-                      </span>
-                    </button>
-                  ))}
-            </div>
-          )}
+          {langPicker}
         </div>
         {tableTag}
         {view.langOpen && <div className="langcatch" onClick={() => update({ langOpen: false })} />}
@@ -1121,6 +1132,33 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
           </>
         )}
       </main>
+
+      {/* provisório (Tarefa 7 substitui): a lista nova aparece com a âncora #lista, só para conferir no navegador. */}
+      {provList && (
+        <>
+          <MenuList
+            menu={menu}
+            cats={cats}
+            lang={lang}
+            status={status}
+            langPicker={langPicker}
+            onOpenItem={(catId, itemId) => {
+              const c = cats.findIndex((x) => x.id === catId);
+              if (c < 0) return;
+              const idx = [...viewRef.current.idx];
+              idx[c] = Math.max(0, cats[c].items.findIndex((x) => x.id === itemId));
+              update({ idx });
+              openViewer(c);
+            }}
+            onStories={() => {
+              history.replaceState(null, "", location.pathname + location.search);
+              setProvList(false);
+            }}
+            hidden={view.open}
+          />
+          {view.langOpen && <div className="langcatch" onClick={() => update({ langOpen: false })} />}
+        </>
+      )}
 
       {/* No computador, fora da coluna do story: clicar fecha. */}
       <div className="viewer-bg" hidden={!view.open} onClick={closeViewer} aria-hidden />
