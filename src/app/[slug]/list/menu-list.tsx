@@ -5,11 +5,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import type { StatusLabel } from "@/lib/menu/hours";
 import { t as tr, type StringKey } from "@/lib/menu/i18n";
-import { activeIndex, brandTokens, groupSubgroups, listCats, listPrice, searchItems } from "@/lib/menu/list";
+import { activeIndex, brandTokens, groupSubgroups, hintSeen, HINT_KEY, listCats, listPrice, searchItems } from "@/lib/menu/list";
 import { CARD_W, mediaUrl, photoSrc, posterSrc, THUMB_W } from "@/lib/menu/media";
 import { sizedSrc } from "@/lib/images/sized";
 import type { MenuCategory, MenuItem, MenuMedia, PublicMenu } from "@/lib/menu/types";
 import { CartButton } from "../order/cart-button";
+import { useVisible } from "./use-visible";
 
 // Foto pequena de uma mídia: a própria foto ou o pôster do vídeo.
 const still = (m: MenuMedia | null | undefined, w: number) =>
@@ -58,7 +59,21 @@ export function MenuList({
   const cats = useMemo(() => listCats(allCats), [allCats]);
   const tokens = brandTokens(restaurant.brand_color);
   const style = { "--brand": tokens.brand, "--brand-text": tokens.brandText, "--on-brand": tokens.onBrand } as CSSProperties;
-  const [hintOpen, setHintOpen] = useState(true);
+  // A dica entra só depois de ler o localStorage (o servidor e a 1ª pintura não a mostram).
+  const [hintOpen, setHintOpen] = useState(false);
+  useLayoutEffect(() => {
+    let seen = false;
+    try {
+      seen = hintSeen(localStorage.getItem(HINT_KEY));
+    } catch {}
+    if (!seen) queueMicrotask(() => setHintOpen(true));
+  }, []);
+  const closeHint = () => {
+    setHintOpen(false);
+    try {
+      localStorage.setItem(HINT_KEY, "1");
+    } catch {}
+  };
   const secEls = useRef(new Map<string, HTMLElement>());
   const headRef = useRef<HTMLElement>(null);
   const catsRef = useRef<HTMLElement>(null);
@@ -130,10 +145,14 @@ export function MenuList({
   // exatamente ao mesmo ponto.
   // Vindo da busca, a linha tocada está na camada: a âncora é a primeira categoria da lista
   // (abaixo da dica), para a lista atrás da busca também ficar no mesmo ponto.
+  const hintRef = useRef<HTMLDivElement>(null);
+  const hintVisible = useVisible(hintRef);
+  // Os brilhos só rodam com a lista à vista: nada anima com o story ou a busca por cima.
+  const live = !hidden && !searchOpen;
   const anchor = useRef<{ el: HTMLElement; top: number } | null>(null);
   const openItem = (catId: string, itemId: string, el: HTMLElement | undefined) => {
     if (hintOpen && el) anchor.current = { el, top: el.getBoundingClientRect().top };
-    setHintOpen(false);
+    closeHint();
     onOpenItem(catId, itemId);
   };
   useLayoutEffect(() => {
@@ -256,7 +275,7 @@ export function MenuList({
         )}
 
         {hintOpen && cats.length > 0 && (
-          <div className="hint" role="note">
+          <div className="hint" role="note" ref={hintRef} data-live={hintVisible && live ? "" : undefined}>
             <span className="hi" aria-hidden>
               <svg className="icon" viewBox="0 0 24 24">
                 <rect x="3.5" y="5" width="17" height="14" rx="3" />
@@ -269,7 +288,7 @@ export function MenuList({
               <b>{hintB}</b>
               {hintC}
             </span>
-            <button className="x" onClick={() => setHintOpen(false)} aria-label={t("listHintClose")}>
+            <button className="x" onClick={closeHint} aria-label={t("listHintClose")}>
               <svg className="icon" viewBox="0 0 24 24" aria-hidden>
                 <path d="M6 6l12 12M18 6 6 18" />
               </svg>
@@ -288,15 +307,9 @@ export function MenuList({
                 else secEls.current.delete(c.id);
               }}
             >
-              <div className="sec-title">
-                <h2 className="fd">{c.name}</h2>
-                <small>
-                  {n} {t(n === 1 ? "item" : "items")}
-                  <svg className="icon" viewBox="0 0 24 24" aria-hidden>
-                    <path d="m9 6 6 6-6 6" />
-                  </svg>
-                </small>
-              </div>
+              <SecTitle name={c.name} still={live}>
+                {n} {t(n === 1 ? "item" : "items")}
+              </SecTitle>
               <div className="grid">
                 {groupSubgroups(c.items).flatMap((g) => [
                   g.label && (
@@ -321,6 +334,23 @@ export function MenuList({
       </main>
 
       {searchOpen && <SearchLayer cats={cats} lang={lang} onOpenItem={openFromSearch} onClose={closeSearch} />}
+    </div>
+  );
+}
+
+// Faixa da categoria; o brilho só roda (data-live) enquanto ela está na tela.
+function SecTitle({ name, still, children }: { name: string; still: boolean; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const visible = useVisible(ref);
+  return (
+    <div className="sec-title" ref={ref} data-live={visible && still ? "" : undefined}>
+      <h2 className="fd">{name}</h2>
+      <small>
+        {children}
+        <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+          <path d="m9 6 6 6-6 6" />
+        </svg>
+      </small>
     </div>
   );
 }

@@ -133,3 +133,9 @@ export function activeIndex(tops: number[], line: number, atEnd = false): number
 export function formatFromHash(hash: string): "stories" | "lista" {
   return hash === "#lista" ? "lista" : "stories";
 }
+
+// Dica "Toque no produto para ver foto": aparece até o cliente fechar ou abrir o primeiro prato.
+export const HINT_KEY = "cardapio-dica-lista";
+export function hintSeen(stored: string | null): boolean {
+  return stored === "1";
+}

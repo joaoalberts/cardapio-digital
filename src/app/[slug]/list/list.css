@@ -294,7 +294,7 @@ html:has(.cm .cm-list) body {
   & .cat-sec .sec-title h2 {
     font-size: calc(24px * var(--display-scale));
   }
-  & .cat-sec .sec-title::before {
+  & .cat-sec .sec-title[data-live]::before {
     content: "";
     position: absolute;
     top: 0;
@@ -306,10 +306,10 @@ html:has(.cm .cm-list) body {
     transform: translateX(-120%);
     animation: faixa-brilho 3.6s ease-in-out infinite;
   }
-  & .cat-sec:nth-of-type(2n) .sec-title::before {
+  & .cat-sec:nth-of-type(2n) .sec-title[data-live]::before {
     animation-delay: 1.2s;
   }
-  & .cat-sec:nth-of-type(3n) .sec-title::before {
+  & .cat-sec:nth-of-type(3n) .sec-title[data-live]::before {
     animation-delay: 2.1s;
   }
 
@@ -738,7 +738,7 @@ html:has(.cm-list .search) {
 }
 
 /* Efeito da dica: anel que pulsa no ícone e um brilho que atravessa o cartão. */
-.cm-list .hint .hi::after {
+.cm-list .hint[data-live] .hi::after {
   content: "";
   box-sizing: border-box;
   position: absolute;
@@ -747,7 +747,7 @@ html:has(.cm-list .search) {
   border: 2px solid var(--brand);
   animation: hint-ring 2.4s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
 }
-.cm-list .hint::before {
+.cm-list .hint[data-live]::before {
   content: "";
   position: absolute;
   top: 0;

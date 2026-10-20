@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeIndex, brandTokens, formatFromHash, groupSubgroups, listCats, listPrice, normalizeText, parseSubgroup, searchItems } from "./list";
+import { activeIndex, brandTokens, formatFromHash, groupSubgroups, hintSeen, HINT_KEY, listCats, listPrice, normalizeText, parseSubgroup, searchItems } from "./list";
 import type { MenuCategory, MenuItem } from "./types";
 
 const item = (id: string, extra: Record<string, unknown> = {}) =>
@@ -236,5 +236,17 @@ describe("formatFromHash", () => {
     expect(formatFromHash("#lista?x")).toBe("stories");
     expect(formatFromHash("")).toBe("stories");
     expect(formatFromHash("#outra")).toBe("stories");
+  });
+});
+
+describe("hintSeen", () => {
+  it("só \"1\" conta como vista", () => {
+    expect(hintSeen(null)).toBe(false);
+    expect(hintSeen("1")).toBe(true);
+    expect(hintSeen("0")).toBe(false);
+    expect(hintSeen("")).toBe(false);
+  });
+  it("a chave é a combinada", () => {
+    expect(HINT_KEY).toBe("cardapio-dica-lista");
   });
 });
