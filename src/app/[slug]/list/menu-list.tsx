@@ -146,7 +146,7 @@ export function MenuList({
   // Vindo da busca, a linha tocada está na camada: a âncora é a primeira categoria da lista
   // (abaixo da dica), para a lista atrás da busca também ficar no mesmo ponto.
   const hintRef = useRef<HTMLDivElement>(null);
-  const hintVisible = useVisible(hintRef);
+  const hintVisible = useVisible(hintRef, hintOpen);
   // Os brilhos só rodam com a lista à vista: nada anima com o story ou a busca por cima.
   const live = !hidden && !searchOpen;
   const anchor = useRef<{ el: HTMLElement; top: number } | null>(null);
@@ -449,9 +449,9 @@ function SearchLayer({
           {!shown ? (
             <p className="note">{t("searchHint")}</p>
           ) : found.length ? (
-            <p className="note">{t("searchCount").replace("{q}", shown).replace("{n}", String(found.length))}</p>
+            <p className="note">{t("searchCount").replace("{q}", () => shown).replace("{n}", () => String(found.length))}</p>
           ) : (
-            <p className="empty">{t("searchEmpty").replace("{q}", shown)}</p>
+            <p className="empty">{t("searchEmpty").replace("{q}", () => shown)}</p>
           )}
         </div>
         {found.length > 0 && (
