@@ -4,6 +4,7 @@ import { currentUserId, isMember } from "@/lib/auth";
 import * as db from "@/lib/db/nocodb";
 import { refreshMenu } from "@/lib/restaurants";
 import { TAG_IDS } from "@/lib/menu/tags";
+import { parseSubgroup } from "@/lib/menu/list";
 import { suggestTranslation, translationEnabled, type Texts } from "@/lib/translate";
 import { autoTranslate } from "@/lib/menu/auto-translate";
 import { createUpload, deleteAsset, muxEnabled, videoState, type VideoState } from "@/lib/mux";
@@ -41,6 +42,7 @@ type ItemRow = {
   serves: number | null;
   country: string | null;
   price_options: unknown;
+  subgroup?: string | null;
 };
 
 // ---------- Categorias ----------
@@ -179,6 +181,8 @@ export type ItemInput = {
   country?: string | null;
   // Múltiplos preços (P, M, G…): substituem o preço único quando há 2 ou mais.
   priceOptions?: { label: string; priceCents: number }[] | null;
+  // Rótulo opcional dentro da categoria (ex.: "Tintos"); vazio = sem subgrupo.
+  subgroup?: string;
   // undefined = não mexe na mídia; null = remove; objeto = foto ou vídeo novo já enviado
   media?: MediaInput | null;
 };
@@ -213,6 +217,7 @@ export async function saveItem(restaurantId: string, input: ItemInput): Promise<
   // A categoria precisa ser deste restaurante (antes, a chave estrangeira garantia).
   if (!(await db.first("categories", { uid: input.categoryId, restaurant_id: restaurantId }))) return { error: FAIL };
 
+  const subgroup = parseSubgroup(input.subgroup);
   const row = {
     category_id: input.categoryId,
     name,
@@ -235,10 +240,12 @@ export async function saveItem(restaurantId: string, input: ItemInput): Promise<
       const before = await db.first<ItemRow>("items", { uid: id, restaurant_id: restaurantId });
       if (!before) return { error: FAIL };
       textsChanged = before.name !== name || (before.description ?? "") !== description;
-      await db.updateRows("items", [{ Id: before.Id, ...row }]);
+      // Só grava quando muda: assim salvar o prato funciona antes de a coluna subgroup existir.
+      const sg = subgroup !== parseSubgroup(before.subgroup);
+      await db.updateRows("items", [{ Id: before.Id, ...row, ...(sg ? { subgroup } : {}) }]);
     } else {
       const count = await db.count("items", { restaurant_id: restaurantId, category_id: input.categoryId });
-      id = (await db.insertOne("items", { ...row, restaurant_id: restaurantId, position: count })).id;
+      id = (await db.insertOne("items", { ...row, ...(subgroup !== null ? { subgroup } : {}), restaurant_id: restaurantId, position: count })).id;
     }
   } catch {
     return { error: FAIL };
@@ -340,6 +347,8 @@ export async function duplicateItem(restaurantId: string, id: string): Promise<R
       serves: it.serves,
       country: it.country,
       price_options: it.price_options ?? null,
+      // Só se existir: assim duplicar funciona antes de a coluna subgroup existir.
+      ...(parseSubgroup(it.subgroup) ? { subgroup: parseSubgroup(it.subgroup) } : {}),
     });
     const tr = await db.list<{ language: string; name: string; description: string | null; auto: boolean }>(
       "translations",

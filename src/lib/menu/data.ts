@@ -3,6 +3,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import * as db from "@/lib/db/nocodb";
 import type { MenuCategory, MenuItem, MenuMedia, MenuRestaurant, OpeningHours, PublicMenu } from "./types";
 import { specialInfo } from "./specials";
+import { parseSubgroup } from "./list";
 
 export function menuTag(slug: string) {
   return `menu:${slug}`;
@@ -103,6 +104,8 @@ export async function getPublicMenu(slug: string, lang = "pt-BR"): Promise<Publi
       country: i.country ?? null,
       price_options: i.price_options ?? null,
       tags: i.tags ?? [],
+      // O subgrupo sai igual em todos os idiomas (decisão do João, 19/10).
+      subgroup: parseSubgroup(i.subgroup),
       media: ready.filter((m) => m.item_id === i.id).map(media),
       category_id: c.id,
       half_half: !!c.half_half,

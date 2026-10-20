@@ -229,6 +229,11 @@ const tagText = (t: string) => TAG_TEXT[t] ?? `Produto ${tagLabel(t).toLowerCase
 
 type Opt = { label: string; price: string };
 
+// Subgrupos já usados na categoria, sem repetir, para o campo sugerir em vez de o dono redigitar.
+const subgroupsOf = (cat: EditorCategory | undefined): string[] => [
+  ...new Set((cat?.items ?? []).map((i) => i.subgroup).filter((s): s is string => !!s)),
+];
+
 export function ItemModal({
   ctx,
   item,
@@ -257,6 +262,7 @@ export function ItemModal({
   const [tags, setTags] = useState<string[]>(item?.tags ?? []);
   const [serves, setServes] = useState(item?.serves ?? null);
   const [country, setCountry] = useState(item?.country ?? "");
+  const [subgroup, setSubgroup] = useState(item?.subgroup ?? "");
   const [active, setActive] = useState(item?.active ?? true);
   const [categoryId, setCategoryId] = useState(initialCat);
   const [rows, setRows] = useState<Record<string, EditorTranslation>>(() => seedIfOpen(item?.translations ?? []));
@@ -295,6 +301,7 @@ export function ItemModal({
       serves,
       country: country || null,
       priceOptions,
+      subgroup,
       media: slot.value,
     });
     if (!res.error && res.id && Object.keys(rows).length) {
@@ -455,6 +462,17 @@ export function ItemModal({
             </option>
           ))}
         </select>
+      </label>
+
+      <label className="md-field">
+        <span>Subgrupo (opcional)</span>
+        <input value={subgroup} onChange={(e) => setSubgroup(e.target.value)} maxLength={40} list="md-subgroups" />
+        <datalist id="md-subgroups">
+          {subgroupsOf(ctx.categories.find((c) => c.id === categoryId)).map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+        <small>Ex.: Tintos, Brancos. Pratos com o mesmo subgrupo aparecem juntos na lista.</small>
       </label>
 
       <Translations ctx={ctx} base={{ name, description }} initial={item?.translations ?? []} withDescription rows={rows} setRows={setRows} />

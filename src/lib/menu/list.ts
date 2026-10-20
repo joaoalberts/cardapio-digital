@@ -31,8 +31,7 @@ export function parseSubgroup(raw: unknown): string | null {
 export function groupSubgroups(items: MenuItem[]): SubgroupBlock[] {
   const blocks = new Map<string | null, MenuItem[]>();
   for (const item of items) {
-    // MenuItem.subgroup entra na Tarefa 2; até lá o campo opcional é lido por aqui.
-    const label = parseSubgroup((item as MenuItem & { subgroup?: string | null }).subgroup);
+    const label = parseSubgroup(item.subgroup);
     const list = blocks.get(label);
     if (list) list.push(item);
     else blocks.set(label, [item]);

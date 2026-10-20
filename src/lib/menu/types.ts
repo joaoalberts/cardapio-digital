@@ -20,6 +20,8 @@ export type MenuItem = {
   country?: string | null;
   price_options?: { label: string; price_cents: number }[] | null;
   tags?: string[];
+  // Rótulo opcional dentro da categoria (ex.: "Tintos"); não é traduzido.
+  subgroup?: string | null;
   media: MenuMedia[];
   // Categoria real do prato (mesmo quando aparece em "Destaques") e se ela aceita meio a meio.
   category_id: string;

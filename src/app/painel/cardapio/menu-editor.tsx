@@ -25,6 +25,7 @@ export type EditorItem = {
   serves: number | null;
   country: string | null;
   priceOptions: { label: string; priceCents: number }[] | null;
+  subgroup: string | null;
   media: EditorMedia;
   translations: EditorTranslation[];
 };

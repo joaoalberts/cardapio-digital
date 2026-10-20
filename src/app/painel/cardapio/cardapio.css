@@ -371,6 +371,10 @@
     color: #8a8a8a;
     font-size: 14px;
   }
+  & .md-field > small {
+    color: #8a8a8a;
+    font-size: 13px;
+  }
   & .md-field textarea {
     resize: vertical;
   }

@@ -24,6 +24,10 @@ describe("setup.mjs: esquema da Comunidade", () => {
     expect(cols("orders")).toMatchObject({ discarded: BOOL });
   });
 
+  it("items ganha subgroup (Cardápio em lista)", () => {
+    expect(cols("items")).toMatchObject({ subgroup: TEXT });
+  });
+
   it("community_polls", () => {
     expect(cols("community_polls")).toEqual({
       uid: TEXT, restaurant_id: TEXT, template: TEXT, question: LONG, options: JSONT,
