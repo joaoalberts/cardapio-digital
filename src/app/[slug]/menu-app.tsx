@@ -1673,10 +1673,13 @@ function StoryMedia({ item, live, onEnded }: { item: MenuItem; live: boolean; on
   }, []);
   useHls(vidRef, src);
   // Saiu de cena: volta a mostrar a capa (o vídeo é descarregado e ficaria preto).
+  // Ajusta o estado durante a renderização (padrão da documentação do React), sem efeito.
   const isVid = m?.kind === "video";
-  useEffect(() => {
+  const [prevLive, setPrevLive] = useState(live);
+  if (live !== prevLive) {
+    setPrevLive(live);
     if (!live && isVid) setReady(false);
-  }, [live, isVid]);
+  }
   if (!m) return null;
   // Miniatura (a mesma da lista, quase sempre já baixada) enquanto a grande chega.
   const low = posterSrc(m, THUMB_W) ?? (m.kind === "photo" ? photoSrc(m, THUMB_W) : null);
