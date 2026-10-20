@@ -13,6 +13,7 @@ let n = 0;
 const line = (unit: number, qty = 1, origin?: PricedLine["origin"], ref?: string): PricedLine => ({
   item_id: `item-${++n}`,
   name: "Prato",
+  dough: null,
   half_item_id: null,
   half_name: null,
   option: null,

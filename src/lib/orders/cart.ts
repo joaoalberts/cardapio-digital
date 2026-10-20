@@ -11,6 +11,7 @@ export type CartLine = {
   item: string;
   option: string | null;
   half: string | null;
+  dough?: string | null; // massa da pizza (só categorias com massas)
   qty: number;
   note: string;
   claim?: string | null;
@@ -29,10 +30,12 @@ export const CART_TTL = 6 * 60 * 60 * 1000;
 // Meio a meio: os dois sabores entram em ordem fixa, então Calabresa + Margherita e
 // Margherita + Calabresa são a mesma pizza (o preço é a média, igual nos dois sentidos).
 // Cada oferta pega é uma linha própria: o registro entra na chave.
-export const lineKey = (l: Pick<CartLine, "item" | "option" | "half" | "note" | "claim">) => {
+// A massa entra na chave só quando existe: a chave das linhas sem massa é a mesma de sempre.
+export const lineKey = (l: Pick<CartLine, "item" | "option" | "half" | "note" | "claim" | "dough">) => {
   const flavors = l.half ? [l.item, l.half].sort() : [l.item, ""];
   const base = [...flavors, l.option ?? "", l.note.trim()];
-  return JSON.stringify(l.claim ? [...base, l.claim] : base);
+  const withDough = l.dough ? [...base, `massa:${l.dough}`] : base;
+  return JSON.stringify(l.claim ? [...withDough, l.claim] : withDough);
 };
 
 const cap = (n: number) => Math.max(1, Math.min(MAX_QTY, Math.floor(n)));
@@ -121,7 +124,8 @@ export function parseStoredCart(raw: string | null, now: number): CartLine[] {
       const claim = str(l.claim) && typeof l.claim_cents === "number" && str(l.claim_name)
         ? { claim: l.claim, claim_cents: l.claim_cents, claim_name: l.claim_name }
         : {};
-      cart = addLine(cart, { item: l.item, option: l.option, half: l.half, note: l.note, qty: l.qty, ...claim, ...originOf(l) });
+      const dough = str(l.dough) && l.dough ? { dough: l.dough } : {};
+      cart = addLine(cart, { item: l.item, option: l.option, half: l.half, note: l.note, qty: l.qty, ...dough, ...claim, ...originOf(l) });
     }
     return cart;
   } catch {

@@ -47,7 +47,7 @@ export const TABLES = {
   members: [text("restaurant_id"), text("user_id"), text("role"), created],
   categories: [
     id, text("restaurant_id"), text("name"), long("description"), num("position"),
-    bool("active"), text("available_from"), text("available_to"), bool("half_half"), bool("special"), created,
+    bool("active"), text("available_from"), text("available_to"), bool("half_half"), json("doughs"), bool("special"), created,
   ],
   items: [
     id, text("restaurant_id"), text("category_id"), text("name"), long("description"),

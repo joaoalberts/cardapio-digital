@@ -87,8 +87,8 @@ describe("priceCart", () => {
       ok: true,
       total_cents: 3490 * 2 + 3590,
       lines: [
-        { item_id: "smash", name: "Smash", half_item_id: null, half_name: null, option: null, qty: 2, unit_cents: 3490, note: "sem picles" },
-        { item_id: "bacon", name: "Bacon", half_item_id: null, half_name: null, option: null, qty: 1, unit_cents: 3590, note: "" },
+        { item_id: "smash", name: "Smash", half_item_id: null, half_name: null, option: null, dough: null, qty: 2, unit_cents: 3490, note: "sem picles" },
+        { item_id: "bacon", name: "Bacon", half_item_id: null, half_name: null, option: null, dough: null, qty: 1, unit_cents: 3590, note: "" },
       ],
     });
   });
@@ -199,5 +199,47 @@ describe("oferta relâmpago: um registro, várias linhas", () => {
     const claims = new Map([["c1", { item_id: "rainha", item_name: "Pizza da Rainha", unit_cents: 6900, qty_max: 1 }]]);
     const r = priceCart(m, [{ item: "rainha", claim: "c1", qty: 1 }, { item: "rainha", claim: "c1", qty: 1, note: "outra" }], NOON, claims);
     expect(r).toEqual({ ok: false, errors: [{ index: 1, item: "rainha", reason: "special" }] });
+  });
+});
+
+describe("priceCart: massa", () => {
+  const doughs = [{ label: "Tradicional", extra_cents: 0 }, { label: "Fina", extra_cents: 500 }];
+  const dmenu = (): PublicMenu => ({
+    restaurant: { id: "r1", timezone: "America/Sao_Paulo", orders_enabled: true } as PublicMenu["restaurant"],
+    categories: [
+      { id: "c-pz", name: "Pizzas", items: [
+        item("mussarela", "c-pz", true, { price_cents: 6900, doughs }),
+        item("portuguesa", "c-pz", true, { price_cents: 7900, doughs }),
+      ] },
+      { id: "c-bg", name: "Burgers", items: [item("smash", "c-bg", false, { price_cents: 3490 })] },
+    ],
+  });
+  it("a massa soma o extra ao preço e vai na linha", () => {
+    const r = priceCart(dmenu(), [{ item: "mussarela", dough: "Fina", qty: 1 }], NOON);
+    expect(r.ok && r.lines[0]).toMatchObject({ unit_cents: 7400, dough: "Fina" });
+  });
+  it("sem massa vale a primeira (Tradicional, 6900)", () => {
+    const r = priceCart(dmenu(), [{ item: "mussarela", qty: 1 }], NOON);
+    expect(r.ok && r.lines[0]).toMatchObject({ unit_cents: 6900, dough: "Tradicional" });
+  });
+  it("meio a meio: o extra entra uma vez, sobre a média", () => {
+    const r = priceCart(dmenu(), [{ item: "mussarela", half: "portuguesa", dough: "Fina", qty: 1 }], NOON);
+    expect(r.ok && r.lines[0].unit_cents).toBe(7400 + 500); // média 7400 + 500
+  });
+  it("massa que não existe recusa com dough", () => {
+    expect(priceCart(dmenu(), [{ item: "mussarela", dough: "Grossa", qty: 1 }], NOON)).toEqual({ ok: false, errors: [{ index: 0, item: "mussarela", reason: "dough" }] });
+  });
+  it("prato sem massas com dough recusa com dough; sem dough segue com dough null", () => {
+    expect(priceCart(dmenu(), [{ item: "smash", dough: "Fina", qty: 1 }], NOON)).toEqual({ ok: false, errors: [{ index: 0, item: "smash", reason: "dough" }] });
+    const r = priceCart(dmenu(), [{ item: "smash", qty: 1 }], NOON);
+    expect(r.ok && r.lines[0].dough).toBeNull();
+  });
+  it("o total soma o extra vezes a quantidade", () => {
+    const r = priceCart(dmenu(), [{ item: "mussarela", dough: "Fina", qty: 3 }, { item: "smash", qty: 1 }], NOON);
+    expect(r.ok && r.total_cents).toBe(7400 * 3 + 3490);
+  });
+  it("oferta relâmpago com massa é recusada como special", () => {
+    const claims = new Map([["cl", { item_id: "smash", item_name: "Smash", unit_cents: 1000, qty_max: 2 }]]);
+    expect(priceCart(dmenu(), [{ item: "smash", claim: "cl", dough: "Fina", qty: 1 }], NOON, claims)).toEqual({ ok: false, errors: [{ index: 0, item: "smash", reason: "special" }] });
   });
 });

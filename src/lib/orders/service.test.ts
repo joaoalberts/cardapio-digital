@@ -305,6 +305,22 @@ describe("origem da Comunidade no pedido", () => {
     });
   });
 
+  describe("parseCreateInput: massa", () => {
+    const line = (dough: unknown) => parseCreateInput(body({ lines: [{ item: ITEM, qty: 1, dough }] }));
+    it("aceita texto de até 20 caracteres", () => {
+      expect(line("Fina")?.lines[0].dough).toBe("Fina");
+      expect(line("a".repeat(20))).not.toBeNull();
+    });
+    it("recusa número, objeto ou texto maior", () => {
+      expect(line(3)).toBeNull();
+      expect(line({})).toBeNull();
+      expect(line("a".repeat(21))).toBeNull();
+    });
+    it("sem massa a linha segue sem o campo", () => {
+      expect(parseCreateInput(body({ lines: [{ item: ITEM, qty: 1 }] }))?.lines[0]).not.toHaveProperty("dough");
+    });
+  });
+
   it("mantém a origem com origin_at = agora − 1 h e enquete do restaurante", async () => {
     const s = seeded();
     expect((await createOrder(s.deps, "forno", body({ lines: [palco(), { item: ITEM2, qty: 1 }] }))).ok).toBe(true);

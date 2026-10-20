@@ -54,7 +54,7 @@ type OrderApi = {
   syncMenu: (menu: PublicMenu) => void;
   setTable: (t: Table | null) => void;
   setViewerOpen: (open: boolean) => void;
-  unit: (l: Pick<CartLine, "item" | "option" | "half" | "claim_cents">) => number | null;
+  unit: (l: Pick<CartLine, "item" | "option" | "half" | "dough" | "claim_cents">) => number | null;
   itemById: (id: string) => MenuItem | undefined;
   inCart: (itemId: string) => number;
   // quiet: sem o aviso "Adicionado" (a Comunidade mostra "✓ No pedido" e a ilha dela).
@@ -332,6 +332,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       const name = (first && (index?.items.get(first.item)?.item.name ?? first.claim_name)) || "";
       dirty.current = true;
       setLines((c) => c.filter((l) => !badKeys.has(l.key)));
+      if (res.errors.some((e) => e.reason === "dough")) return { ok: false, message: tr("oDoughGone", lang) };
       if (res.errors.some((e) => e.reason === "special")) return { ok: false, message: tr("oSpecialInvalid", lang) };
       return { ok: false, message: tf("oErrGone", lang, { name }) };
     }

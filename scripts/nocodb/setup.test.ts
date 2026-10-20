@@ -28,6 +28,10 @@ describe("setup.mjs: esquema da Comunidade", () => {
     expect(cols("items")).toMatchObject({ subgroup: TEXT });
   });
 
+  it("categories ganha doughs (massa da pizza)", () => {
+    expect(cols("categories")).toMatchObject({ doughs: JSONT });
+  });
+
   it("community_polls", () => {
     expect(cols("community_polls")).toEqual({
       uid: TEXT, restaurant_id: TEXT, template: TEXT, question: LONG, options: JSONT,

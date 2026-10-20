@@ -196,3 +196,27 @@ describe("origem da Comunidade no carrinho", () => {
     expect(originOf(restoreLine(cart, removed!)[0])).toEqual(["comunidade_palco", POLL, 5000]);
   });
 });
+
+describe("carrinho: massa", () => {
+  const base: NewLine = { item: "margherita", option: null, half: null, qty: 1, note: "" };
+  it("a mesma pizza com massas diferentes são linhas diferentes", () => {
+    const c = addLine(addLine([], { ...base, dough: "Fina" }), { ...base, dough: "Tradicional" });
+    expect(c).toHaveLength(2);
+    expect(addLine(c, { ...base, dough: "Fina" })[0].qty).toBe(2);
+  });
+  it("meio a meio com a mesma massa nos dois sentidos é a mesma chave", () => {
+    const a = { ...base, half: "calabresa", dough: "Fina" };
+    expect(lineKey(a)).toBe(lineKey({ ...a, item: "calabresa", half: "margherita" }));
+  });
+  it("a chave de linha sem massa não muda", () => {
+    expect(lineKey({ item: "x", option: null, half: null, note: "" })).toBe(JSON.stringify(["x", "", "", ""]));
+    expect(lineKey({ item: "x", option: null, half: null, note: "", dough: null })).toBe(JSON.stringify(["x", "", "", ""]));
+  });
+  it("parseStoredCart mantém a massa e descarta a que não é texto", () => {
+    const raw = (dough: unknown) => JSON.stringify({ v: 1, savedAt: 1000, lines: [{ ...base, dough }] });
+    expect(parseStoredCart(raw("Fina"), 1000)[0].dough).toBe("Fina");
+    expect(parseStoredCart(raw(7), 1000)[0].dough ?? null).toBeNull();
+    expect(parseStoredCart(raw(undefined), 1000)[0].dough ?? null).toBeNull();
+  });
+});
+

@@ -8,6 +8,8 @@ export type MenuMedia = {
   poster_path: string | null;
 };
 
+export type Dough = { label: string; extra_cents: number };
+
 export type MenuItem = {
   id: string;
   name: string;
@@ -26,6 +28,8 @@ export type MenuItem = {
   // Categoria real do prato (mesmo quando aparece em "Destaques") e se ela aceita meio a meio.
   category_id: string;
   half_half: boolean;
+  // Massas da pizza (só categorias com meio a meio); a primeira é a padrão. Ausente = sem escolha.
+  doughs?: Dough[] | null;
   // Só nos produtos especiais (oferta relâmpago).
   special?: SpecialInfo | null;
 };

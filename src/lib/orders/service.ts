@@ -83,14 +83,16 @@ export function parseCreateInput(body: unknown): CreateInput | null {
     const option = l.option ?? null;
     const half = l.half ?? null;
     const note = l.note ?? null;
+    const dough = l.dough ?? null;
     const claim = l.claim ?? null;
     if (!isUuid(l.item) || typeof l.qty !== "number") return null;
     if (claim !== null && !isUuid(claim)) return null;
     if (option !== null && (typeof option !== "string" || option.length > 40)) return null;
     if (half !== null && !isUuid(half)) return null;
+    if (dough !== null && (typeof dough !== "string" || dough.length > 20)) return null;
     if (note !== null && (typeof note !== "string" || note.length > 1000)) return null;
     const line: CartLineInput = claim ? { item: l.item, option, half, qty: l.qty, note, claim } : { item: l.item, option, half, qty: l.qty, note };
-    lines.push({ ...line, ...parseOrigin(l) });
+    lines.push({ ...line, ...(dough !== null ? { dough } : {}), ...parseOrigin(l) });
   }
   return { mesa: b.mesa, device: b.device, ref: b.ref, lines };
 }

@@ -4,6 +4,7 @@ import * as db from "@/lib/db/nocodb";
 import type { MenuCategory, MenuItem, MenuMedia, MenuRestaurant, OpeningHours, PublicMenu } from "./types";
 import { specialInfo } from "./specials";
 import { parseSubgroup } from "./list";
+import { parseDoughs } from "@/lib/orders/dough";
 
 export function menuTag(slug: string) {
   return `menu:${slug}`;
@@ -32,7 +33,7 @@ type R = Omit<MenuRestaurant, "cover" | "language"> & {
   show_payments: boolean;
   orders_enabled: boolean;
 };
-type C = { id: string; name: string; description: string | null; available_from: string | null; available_to: string | null; active: boolean; half_half: boolean; special?: boolean };
+type C = { id: string; name: string; description: string | null; available_from: string | null; available_to: string | null; active: boolean; half_half: boolean; special?: boolean; doughs?: unknown };
 type I = Omit<MenuItem, "media" | "special"> & {
   category_id: string;
   active: boolean;
@@ -109,6 +110,8 @@ export async function getPublicMenu(slug: string, lang = "pt-BR"): Promise<Publi
       media: ready.filter((m) => m.item_id === i.id).map(media),
       category_id: c.id,
       half_half: !!c.half_half,
+      // Só pizza (categoria com meio a meio) tem escolha de massa. Coluna ausente no banco = sem massa.
+      doughs: c.half_half ? parseDoughs(c.doughs) : null,
     };
   };
 
@@ -137,7 +140,7 @@ export async function getPublicMenu(slug: string, lang = "pt-BR"): Promise<Publi
         name: sc.name,
         items: items
           .filter((i) => i.category_id === sc.id && i.active && i.promo_price_cents != null && i.promo_price_cents < (i.price_cents ?? 0))
-          .map((i) => ({ ...toItem(i, sc), featured: false, half_half: false, price_options: null, special: specialInfo(i) })),
+          .map((i) => ({ ...toItem(i, sc), featured: false, half_half: false, doughs: null, price_options: null, special: specialInfo(i) })),
       }
     : null;
 
