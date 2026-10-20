@@ -24,6 +24,19 @@ export function parseDoughs(raw: unknown): Dough[] | null {
   return out;
 }
 
+// Validação do que o dono manda no painel: linhas sem nome são ignoradas; o resto passa por parseDoughs.
+export function validateDoughs(raw: unknown): { doughs: Dough[] } | { error: string } {
+  const list = Array.isArray(raw) ? raw : [];
+  const rows = list.filter((d) => d && typeof d === "object" && String((d as { label?: unknown }).label ?? "").trim());
+  const badExtra = rows.some((d) => {
+    const e = (d as { extra_cents?: unknown }).extra_cents ?? 0;
+    return typeof e !== "number" || !Number.isInteger(e) || e < 0 || e > DOUGH_EXTRA_MAX;
+  });
+  if (badExtra) return { error: "O valor extra da massa vai de R$ 0 a R$ 50." };
+  const doughs = parseDoughs(rows);
+  return doughs ? { doughs } : { error: "Informe de 2 a 4 tipos de massa, com nomes diferentes." };
+}
+
 export type DoughResult = { ok: true; dough: string | null; extra: number } | { ok: false };
 
 // Prato sem massas só aceita linha sem massa. Com massas, linha sem massa (carrinho antigo,

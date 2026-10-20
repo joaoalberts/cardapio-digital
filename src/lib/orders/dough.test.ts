@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MenuItem } from "@/lib/menu/types";
-import { parseDoughs, resolveDough } from "./dough";
+import { parseDoughs, resolveDough, validateDoughs } from "./dough";
 
 const pizza = (doughs: MenuItem["doughs"]) => ({ id: "p", doughs }) as MenuItem;
 const base = [{ label: "Tradicional", extra_cents: 0 }, { label: "Fina", extra_cents: 500 }];
@@ -57,5 +57,27 @@ describe("resolveDough", () => {
     expect(resolveDough(pizza(null), undefined)).toEqual({ ok: true, dough: null, extra: 0 });
     expect(resolveDough(pizza(undefined), null)).toEqual({ ok: true, dough: null, extra: 0 });
     expect(resolveDough(pizza(null), "Fina")).toEqual({ ok: false });
+  });
+});
+
+describe("validateDoughs (cadastro pelo dono)", () => {
+  const ok = [{ label: "Tradicional", extra_cents: 0 }, { label: "Fina", extra_cents: 500 }];
+  it("aceita de 2 a 4 massas e ignora linhas sem nome", () => {
+    expect(validateDoughs([...ok, { label: "  ", extra_cents: 0 }])).toEqual({ doughs: ok });
+  });
+  it("menos de 2 nomes válidos ou nomes repetidos: erro dos tipos", () => {
+    const msg = "Informe de 2 a 4 tipos de massa, com nomes diferentes.";
+    expect(validateDoughs([ok[0], { label: "", extra_cents: 0 }])).toEqual({ error: msg });
+    expect(validateDoughs([ok[0], { label: "tradicional", extra_cents: 0 }])).toEqual({ error: msg });
+    expect(validateDoughs([...ok, ...["A", "B", "C"].map((label) => ({ label, extra_cents: 0 }))])).toEqual({ error: msg });
+  });
+  it("extra fora de R$ 0 a R$ 50: erro do valor", () => {
+    const msg = "O valor extra da massa vai de R$ 0 a R$ 50.";
+    expect(validateDoughs([ok[0], { label: "Fina", extra_cents: 5001 }])).toEqual({ error: msg });
+    expect(validateDoughs([ok[0], { label: "Fina", extra_cents: -1 }])).toEqual({ error: msg });
+    expect(validateDoughs([ok[0], { label: "Fina", extra_cents: 5000 }])).toHaveProperty("doughs");
+  });
+  it("lixo (não lista) vira erro", () => {
+    expect(validateDoughs("x")).toHaveProperty("error");
   });
 });

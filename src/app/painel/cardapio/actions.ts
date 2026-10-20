@@ -5,6 +5,8 @@ import * as db from "@/lib/db/nocodb";
 import { refreshMenu } from "@/lib/restaurants";
 import { TAG_IDS } from "@/lib/menu/tags";
 import { parseSubgroup } from "@/lib/menu/list";
+import { parseDoughs, validateDoughs } from "@/lib/orders/dough";
+import type { Dough } from "@/lib/menu/types";
 import { suggestTranslation, translationEnabled, type Texts } from "@/lib/translate";
 import { autoTranslate } from "@/lib/menu/auto-translate";
 import { createUpload, deleteAsset, muxEnabled, videoState, type VideoState } from "@/lib/mux";
@@ -26,7 +28,7 @@ const okId = (id: unknown): id is string => typeof id === "string" && UUIDS.test
 const clean = (s: unknown, max: number) => String(s ?? "").trim().slice(0, max);
 
 
-type CatRow = { Id: number; id: string; name: string; description: string | null; half_half?: boolean };
+type CatRow = { Id: number; id: string; name: string; description: string | null; half_half?: boolean; doughs?: unknown };
 type ItemRow = {
   Id: number;
   id: string;
@@ -77,6 +79,8 @@ export type CategoryInput = {
   availableTo?: string | null;
   // Pizza meio a meio: o cliente escolhe 2 sabores desta categoria (preço = média).
   halfHalf?: boolean;
+  // Massa da pizza (só vale com meio a meio): undefined = não mexe; null = sem escolha de massa.
+  doughs?: Dough[] | null;
   // undefined = não mexe; null = remove; objeto = foto ou vídeo novo já enviado
   media?: MediaInput | null;
 };
@@ -95,9 +99,22 @@ export async function updateCategory(restaurantId: string, id: string, input: Ca
   if (!okId(id) || !(await isMember(restaurantId))) return { error: DENIED };
   const before = await db.first<CatRow>("categories", { uid: id, restaurant_id: restaurantId });
   if (!before) return { error: FAIL };
+  const halfHalf = input.halfHalf !== undefined ? !!input.halfHalf : !!before.half_half;
+  // Massa: desligar o meio a meio ou o interruptor grava null; ligado, valida de 2 a 4 massas.
+  let doughs: Dough[] | null | undefined;
+  if (input.doughs !== undefined || (input.halfHalf === false && before.doughs != null)) {
+    if (!halfHalf || input.doughs == null) doughs = null;
+    else {
+      const v = validateDoughs(input.doughs);
+      if ("error" in v) return { error: v.error };
+      doughs = v.doughs;
+    }
+  }
   const row: Record<string, unknown> = { name: n, active: !!input.active };
   // Só grava quando muda: assim salvar a categoria funciona antes de a coluna half_half existir.
   if (input.halfHalf !== undefined && !!before.half_half !== !!input.halfHalf) row.half_half = !!input.halfHalf;
+  // Mesma ideia da coluna doughs: só grava quando muda (parseDoughs normaliza o que já estava salvo).
+  if (doughs !== undefined && JSON.stringify(parseDoughs(before.doughs)) !== JSON.stringify(doughs)) row.doughs = doughs;
   const description = input.description === undefined ? undefined : clean(input.description, 300);
   if (description !== undefined) {
     Object.assign(row, {

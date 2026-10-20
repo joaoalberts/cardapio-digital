@@ -3,6 +3,7 @@
 import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatPrice } from "@/lib/menu/media";
+import type { Dough } from "@/lib/menu/types";
 import { createCategory, reorder } from "./actions";
 import { CategoryModal, ItemModal } from "./modals";
 import { LinkModal, SettingsModal } from "./menu-modals";
@@ -38,6 +39,7 @@ export type EditorCategory = {
   availableFrom: string | null;
   availableTo: string | null;
   halfHalf: boolean;
+  doughs: Dough[] | null;
   media: EditorMedia;
   translations: EditorTranslation[];
   items: EditorItem[];

@@ -523,6 +523,16 @@ export function CategoryModal({
   const [from, setFrom] = useState(category.availableFrom ?? "11:00");
   const [to, setTo] = useState(category.availableTo ?? "15:00");
   const [halfHalf, setHalfHalf] = useState(category.halfHalf);
+  // Massa da pizza: começa com Tradicional e Fina (R$ 0) quando o dono liga pela primeira vez.
+  type DoughRow = { label: string; extra: string };
+  const [doughOn, setDoughOn] = useState(!!category.doughs);
+  const [doughs, setDoughs] = useState<DoughRow[]>(
+    category.doughs?.map((d) => ({ label: d.label, extra: d.extra_cents ? money(d.extra_cents) : "" })) ?? [
+      { label: "Tradicional", extra: "" },
+      { label: "Fina", extra: "" },
+    ],
+  );
+  const setDough = (i: number, patch: Partial<DoughRow>) => setDoughs((all) => all.map((x, k) => (k === i ? { ...x, ...patch } : x)));
   const [rows, setRows] = useState<Record<string, EditorTranslation>>(() => seedIfOpen(category.translations));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -543,6 +553,7 @@ export function CategoryModal({
       availableFrom: timed ? from : null,
       availableTo: timed ? to : null,
       halfHalf,
+      doughs: halfHalf && doughOn ? doughs.map((d) => ({ label: d.label, extra_cents: parseMoney(d.extra) ?? 0 })) : null,
       media: slot.value,
     });
     if (!res.error && Object.keys(rows).length) {
@@ -592,6 +603,37 @@ export function CategoryModal({
       <Check checked={halfHalf} onChange={setHalfHalf}>
         Aceita meio a meio (o cliente escolhe 2 sabores desta categoria; cobra a média)
       </Check>
+      {halfHalf && (
+        <div className="md-field">
+          <Check checked={doughOn} onChange={setDoughOn}>
+            Escolha de massa
+          </Check>
+          {doughOn && (
+            <>
+              {doughs.map((d, i) => (
+                <div key={i} className="md-opt">
+                  <input aria-label={`Nome da massa ${i + 1}`} placeholder="Nome" value={d.label} maxLength={20} onChange={(e) => setDough(i, { label: e.target.value })} />
+                  <Money value={d.extra} onChange={(v) => setDough(i, { extra: v })} label={`Valor extra da massa ${i + 1}`} />
+                  <button
+                    className="md-x"
+                    aria-label={`Remover massa ${i + 1}`}
+                    disabled={doughs.length <= 2}
+                    onClick={() => setDoughs((all) => all.filter((_, k) => k !== i))}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {doughs.length < 4 && (
+                <button className="md-link" onClick={() => setDoughs((all) => [...all, { label: "", extra: "" }])}>
+                  + Massa
+                </button>
+              )}
+              <p className="md-note">O cliente escolhe a massa ao pedir, nos stories e na lista. O valor extra entra no preço da pizza.</p>
+            </>
+          )}
+        </div>
+      )}
       <label className="md-field">
         <span>Observação</span>
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} rows={2} />

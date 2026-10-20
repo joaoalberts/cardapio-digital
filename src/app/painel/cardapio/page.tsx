@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { fontVariables } from "@/lib/menu/fonts";
 import { mediaUrl } from "@/lib/menu/media";
 import { parseSubgroup } from "@/lib/menu/list";
+import { parseDoughs } from "@/lib/orders/dough";
 import * as db from "@/lib/db/nocodb";
 import { translationEnabled } from "@/lib/translate";
 import { currentRestaurant } from "../current";
@@ -35,7 +36,7 @@ async function Cardapio() {
     wifi_name: string | null;
     wifi_password: string | null;
   };
-  type Cat = { id: string; name: string; active: boolean; description: string | null; available_from: string | null; available_to: string | null; half_half: boolean; special?: boolean };
+  type Cat = { id: string; name: string; active: boolean; description: string | null; available_from: string | null; available_to: string | null; half_half: boolean; doughs?: unknown; special?: boolean };
   type It = {
     id: string; category_id: string; name: string; description: string | null; price_cents: number;
     promo_price_cents: number | null; tags: string[] | null; active: boolean; featured: boolean; hide_price: boolean;
@@ -78,6 +79,7 @@ async function Cardapio() {
     availableFrom: hhmm(c.available_from),
     availableTo: hhmm(c.available_to),
     halfHalf: !!c.half_half,
+    doughs: c.half_half ? parseDoughs(c.doughs) : null,
     media: toMedia(media.findLast((x) => x.category_id === c.id)),
     translations: translations.filter((t) => t.category_id === c.id).map(pick),
     items: items
