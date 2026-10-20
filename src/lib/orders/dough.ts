@@ -39,8 +39,8 @@ export function validateDoughs(raw: unknown): { doughs: Dough[] } | { error: str
 
 export type DoughResult = { ok: true; dough: string | null; extra: number } | { ok: false };
 
-// Prato sem massas só aceita linha sem massa. Com massas, linha sem massa (carrinho antigo,
-// "Pedir também" da Comunidade) usa a primeira; massa que não existe mais é recusada.
+// Prato sem massas só aceita linha sem massa. Com massas, linha sem massa (carrinho antigo)
+// usa a primeira; massa que não existe mais é recusada.
 export function resolveDough(item: MenuItem, dough: string | null | undefined): DoughResult {
   const list = item.doughs;
   if (!list?.length) return dough == null ? { ok: true, dough: null, extra: 0 } : { ok: false };

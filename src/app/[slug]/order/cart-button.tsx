@@ -6,15 +6,14 @@ import { cartCount, useOrder } from "./order-context";
 // Carrinho no topo (capa e stories): leva direto ao fechamento do pedido, mesmo no meio
 // da escolha de uma metade ou da edição. É também o alvo da miniatura que "voa" ao adicionar.
 // Só um carrinho fica com o islandRef (o alvo do voo): o do story com ele aberto, o da capa
-// com ele fechado. island={false} tira o botão dessa disputa (o carrinho da camada da
-// Comunidade fica sempre montado e o "Pedir também" de lá voa até ele direto).
-export function CartButton({ inViewer = false, island = true, className }: { inViewer?: boolean; island?: boolean; className: string }) {
+// com ele fechado.
+export function CartButton({ inViewer = false, className }: { inViewer?: boolean; className: string }) {
   const { islandRef, ...o } = useOrder();
   if (!o.enabled) return null;
   const n = cartCount(o.lines);
   return (
     <button
-      ref={island && o.viewerOpen === inViewer ? islandRef : undefined}
+      ref={o.viewerOpen === inViewer ? islandRef : undefined}
       className={`o-cartbtn ${className}`}
       onClick={() => o.openCart(n || !o.orders.length ? "cart" : "orders")}
       aria-label={tr("oGoCart", o.lang)}
@@ -24,7 +23,7 @@ export function CartButton({ inViewer = false, island = true, className }: { inV
         <circle cx="9.6" cy="19.4" r="1.3" />
         <circle cx="17" cy="19.4" r="1.3" />
       </svg>
-      {/* key: o selo remonta a cada mudança (a Comunidade faz o número pular). */}
+      {/* key: o selo remonta a cada mudança (o número pula). */}
       {n > 0 && <b key={n} className="o-cartbtn-n">{n}</b>}
     </button>
   );

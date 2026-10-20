@@ -12,7 +12,6 @@ import "@/styles/font-themes.css";
 import "./menu.css";
 import "./order/order.css";
 import "./order/special.css";
-import "./comunidade/comunidade.css";
 import "./apareca/apareca.css";
 import "./list/list.css";
 

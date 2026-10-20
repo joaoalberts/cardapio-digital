@@ -1,5 +1,5 @@
-// Perfil e a Comunidade: o @ do Instagram, o nome, a logo, a cor e o horário estão na
-// cabeça da Comunidade (cache de 5 min). Salvar no Perfil invalida comunidade:<slug> na hora.
+// Perfil e o telão: o @ do Instagram, o nome, a logo, a cor e o horário estão na
+// cabeça do telão (cache de 5 min). Salvar no Perfil invalida tv:<slug> na hora.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
@@ -22,8 +22,8 @@ const week = Array.from({ length: 7 }, () => [{ open: "18:00", close: "23:00" }]
 
 beforeEach(() => h.updateTag.mockClear());
 
-describe("Perfil invalida a cabeça da Comunidade", () => {
-  it("salvar o perfil (Instagram) chama updateTag('comunidade:<slug>') além do cardápio", async () => {
+describe("Perfil invalida a cabeça do telão", () => {
+  it("salvar o perfil (Instagram) chama updateTag('tv:<slug>') além do cardápio", async () => {
     const res = await actions.saveProfile(RID, {
       name: "Forno",
       phone: "",
@@ -41,14 +41,14 @@ describe("Perfil invalida a cabeça da Comunidade", () => {
     });
     expect(res).toEqual({});
     expect(h.updateTag).toHaveBeenCalledWith("menu:forno");
-    expect(h.updateTag).toHaveBeenCalledWith("comunidade:forno");
+    expect(h.updateTag).toHaveBeenCalledWith("tv:forno");
   });
 
-  it("logo, horário e cor também (estão no telão e no story)", async () => {
+  it("logo, horário e cor também (estão no telão)", async () => {
     await actions.setLogo(RID, null);
     await actions.saveHours(RID, week);
     await actions.saveMenuSettings(RID, { brandColor: "#112233", wifiName: "", wifiPassword: "" });
-    expect(h.updateTag.mock.calls.filter(([t]) => t === "comunidade:forno")).toHaveLength(3);
+    expect(h.updateTag.mock.calls.filter(([t]) => t === "tv:forno")).toHaveLength(3);
   });
 
   it("erro de validação não invalida nada", async () => {

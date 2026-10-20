@@ -22,8 +22,6 @@ function fakeDb() {
   const tables: Record<string, Record<string, unknown>[]> = {
     orders: [],
     special_claims: [],
-    community_polls: [],
-    community_posts: [],
     dining_tables: [
       { uid: U(1), id: U(1), restaurant_id: "r1", label: "Mesa 7", code: "ABC234", active: true },
       { uid: U(2), id: U(2), restaurant_id: "r1", label: "Mesa 8", code: "OFF234", active: false },
@@ -122,7 +120,7 @@ describe("reenvio e corrida", () => {
     const [a, b] = await Promise.all([createOrder(s.deps, "forno", body()), createOrder(s.deps, "forno", body())]);
     expect(a.ok && b.ok && a.order.id === b.order.id).toBe(true);
     expect(await listOpenOrders({ db: s.db }, "r1")).toHaveLength(1);
-    // O pedido fechado no descarte fica marcado e não entra no placar da Comunidade.
+    // O pedido fechado no descarte fica marcado.
     expect(s.tables.orders.map((o) => [o.open, o.discarded ?? false])).toEqual([[true, false], [false, true]]);
   });
   it("reenvio de pedido já gravado volta o pedido mesmo com pedidos desligados", async () => {
@@ -270,109 +268,18 @@ describe("oferta relâmpago no pedido", () => {
   });
 });
 
-describe("origem da Comunidade no pedido", () => {
-  const POLL = U(601), POLL_B = U(602), POST = U(611);
-  const HOUR = 3_600_000;
-  const at = (ms: number) => NOON.getTime() + ms;
-  const palco = (over: Record<string, unknown> = {}) => ({ item: ITEM, qty: 1, note: "", origin: "comunidade_palco", origin_ref: POLL, origin_at: at(-HOUR), ...over });
-  const seeded = () => {
-    const s = setup();
-    s.tables.community_polls.push({ uid: POLL, id: POLL, restaurant_id: "r1" }, { uid: POLL_B, id: POLL_B, restaurant_id: "r2" });
-    s.tables.community_posts.push({ uid: POST, id: POST, restaurant_id: "r1", status: "approved" });
-    return s;
-  };
-  const saved = (s: ReturnType<typeof seeded>) => (s.tables.orders[0].lines as Record<string, unknown>[]);
-
-  describe("parseCreateInput", () => {
-    it("aceita a origem válida", () => {
-      const r = parseCreateInput(body({ lines: [palco()] }));
-      expect(r?.lines[0]).toEqual({ item: ITEM, option: null, half: null, qty: 1, note: "", origin: "comunidade_palco", origin_ref: POLL, origin_at: at(-HOUR) });
-    });
-    it("descarta a origem (e mantém a linha) com enum desconhecido, origin_ref não uuid ou origin_at inválido", () => {
-      for (const over of [
-        { origin: "comunidade_vip" },
-        { origin: "Comunidade_Palco" },
-        { origin_ref: "abc" },
-        { origin_ref: "00000000-0000-4000-8000-00000000060" },
-        { origin_ref: null },
-        { origin_at: "123" },
-        { origin_at: Number.NaN },
-        { origin_at: null },
-      ]) {
-        const r = parseCreateInput(body({ lines: [palco(over)] }));
-        expect(r?.lines).toEqual([{ item: ITEM, option: null, half: null, qty: 1, note: "" }]);
-      }
-    });
+describe("parseCreateInput: massa", () => {
+  const line = (dough: unknown) => parseCreateInput(body({ lines: [{ item: ITEM, qty: 1, dough }] }));
+  it("aceita texto de até 20 caracteres", () => {
+    expect(line("Fina")?.lines[0].dough).toBe("Fina");
+    expect(line("a".repeat(20))).not.toBeNull();
   });
-
-  describe("parseCreateInput: massa", () => {
-    const line = (dough: unknown) => parseCreateInput(body({ lines: [{ item: ITEM, qty: 1, dough }] }));
-    it("aceita texto de até 20 caracteres", () => {
-      expect(line("Fina")?.lines[0].dough).toBe("Fina");
-      expect(line("a".repeat(20))).not.toBeNull();
-    });
-    it("recusa número, objeto ou texto maior", () => {
-      expect(line(3)).toBeNull();
-      expect(line({})).toBeNull();
-      expect(line("a".repeat(21))).toBeNull();
-    });
-    it("sem massa a linha segue sem o campo", () => {
-      expect(parseCreateInput(body({ lines: [{ item: ITEM, qty: 1 }] }))?.lines[0]).not.toHaveProperty("dough");
-    });
+  it("recusa número, objeto ou texto maior", () => {
+    expect(line(3)).toBeNull();
+    expect(line({})).toBeNull();
+    expect(line("a".repeat(21))).toBeNull();
   });
-
-  it("mantém a origem com origin_at = agora − 1 h e enquete do restaurante", async () => {
-    const s = seeded();
-    expect((await createOrder(s.deps, "forno", body({ lines: [palco(), { item: ITEM2, qty: 1 }] }))).ok).toBe(true);
-    expect(saved(s)[0]).toMatchObject({ item_id: ITEM, origin: "comunidade_palco", origin_ref: POLL });
-    expect("origin_at" in saved(s)[0]).toBe(false);
-    expect("origin" in saved(s)[1]).toBe(false); // linha que não nasceu na Comunidade não conta como dela
-  });
-
-  it("descarta com origin_at = agora − 2 h − 1 s e mantém em agora − 2 h", async () => {
-    const s = seeded();
-    await createOrder(s.deps, "forno", body({ lines: [palco({ origin_at: at(-2 * HOUR - 1000) }), { ...palco({ origin_at: at(-2 * HOUR) }), item: ITEM2 }] }));
-    expect("origin" in saved(s)[0]).toBe(false);
-    expect("origin_ref" in saved(s)[0]).toBe(false);
-    expect(saved(s)[1]).toMatchObject({ item_id: ITEM2, origin: "comunidade_palco", origin_ref: POLL });
-  });
-
-  it("descarta com origin_at no futuro (> agora + 1 min); relógio do celular 30 s adiantado passa", async () => {
-    const s = seeded();
-    await createOrder(s.deps, "forno", body({ lines: [palco({ origin_at: at(61_000) }), { ...palco({ origin_at: at(30_000) }), item: ITEM2 }] }));
-    expect("origin" in saved(s)[0]).toBe(false);
-    expect(saved(s)[1]).toMatchObject({ origin: "comunidade_palco" });
-  });
-
-  it("descarta com origin_ref de enquete de outro restaurante, ou que não existe", async () => {
-    const s = seeded();
-    const r = await createOrder(s.deps, "forno", body({ lines: [palco({ origin_ref: POLL_B }), { ...palco({ origin_ref: U(699) }), item: ITEM2 }] }));
-    expect(r.ok).toBe(true); // a origem cai em silêncio; o pedido segue
-    expect(saved(s).map((l) => "origin" in l || "origin_ref" in l)).toEqual([false, false]);
-  });
-
-  it("comunidade_mural confere em community_posts e comunidade_palco em community_polls", async () => {
-    const s = seeded();
-    await createOrder(s.deps, "forno", body({
-      lines: [
-        palco({ origin: "comunidade_mural", origin_ref: POST }),
-        { ...palco({ origin: "comunidade_mural", origin_ref: POLL }), item: ITEM2 }, // id de enquete passado como post
-        { ...palco({ origin: "comunidade_palco", origin_ref: POST }), note: "x" }, // id de post passado como enquete
-      ],
-    }));
-    expect(saved(s).map((l) => l.origin ?? null)).toEqual(["comunidade_mural", null, null]);
-  });
-
-  it("confere cada origin_ref uma vez só", async () => {
-    const s = seeded();
-    await createOrder(s.deps, "forno", body({ lines: [palco(), { ...palco(), item: ITEM2 }, { ...palco(), note: "x" }] }));
-    expect(s.firsts.filter((t) => t === "community_polls")).toHaveLength(1);
-    expect(saved(s).every((l) => l.origin === "comunidade_palco")).toBe(true);
-  });
-
-  it("sem nenhuma origem, não consulta as tabelas da Comunidade", async () => {
-    const s = seeded();
-    await createOrder(s.deps, "forno", body());
-    expect(s.firsts.some((t) => t.startsWith("community_"))).toBe(false);
+  it("sem massa a linha segue sem o campo", () => {
+    expect(parseCreateInput(body({ lines: [{ item: ITEM, qty: 1 }] }))?.lines[0]).not.toHaveProperty("dough");
   });
 });

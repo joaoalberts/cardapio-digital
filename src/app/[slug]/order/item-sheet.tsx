@@ -43,20 +43,15 @@ export function ItemSheet({ item, focusNote, edit, draft, qty: startQty }: { ite
   const pa = itemPrice(item, option);
   // Em Metade, antes do outro sabor, vale a metade do sabor (sem a massa, como antes); inteira soma o extra.
   const shown = pa == null ? null : effMode === "half" ? Math.ceil(pa / 2) : pa + extra;
-  // Prato aberto pelo "Pedir também" da Comunidade: a origem vai junto só no prato novo.
-  // Na edição a linha já tem a dela (replaceLine a mantém). Lida na hora do toque: com a
-  // folha aberta, o o.sheet é esta folha.
-  const origin = () => (!edit && o.sheet?.kind === "item" && o.sheet.item.id === item.id ? o.sheet.origin : undefined);
 
   const save = (half: string | null) => {
     if (pa == null) return;
     const line = { item: item.id, option, half, qty: edit?.qty ?? startQty ?? 1, note: note.trim().slice(0, NOTE_MAX), ...(dough ? { dough } : {}) };
     if (edit) o.replace(edit.key, line);
-    else o.add({ ...line, ...(origin() ?? {}) });
+    else o.add(line);
     o.openCart("cart");
   };
   const startPick = () => {
-    const from = origin();
     o.startPick({
       keep: item,
       option,
@@ -65,7 +60,6 @@ export function ItemSheet({ item, focusNote, edit, draft, qty: startQty }: { ite
       swap: edit ? { key: edit.key, side: "half" } : null,
       fromSheet: !!edit,
       qty: startQty,
-      ...(from ? { origin: from } : {}),
     });
   };
 

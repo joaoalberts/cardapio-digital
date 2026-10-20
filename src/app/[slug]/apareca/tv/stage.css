@@ -1,4 +1,4 @@
-/* Palco do Apareça no telão (T14). Camada por cima do pôster da Comunidade, dentro de .tl:
+/* Palco do Apareça no telão (T14). Camada por cima do pôster do telão, dentro de .tl:
    herda a unidade --u (min(1vmin, 0,75vmax)), as cores e o --accent da casa. Medidas do nome, do
    QR e do logo vêm de tv-layout.ts (--apt-name, --apt-qr, --apt-logo); o tamanho do clipe 9:16,
    em %, também. Mesmas regras do telão: nenhum filter nem backdrop-filter (o fundo desfocado é o

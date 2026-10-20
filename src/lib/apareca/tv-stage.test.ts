@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Program } from "./schedule";
 import {
   clipInProgram, houseCacheDropDue, muxHls, muxMp4, parseProgramReply, pickPlayable, playBody, pollDelay, programAfter,
-  stageRuns, streamBase, uuid4, type ProgramReply,
+  streamBase, uuid4, type ProgramReply,
 } from "./tv-stage";
 
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -16,15 +16,6 @@ const prog = (house = 1, clients = 2): Program => ({
   plays: 1,
 });
 const cursor0 = { houseIdx: 0, clientsSinceHouse: 0, playedHere: {} };
-
-describe("stageRuns (pausa do palco)", () => {
-  it("só toca sem enquete: pausa com enquete aberta e durante o \"Deu X\"", () => {
-    expect(stageRuns("feat")).toBe(true);
-    expect(stageRuns("poll")).toBe(false);
-    expect(stageRuns("win")).toBe(false);
-    expect(stageRuns("off")).toBe(false);
-  });
-});
 
 describe("parseProgramReply", () => {
   it("aceita a resposta da rota e devolve programa, logo e ligado", () => {

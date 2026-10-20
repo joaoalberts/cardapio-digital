@@ -10,7 +10,7 @@ const UUID2 = "1c0b1d2f-3a4e-4b6c-9d7e-8f9a0b1c2d3e";
 
 const head = (over: Partial<AparecaHead> = {}): AparecaHead => ({
   id: UUID, slug: "casa", name: "Casa", timezone: TZ, opening_hours: null,
-  allowed: true, ai_allowed: false, enabled: true, community_enabled: true,
+  allowed: true, ai_allowed: false, enabled: true,
   config: DEFAULT_CONFIG, logo_path: null, brand_color: null, instagram: null, ...over,
 });
 
@@ -80,8 +80,6 @@ describe("featureState", () => {
   it("não liberado mesmo com enabled", () =>
     expect(featureState(head({ allowed: false, enabled: true }), o)).toEqual({ on: false, why: "not_allowed" }));
   it("desligado pelo dono", () => expect(featureState(head({ enabled: false }), o)).toEqual({ on: false, why: "disabled" }));
-  it("sem Comunidade", () =>
-    expect(featureState(head({ community_enabled: false }), o)).toEqual({ on: false, why: "no_community" }));
   it("fora do horário", () => {
     const c = { ...DEFAULT_CONFIG, hours: { from: "19:00", to: "23:00" } };
     expect(featureState(head({ config: c }), o)).toEqual({ on: false, why: "closed" });

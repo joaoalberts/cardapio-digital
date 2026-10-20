@@ -101,7 +101,7 @@ async function Apareca() {
             enabled={r.apareca_enabled === true}
             modes={modes}
             cfg={{
-              mode: cfg.mode, clients_max: cfg.rule.clients_max, plays: cfg.plays, device_per_hour: cfg.device_per_hour,
+              mode: cfg.mode, clients_max: cfg.rule.clients_max, plays: cfg.plays,
               hours: cfg.hours, retention_h: cfg.retention_h,
             }}
           />

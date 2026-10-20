@@ -105,7 +105,7 @@ let now = T0;
 function mkHead(config: Partial<AparecaConfig> = {}, p: Partial<AparecaHead> = {}): AparecaHead {
   return {
     id: RID, slug: "casa", name: "Casa", timezone: "America/Sao_Paulo", opening_hours: null, allowed: true, ai_allowed: true,
-    enabled: true, community_enabled: true, config: { ...DEFAULT_CONFIG, mode: "automatico", ...config }, logo_path: null,
+    enabled: true, config: { ...DEFAULT_CONFIG, mode: "automatico", ...config }, logo_path: null,
     brand_color: null, instagram: null, ...p,
   };
 }

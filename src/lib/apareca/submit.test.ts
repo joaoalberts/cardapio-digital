@@ -1,7 +1,7 @@
 // Rotas do cliente sem o Next: envio (aceite, mesa, horário, teto, limites), "meu vídeo"
 // (estados, Mux consultado com calma, vencido apagado) e download. Banco, Mux e relógio falsos.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createLimiter } from "@/lib/comunidade/limiter";
+import { createLimiter } from "@/lib/limiter";
 import { DEFAULT_CONFIG } from "./config";
 import type { AparecaConfig, AparecaHead, VideoRow } from "./types";
 
@@ -58,7 +58,7 @@ let seq = 100;
 function mkHead(config: Partial<AparecaConfig> = {}, p: Partial<AparecaHead> = {}): AparecaHead {
   return {
     id: RID, slug: SLUG, name: "Casa da Ana", timezone: "America/Sao_Paulo", opening_hours: null, allowed: true, ai_allowed: false,
-    enabled: true, community_enabled: true, config: { ...DEFAULT_CONFIG, ...config }, logo_path: null, brand_color: null, instagram: null, ...p,
+    enabled: true, config: { ...DEFAULT_CONFIG, ...config }, logo_path: null, brand_color: null, instagram: null, ...p,
   };
 }
 
@@ -75,14 +75,8 @@ function video(p: Partial<VideoRow> = {}): VideoRow {
 
 function limits(): SubmitLimits {
   const clock = () => now.getTime();
-  const byMax = new Map<number, ReturnType<typeof createLimiter>>();
   return {
     ip: createLimiter({ max: 60, windowMs: HOUR, now: clock }), // igual ao IP_PER_HOUR
-    device: (max) => {
-      let l = byMax.get(max);
-      if (!l) byMax.set(max, (l = createLimiter({ max, windowMs: HOUR, now: clock })));
-      return l;
-    },
     download: createLimiter({ max: 5, windowMs: HOUR, now: clock }),
     ipGlobal: createLimiter({ max: 120, windowMs: HOUR, now: clock }), // igual ao IP_PER_HOUR_GLOBAL
     reads: createLimiter({ max: READS_PER_HOUR, windowMs: HOUR, now: clock }),
@@ -177,7 +171,6 @@ describe("startSubmission: recusas", () => {
     ["chave geral", () => ({ off: () => true }), {}],
     ["não liberado pelo João", () => ({}), { allowed: false }],
     ["desligado pelo dono", () => ({}), { enabled: false }],
-    ["sem Comunidade", () => ({}), { community_enabled: false }],
   ])("%s → off", async (_n, over, h) => {
     head = mkHead({}, h as Partial<AparecaHead>);
     const { d, createUpload } = mk(over());
@@ -220,24 +213,15 @@ describe("startSubmission: recusas", () => {
     expect(videos()).toHaveLength(0);
   });
 
-  it("3º envio do mesmo device na mesma hora → too_many (device_per_hour 2); uma hora depois, passa", async () => {
-    head = mkHead({ device_per_hour: 2 });
-    const { d } = mk();
-    expect((await startSubmission(d, SLUG, body())).ok).toBe(true);
-    now = new Date(T0.getTime() + 60_000);
-    expect((await startSubmission(d, SLUG, body())).ok).toBe(true);
-    now = new Date(T0.getTime() + 120_000);
-    expect(await startSubmission(d, SLUG, body())).toEqual({ ok: false, code: "too_many" });
-    expect(videos()).toHaveLength(2);
-    now = new Date(T0.getTime() + HOUR + 61_000);
-    expect((await startSubmission(d, SLUG, body())).ok).toBe(true);
-  });
-
-  it("o limite do device vale mesmo em outra instância (linhas do banco na última hora)", async () => {
-    head = mkHead({ device_per_hour: 2 });
+  it("sem limite por pessoa: o mesmo device manda vários vídeos seguidos", async () => {
+    head = mkHead({ device_per_hour: 1 }); // valor antigo salvo na config não limita mais
     tables.apareca_videos = [video({ created_at: "2026-10-16T21:30:00.000Z" }), video({ created_at: "2026-10-16T21:40:00.000Z" })];
     const { d } = mk();
-    expect(await startSubmission(d, SLUG, body())).toEqual({ ok: false, code: "too_many" });
+    for (let i = 0; i < 5; i++) {
+      now = new Date(T0.getTime() + i * 60_000);
+      expect((await startSubmission(d, SLUG, body())).ok).toBe(true);
+    }
+    expect(videos()).toHaveLength(7);
   });
 
   it("61º envio do mesmo IP no mesmo restaurante → too_many; o mesmo IP em outro restaurante não conta", async () => {
@@ -272,7 +256,7 @@ describe("startSubmission: recusas", () => {
     head = mkHead({ device_per_hour: 1 });
     const bad = mk();
     bad.createUpload.mockRejectedValueOnce(new Error("mux 500"));
-    expect(await startSubmission(bad.d, SLUG, body())).toEqual({ ok: false, code: "mux" });
+    expect(await startSubmission(bad.d, SLUG, body())).toEqual({ ok: false, code: "mux", detail: "mux 500" });
     expect(videos()).toHaveLength(0);
     expect((await startSubmission(bad.d, SLUG, body())).ok).toBe(true);
   });

@@ -1,4 +1,4 @@
-/* Painel: tela TVs. Reaproveita as peças da Comunidade (.cp: campos, interruptor, Confirm) e o editor de
+/* Painel: tela TVs. Usa as peças de campos.css (.cp: campos, interruptor, Confirm) e o editor de
    zonas do Apareça (.app-setup); aqui só o que é da tela. Contraste AA: cinza #666666 no branco (5,7:1)
    e no fundo do painel (5,1:1), texto #1a1a1a no dourado (5,8:1), verde #2f6b1f no branco (6,4:1) e no
    cinza #f1f2f4 (5,7:1), dourado escuro #7a5218 no branco (6,9:1).

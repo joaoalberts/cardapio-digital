@@ -1,6 +1,6 @@
 import "server-only";
-import { sharedLimiter, type Limiter } from "@/lib/comunidade/limiter";
-import type { PollRow, TvRow } from "@/lib/comunidade/types";
+import { sharedLimiter, type Limiter } from "@/lib/limiter";
+import type { TvRow } from "@/lib/tv/types";
 import type * as nocodb from "@/lib/db/nocodb";
 import { serverNow } from "./clock";
 import { featureState } from "./config";
@@ -8,7 +8,7 @@ import { tetoUsd, uploadGate } from "./cost";
 import { onAssetReady } from "./moderation";
 import { mp4Url, type AssetInfo, type assetInfo, type createAparecaUpload } from "./mux-video";
 import { cleanName } from "./name";
-import { estimateWait, pollLeftMs, queuePosition, tvsIn } from "./queue";
+import { estimateWait, queuePosition, tvsIn } from "./queue";
 import { expiresAt, isExpired, isStuckUpload } from "./retention";
 import { forgetSnapshot, readSnapshot, type StoreDb, type StoreDeps } from "./store";
 import type { AparecaHead, VideoRow } from "./types";
@@ -18,10 +18,12 @@ import type { AparecaHead, VideoRow } from "./types";
 // da linha de dining_tables. Nenhuma resposta leva device_id, table_id, zona, ai_reason,
 // motivo de reprovação nem ids do Mux: o "meu vídeo" devolve só o estado público (MyStatus).
 
-export type PublicHead = { enabled: boolean; open: boolean; why: "off" | "not_allowed" | "disabled" | "no_community" | "closed" | "paused" | null };
+export type PublicHead = { enabled: boolean; open: boolean; why: "off" | "not_allowed" | "disabled" | "closed" | "paused" | null };
 export type StartResult =
   | { ok: true; id: string; upload_url: string; expires_at: string }
-  | { ok: false; code: "invalid" | "not_found" | "off" | "table" | "closed" | "paused" | "too_many" | "name" | "consent" | "mux" };
+  | { ok: false; code: "invalid" | "not_found" | "off" | "table" | "closed" | "paused" | "too_many" | "name" | "consent" }
+  // detail: só "mux <status HTTP>" ou "mux desligado", nunca o corpo da resposta, para a tela mostrar o motivo.
+  | { ok: false; code: "mux"; detail: string };
 export type MyStatus = {
   state: "sending" | "preparing" | "review" | "queue" | "on_tv" | "shown" | "not_shown" | "gone";
   position: number | null;
@@ -30,10 +32,11 @@ export type MyStatus = {
   download: string | null;
 };
 export type SubmitDb = StoreDb & Pick<typeof nocodb, "insertOne" | "updateRows">;
-// Limitadores em memória (por instância). device(max): um por valor de device_per_hour.
+// Limitadores em memória (por instância). Não há limite por pessoa: o mesmo celular pode mandar
+// quantos vídeos quiser (pedido do João, 19/10); valem só os tetos por IP, contra abuso.
 // ipGlobal: opcional (padrão: o compartilhado do processo), soma o IP em todos os restaurantes.
 // reads: opcional (padrão: o compartilhado), "meu", "baixar" e "baixou" por IP e restaurante.
-export type SubmitLimits = { ip: Limiter; device: (max: number) => Limiter; download: Limiter; ipGlobal?: Limiter; reads?: Limiter };
+export type SubmitLimits = { ip: Limiter; download: Limiter; ipGlobal?: Limiter; reads?: Limiter };
 export type SubmitDeps = {
   db: SubmitDb;
   store: Pick<StoreDeps, "mux" | "now" | "defer">;
@@ -49,11 +52,11 @@ export type SubmitDeps = {
   off?: () => boolean;
   origin: string;
   // Opcionais (padrões entre parênteses): IP de quem chama ("anon"), limitadores (compartilhados
-  // no processo), durações dos institucionais ([]) e enquetes/TVs da Comunidade (sem enquete, 1 TV).
+  // no processo), durações dos institucionais ([]) e TVs do restaurante (1 TV).
   ip?: string;
   limits?: SubmitLimits;
   houseS?: (rid: string) => Promise<number[]>;
-  community?: (rid: string) => Promise<{ polls: PollRow[]; tvs: TvRow[] }>;
+  tvs?: (rid: string) => Promise<TvRow[]>;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -61,7 +64,7 @@ const MESA = /^[A-Z2-9]{6}$/;
 const HOUR_MS = 60 * 60_000;
 // No Wi-Fi do restaurante todos os clientes saem pelo mesmo IP público, e o João pediu até
 // 100 vídeos por noite: o limite por IP é por restaurante e largo (60/h, decisão do controlador
-// na correção 1 da T7). O limite principal por pessoa é o device_per_hour (padrão 2).
+// na correção 1 da T7).
 const IP_PER_HOUR = 60;
 // Teto do mesmo IP somando todos os restaurantes: sem ele, um IP espalhado por várias casas teria
 // 60 por casa. 120/h cobre um IP de rede móvel (CGNAT) compartilhado por clientes de duas casas
@@ -99,7 +102,6 @@ export function defaultLimits(): SubmitLimits {
   return {
     ip: sharedLimiter("apareca.envio.ip", { max: IP_PER_HOUR, windowMs: HOUR_MS }),
     ipGlobal: globalIpLimiter(),
-    device: (max) => sharedLimiter(`apareca.envio.device.${max}`, { max, windowMs: HOUR_MS }),
     download: sharedLimiter("apareca.baixou", { max: DOWNLOADS_PER_HOUR, windowMs: HOUR_MS }),
     reads: readsLimiter(),
   };
@@ -166,31 +168,18 @@ export async function startSubmission(d: SubmitDeps, slug: string, body: unknown
   const name = cleanName(input.name);
   if (!name.ok) return { ok: false, code: "name" };
 
-  // Limite por device: as linhas da última hora (vale entre instâncias) e o limitador em memória
-  // (vale entre os 5 s do retrato). Limites por IP (por restaurante e global): só em memória.
+  // Limites por IP (por restaurante e global), só em memória. Sem limite por pessoa.
   const cfg = head.config;
-  const snap = await readSnapshot(storeDeps(d), head.id);
-  const since = now.getTime() - HOUR_MS;
-  const recent = snap.videos.filter((v) => v.device_id === input.device && Date.parse(v.created_at) > since).length;
-  if (recent >= cfg.device_per_hour) return { ok: false, code: "too_many" };
   const limits = d.limits ?? defaultLimits();
-  const devLimiter = limits.device(cfg.device_per_hour);
-  const devKey = `${head.id}:${input.device}`;
   const ip = d.ip ?? "anon";
   const ipKey = `${ip}|${head.id}`; // molde do telao/codigo: IP por restaurante
   const ipGlobal = limits.ipGlobal ?? globalIpLimiter();
-  if (!devLimiter.hit(devKey)) return { ok: false, code: "too_many" };
-  if (!limits.ip.hit(ipKey)) {
-    devLimiter.undo(devKey);
-    return { ok: false, code: "too_many" };
-  }
+  if (!limits.ip.hit(ipKey)) return { ok: false, code: "too_many" };
   if (!ipGlobal.hit(ip)) {
-    devLimiter.undo(devKey);
     limits.ip.undo(ipKey);
     return { ok: false, code: "too_many" };
   }
   const giveBack = () => {
-    devLimiter.undo(devKey);
     limits.ip.undo(ipKey);
     ipGlobal.undo(ip);
   };
@@ -202,7 +191,8 @@ export async function startSubmission(d: SubmitDeps, slug: string, body: unknown
   } catch (e) {
     console.error("apareca: upload do Mux", String(e).slice(0, 300));
     giveBack();
-    return { ok: false, code: "mux" };
+    const m = /^mux (\d{3})\b/.exec(e instanceof Error ? e.message : "");
+    return { ok: false, code: "mux", detail: m ? `mux ${m[1]}` : "mux desligado" };
   }
 
   const expires = expiresAt(now, cfg.retention_h);
@@ -360,23 +350,22 @@ async function settleUpload(d: SubmitDeps, head: AparecaHead, v: VideoRow, now: 
   return ready;
 }
 
-async function waitFor(d: SubmitDeps, head: AparecaHead, v: VideoRow, videos: VideoRow[], now: Date) {
+async function waitFor(d: SubmitDeps, head: AparecaHead, v: VideoRow, videos: VideoRow[]) {
   const known = new Set(head.config.zones.map((z) => z.id));
   const zoneOf = (x: VideoRow) => (x.zone_id && known.has(x.zone_id) ? x.zone_id : null);
   const line = [...videos.filter((x) => x.id !== v.id), v].map((x) => ({ ...x, zone_id: zoneOf(x) }));
   const zone = zoneOf(v);
   const position = queuePosition(line, v.id, zone);
   if (position === null) return { position: null, eta_ms: null };
-  const [houseS, community] = await Promise.all([
+  const [houseS, tvs] = await Promise.all([
     d.houseS?.(head.id).catch(() => []) ?? Promise.resolve([]),
-    d.community?.(head.id).catch(() => null) ?? Promise.resolve(null),
+    d.tvs?.(head.id).catch(() => null) ?? Promise.resolve(null),
   ]);
   const eta_ms = estimateWait({
     position,
     rule: head.config.rule,
     houseS,
-    pollLeftMs: community ? pollLeftMs(community.polls, now) : 0,
-    tvs: community ? tvsIn(community.tvs, head.config, zone) : 1,
+    tvs: tvs ? tvsIn(tvs, head.config, zone) : 1,
   });
   return { position, eta_ms };
 }
@@ -416,7 +405,7 @@ export async function myStatus(
   switch (v.status) {
     case "pending":
     case "ai_review":
-      return { state: "review", ...(await waitFor(d, head, v, found.videos, now)), first_shown_at: null, download: null };
+      return { state: "review", ...(await waitFor(d, head, v, found.videos)), first_shown_at: null, download: null };
     case "approved": {
       const download = v.mux_playback_id && (await mp4Ready(d, v, now)) ? downloadPath(head.slug, v.id) : null;
       // A TV avisa o "tocou" no INÍCIO do clipe e já sobe plays: com plays_target 1, plays >= alvo
@@ -425,7 +414,7 @@ export async function myStatus(
         return { state: "on_tv", position: null, eta_ms: null, first_shown_at: v.first_shown_at, download };
       }
       if (v.plays >= v.plays_target) return { state: "shown", position: null, eta_ms: null, first_shown_at: v.first_shown_at, download };
-      return { state: "queue", ...(await waitFor(d, head, v, found.videos, now)), first_shown_at: null, download };
+      return { state: "queue", ...(await waitFor(d, head, v, found.videos)), first_shown_at: null, download };
     }
     default:
       return NOT_SHOWN; // rejected, removed, failed: sem motivo

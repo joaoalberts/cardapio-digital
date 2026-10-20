@@ -19,7 +19,6 @@ export type PanelHref =
   | "/painel/aparencia"
   | "/painel/mesas"
   | "/painel/tvs"
-  | "/painel/comunidade"
   | "/painel/apareca"
   | "/painel/perfil"
   | "/painel/suporte"

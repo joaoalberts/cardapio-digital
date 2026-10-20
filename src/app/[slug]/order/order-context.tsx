@@ -2,7 +2,6 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { uuid } from "@/lib/uuid";
-import type { Origin } from "@/lib/comunidade/types";
 import type { MenuItem, PublicMenu } from "@/lib/menu/types";
 import { tf, t as tr } from "@/lib/menu/i18n";
 import { formatPrice, thumbSrc } from "@/lib/menu/media";
@@ -17,9 +16,8 @@ import { useDeviceOrders } from "./use-device-orders";
 import { flyTo } from "./fly";
 
 export type Table = { code: string; label: string };
-// origin: o prato veio do "Pedir também" da Comunidade; a folha leva a origem até o add.
 export type SheetState =
-  | { kind: "item"; item: MenuItem; focusNote: boolean; edit: CartLine | null; draft?: { option: string | null; note: string; dough?: string | null }; qty?: number; origin?: Origin }
+  | { kind: "item"; item: MenuItem; focusNote: boolean; edit: CartLine | null; draft?: { option: string | null; note: string; dough?: string | null }; qty?: number }
   | { kind: "cart"; tab: "cart" | "orders" }
   | null;
 export type FlashState = { id: number; label: string; text: string; img: string | null; tone: "added" | "ok" } | null;
@@ -34,7 +32,6 @@ export type PickState = {
   swap: { key: string; side: "item" | "half" } | null;
   fromSheet?: boolean; // troca começada na folha do prato (Editar > Observação): desistir volta a ela
   qty?: number; // quantidade escolhida no story
-  origin?: Origin; // meio a meio começado no "Pedir também" da Comunidade
 } | null;
 
 type OrderApi = {
@@ -58,14 +55,13 @@ type OrderApi = {
   unit: (l: Pick<CartLine, "item" | "option" | "half" | "dough" | "claim_cents">) => number | null;
   itemById: (id: string) => MenuItem | undefined;
   inCart: (itemId: string) => number;
-  // quiet: sem o aviso "Adicionado" (a Comunidade mostra "✓ No pedido" e a ilha dela).
-  add: (l: NewLine, from?: HTMLElement | null, opts?: { quiet?: boolean }) => void;
+  add: (l: NewLine, from?: HTMLElement | null) => void;
   // Oferta relâmpago: grava o registro no servidor e põe a linha com o preço garantido.
   takeSpecial: (item: MenuItem, qty: number) => Promise<{ ok: true; cents: number } | { ok: false }>;
   replace: (key: string, l: NewLine) => void;
   setQty: (key: string, qty: number) => void;
   remove: (key: string) => void;
-  openItem: (item: MenuItem, opts?: { focusNote?: boolean; edit?: CartLine; qty?: number; origin?: Origin }) => void;
+  openItem: (item: MenuItem, opts?: { focusNote?: boolean; edit?: CartLine; qty?: number }) => void;
   openCart: (tab?: "cart" | "orders") => void;
   closeSheet: () => void;
   send: () => Promise<SendOutcome>;
@@ -214,13 +210,12 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
   );
 
   const add = useCallback(
-    (l: NewLine, from?: HTMLElement | null, opts?: { quiet?: boolean }) => {
+    (l: NewLine, from?: HTMLElement | null) => {
       dirty.current = true;
       setLines((c) => addLine(c, l));
       try {
         navigator.vibrate?.(12);
       } catch {}
-      if (opts?.quiet) return;
       const it = index?.items.get(l.item)?.item;
       const img = it ? thumbSrc(it) : null;
       const half = l.half ? index?.items.get(l.half)?.item : undefined;
@@ -298,12 +293,10 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
           mesa: table.code,
           device,
           ref: refAttempt.current,
-          lines: lines.map(({ item, option, half, dough, qty, note, claim, origin, origin_ref, origin_at }) => ({
+          lines: lines.map(({ item, option, half, dough, qty, note, claim }) => ({
             item, option, half, qty, note,
             ...(dough ? { dough } : {}),
             ...(claim ? { claim } : {}),
-            // A origem da Comunidade vai junto; o servidor confere a janela e o restaurante.
-            ...(origin && origin_ref && origin_at != null ? { origin, origin_ref, origin_at } : {}),
           })),
         }),
       });
@@ -373,7 +366,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       }
       setEditing(true);
     } else {
-      add({ item: p.keep.id, option: p.option, half: c.id, qty: p.qty ?? 1, note: p.note, ...(p.dough ? { dough: p.dough } : {}), ...(p.origin ?? {}) });
+      add({ item: p.keep.id, option: p.option, half: c.id, qty: p.qty ?? 1, note: p.note, ...(p.dough ? { dough: p.dough } : {}) });
     }
     setSheet({ kind: "cart", tab: "cart" });
   };
@@ -411,7 +404,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
     },
     remove,
     openItem: (item, opts) =>
-      setSheet({ kind: "item", item, focusNote: !!opts?.focusNote, edit: opts?.edit ?? null, qty: opts?.qty, ...(opts?.origin ? { origin: opts.origin } : {}) }),
+      setSheet({ kind: "item", item, focusNote: !!opts?.focusNote, edit: opts?.edit ?? null, qty: opts?.qty }),
     openCart: (tab = "cart") => {
       setPick(null);
       setCartMin(false);
@@ -440,7 +433,7 @@ export function OrderProvider({ slug, children }: { slug: string; children: Reac
       else if (p?.swap) {
         setEditing(true);
         setSheet({ kind: "cart", tab: "cart" });
-      } else if (p) setSheet({ kind: "item", item: p.keep, focusNote: false, edit: null, draft: { option: p.option, note: p.note, dough: p.dough }, ...(p.origin ? { origin: p.origin } : {}) });
+      } else if (p) setSheet({ kind: "item", item: p.keep, focusNote: false, edit: null, draft: { option: p.option, note: p.note, dough: p.dough } });
     },
     canPair,
     pair,

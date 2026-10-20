@@ -48,7 +48,7 @@ async function Apareca({
     publicHead(routeDeps(new Request(`https://${slug}.apareca.local/`, { headers: h })), slug).catch(() => null),
   ]);
   if (!menu || !head) notFound();
-  // Desligado (geral, pelo super admin, pelo dono ou sem Comunidade): para o cliente, não existe.
+  // Desligado (geral, pelo super admin, ou pelo dono): para o cliente, não existe.
   if (!head.enabled) notFound();
 
   const r = menu.restaurant;

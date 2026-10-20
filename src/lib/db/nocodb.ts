@@ -23,11 +23,7 @@ export type Table =
   | "orders"
   | "special_claims"
   | "support_requests"
-  | "community_polls"
-  | "community_votes"
-  | "community_posts"
   | "community_tvs"
-  | "community_tally"
   | "apareca_videos"
   | "apareca_house_videos"
   | "apareca_tally";

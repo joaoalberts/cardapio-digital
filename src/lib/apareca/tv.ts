@@ -1,9 +1,9 @@
 // Apareça na TV, lado da TV: quem é a TV, sinal de vida e "tocou".
-// A TV é a mesma do telão da Comunidade: manda o segredo no cabeçalho x-telao e o banco só
-// guarda o hash (community_tvs). A conferência do segredo é a mesma da Comunidade
+// A TV é a mesma do telão: manda o segredo no cabeçalho x-telao e o banco só
+// guarda o hash (community_tvs). A conferência do segredo é a mesma do telão
 // (matchTvSecret): hash, revogação e restaurante. Só TV pareada entra no Apareça.
 // Funções puras, com banco, cabeça e relógio vindos de fora; memória por instância.
-import { matchTvSecret, sha256Hex } from "@/lib/comunidade/tv";
+import { matchTvSecret, sha256Hex } from "@/lib/tv/pair";
 import { featureState } from "./config";
 import { zoneOf } from "./schedule";
 import type { AparecaHead, HouseVideoRow, VideoRow } from "./types";
@@ -121,7 +121,7 @@ export async function programGate(
 
 // ---------- Sinal de vida ----------
 
-// Grava last_seen_at (o mesmo "visto há" do painel da Comunidade) no máximo 1x a cada 60 s por TV.
+// Grava last_seen_at (o mesmo "visto há" da tela TVs) no máximo 1x a cada 60 s por TV.
 // A vez é marcada antes de gravar (duas consultas juntas não gravam duas vezes) e devolvida se falhar.
 export async function heartbeat(d: AparecaTvDeps, tv: TvIdentity): Promise<void> {
   const t = nowMs(d);

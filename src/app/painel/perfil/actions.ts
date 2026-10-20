@@ -2,7 +2,7 @@
 
 import { updateTag } from "next/cache";
 import { isOwner } from "@/lib/auth";
-import { communityTags } from "@/lib/comunidade/tags";
+import { tvTags } from "@/lib/tv/tags";
 import * as db from "@/lib/db/nocodb";
 import { menuTag } from "@/lib/menu/data";
 import type { OpeningHours } from "@/lib/menu/types";
@@ -29,11 +29,11 @@ async function updateRestaurant(restaurantId: string, patch: Record<string, unkn
   return before;
 }
 
-// Cardápio e cabeça da Comunidade (nome, logo, cor, horário e Instagram aparecem no telão e
-// no story, com cache de 5 min): a mudança vale na hora.
+// Cardápio e cabeça do telão (nome, logo, cor, horário e Instagram aparecem no telão, com
+// cache de 5 min): a mudança vale na hora.
 function refreshBoth(slug: string) {
   updateTag(menuTag(slug));
-  updateTag(communityTags.slug(slug));
+  updateTag(tvTags.slug(slug));
 }
 
 // Guarda a logo já enviada ao Storage e apaga a anterior da pasta do restaurante.

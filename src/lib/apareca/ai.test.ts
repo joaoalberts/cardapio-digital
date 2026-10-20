@@ -19,7 +19,8 @@ describe("constantes", () => {
   it("prazo de 30 s, um quadro por segundo (0,5 a 5,5 s) e regras com os temas da spec", () => {
     expect(AI_TIMEOUT_MS).toBe(30_000);
     expect(AI_FRAMES_S).toEqual([0.5, 1.5, 2.5, 3.5, 4.5, 5.5]);
-    for (const t of ["nudez", "gestos obscenos", "violência", "armas", "drogas", "discurso de ódio", "texto ofensivo", "menores"]) {
+    for (const t of ["nudez", "gestos obscenos", "violência", "armas", "drogas", "discurso de ódio", "texto ofensivo", "menores",
+      "abuso", "assédio", "política", "partidos", "racismo", "suicídio", "qr code"]) {
       expect(AI_RULES.toLowerCase()).toContain(t);
     }
   });

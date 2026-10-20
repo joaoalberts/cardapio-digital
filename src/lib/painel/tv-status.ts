@@ -1,4 +1,5 @@
-import { TV_FRESH_MS } from "@/lib/comunidade/public-state";
+// "Na TV": a TV pareada consultou o estado há menos de 10 min.
+export const TV_FRESH_MS = 10 * 60_000;
 
 export type TvStatus = { on: boolean; text: string };
 

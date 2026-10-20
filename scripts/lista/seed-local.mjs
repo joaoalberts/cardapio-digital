@@ -14,7 +14,7 @@
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { assertLocalNocodb } from "../comunidade/seed-local.mjs";
+import { assertLocalNocodb } from "../apareca/seed-local.mjs";
 
 export { assertLocalNocodb };
 

@@ -91,7 +91,7 @@ export function withinHours(
   return openStatus(head.opening_hours, head.timezone, now).open;
 }
 
-// Interruptores em cadeia: geral, liberado pelo João, ligado pelo dono, Comunidade, horário, teto.
+// Interruptores em cadeia: geral, liberado pelo João, ligado pelo dono, horário, teto.
 export function featureState(
   head: AparecaHead | null,
   o: { now: Date; off: boolean; paused: boolean },
@@ -100,7 +100,6 @@ export function featureState(
   if (!head) return { on: false, why: "disabled" };
   if (!head.allowed) return { on: false, why: "not_allowed" };
   if (!head.enabled) return { on: false, why: "disabled" };
-  if (!head.community_enabled) return { on: false, why: "no_community" };
   if (!withinHours(head.config, head, o.now)) return { on: false, why: "closed" };
   if (o.paused) return { on: false, why: "paused" };
   return { on: true };

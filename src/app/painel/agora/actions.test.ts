@@ -1,5 +1,5 @@
 // Leitura da tela Agora (loadAgora): confere o membro antes de qualquer leitura e divide a leitura num memo de 5 s,
-// que as ações da fila e da enquete esquecem (forgetAgora).
+// que as ações da fila e das TVs esquecem (forgetAgora).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -12,7 +12,7 @@ const reads = vi.hoisted(() => [] as string[]);
 vi.mock("@/lib/db/nocodb", () => ({
   first: vi.fn(async (t: string) => {
     reads.push(t);
-    return { id: "rid", community_enabled: true, apareca_allowed: false };
+    return { id: "rid", apareca_allowed: false };
   }),
   list: vi.fn(async (t: string) => {
     reads.push(t);
@@ -49,30 +49,30 @@ describe("loadAgora", () => {
     await expect(loadAgora(42 as never)).rejects.toThrow();
     expect(reads).toEqual([]);
   });
-  it("membro → 3 leituras: restaurants, community_polls e community_tvs", async () => {
+  it("membro → 2 leituras: restaurants e community_tvs", async () => {
     const out = await loadAgora(RID);
-    expect(out).toMatchObject({ communityOn: true, aparecaAllowed: false, queueOk: true });
-    expect([...reads].sort()).toEqual(["community_polls", "community_tvs", "restaurants"]);
+    expect(out).toMatchObject({ aparecaAllowed: false, queueOk: true });
+    expect([...reads].sort()).toEqual(["community_tvs", "restaurants"]);
   });
   it("segunda chamada dentro de 5 s → nenhuma leitura nova; depois de 5 s, lê de novo", async () => {
     await loadAgora(RID);
     vi.advanceTimersByTime(4_999);
     await loadAgora(RID);
-    expect(reads).toHaveLength(3);
+    expect(reads).toHaveLength(2);
     vi.advanceTimersByTime(1);
     await loadAgora(RID);
-    expect(reads).toHaveLength(6);
+    expect(reads).toHaveLength(4);
   });
   it("o memo não pula a conferência: quem não é membro é recusado mesmo com o memo quente", async () => {
     await loadAgora(RID);
     auth.member = new Set();
     await expect(loadAgora(RID)).rejects.toThrow();
-    expect(reads).toHaveLength(3);
+    expect(reads).toHaveLength(2);
   });
   it("depois do forgetAgora(rid) → lê de novo", async () => {
     await loadAgora(RID);
     forgetAgora(RID);
     await loadAgora(RID);
-    expect(reads).toHaveLength(6);
+    expect(reads).toHaveLength(4);
   });
 });

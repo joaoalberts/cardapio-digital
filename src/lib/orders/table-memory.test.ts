@@ -42,7 +42,7 @@ describe("mesa lembrada", () => {
   });
 });
 
-describe("esquecer a mesa lembrada (voto ou pedido recusado com code \"table\")", () => {
+describe("esquecer a mesa lembrada (pedido recusado com code \"table\")", () => {
   it("apaga só a chave deste restaurante", () => {
     const data = new Map([["cardapio-mesa:depot", "x"], ["cardapio-mesa:forno", "y"], ["cardapio-device", "z"]]);
     forgetTableMemory({ removeItem: (k: string) => void data.delete(k) }, "depot");

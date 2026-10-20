@@ -1,5 +1,5 @@
-// Contador de chamadas ao NocoDB, só para medir o orçamento da Comunidade em teste local
-// (scripts/comunidade/e2e.mjs). Liga com NOCODB_COUNT=1; sem a variável, não conta e não
+// Contador de chamadas ao NocoDB, só para medir o orçamento de pedidos em teste local.
+// Liga com NOCODB_COUNT=1; sem a variável, não conta e não
 // cria nada no globalThis. A conta fica no globalThis porque o Next carrega nocodb.ts em
 // mais de um pacote do servidor (rotas, páginas, "use cache"), todos no mesmo processo.
 // A leitura sai só em GET /api/arquivos-locais/_calls, que só existe com STORAGE_DRIVER=local.
@@ -12,7 +12,7 @@ type WithCounter = typeof globalThis & { [COUNTER_KEY]?: CallCounts };
 
 const on = () => process.env.NOCODB_COUNT === "1";
 
-/** Soma 1 pedido HTTP ao NocoDB, por método + tabela ("GET community_votes"). */
+/** Soma 1 pedido HTTP ao NocoDB, por método + tabela ("GET items"). */
 export function countCall(method: string, table: string) {
   if (!on()) return;
   const g = globalThis as WithCounter;

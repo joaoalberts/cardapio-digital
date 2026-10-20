@@ -174,7 +174,7 @@ export function MenuList({
               <path d="m20 20-3.6-3.6" />
             </svg>
           </button>
-          <CartButton inViewer={false} island={false} className="round" />
+          <CartButton inViewer={false} className="round" />
           <button className="round" onClick={onStories} aria-label={t("viewStories")}>
             <svg className="icon" viewBox="0 0 24 24" aria-hidden>
               <rect x="6" y="3" width="12" height="18" rx="3" />
