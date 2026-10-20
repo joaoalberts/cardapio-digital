@@ -177,6 +177,23 @@ const STRINGS = {
     "Nessun risultato per “{q}”.",
     "Nichts gefunden für „{q}“.",
   ]),
+  searchPlaceholder: L6([
+    "Prato, ingrediente ou selo",
+    "Dish, ingredient or label",
+    "Plato, ingrediente o etiqueta",
+    "Plat, ingrédient ou label",
+    "Piatto, ingrediente o etichetta",
+    "Gericht, Zutat oder Kennzeichnung",
+  ]),
+  searchHint: L6([
+    "Digite o nome do prato, um ingrediente ou um selo, como “vegano”.",
+    "Type a dish, an ingredient or a label, like “vegan”.",
+    "Escribe el nombre del plato, un ingrediente o una etiqueta, como “vegano”.",
+    "Tapez le nom du plat, un ingrédient ou un label, comme « végan ».",
+    "Scrivi il nome del piatto, un ingrediente o un’etichetta, come “vegano”.",
+    "Gib ein Gericht, eine Zutat oder eine Kennzeichnung ein, z. B. „vegan“.",
+  ]),
+  searchClear: L6(["Limpar busca", "Clear search", "Borrar búsqueda", "Effacer la recherche", "Cancella ricerca", "Suche löschen"]),
   searchCount: L6([
     "Resultados para “{q}”: {n}",
     "Results for “{q}”: {n}",

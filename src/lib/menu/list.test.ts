@@ -114,6 +114,10 @@ describe("searchItems", () => {
     expect(searchItems(cats, "", "pt-BR")).toEqual([]);
     expect(searchItems(cats, "  ", "pt-BR")).toEqual([]);
   });
+  it("espaços repetidos no meio do que foi digitado contam como um só", () => {
+    expect(searchItems(cats, "penne   pomodoro", "pt-BR").map((x) => x.item.id)).toEqual(["pomodoro"]);
+    expect(searchItems(cats, " sem  gluten ", "pt-BR").map((x) => x.item.id)).toEqual(["marg"]);
+  });
   it("sem resultado devolve lista vazia", () => {
     expect(searchItems(cats, "sushi", "pt-BR")).toEqual([]);
   });
@@ -216,6 +220,11 @@ describe("activeIndex", () => {
   it("antes da primeira seção ou sem seções, devolve -1", () => {
     expect(activeIndex(tops, 50)).toBe(-1);
     expect(activeIndex([], 50)).toBe(-1);
+  });
+  it("no fim da página a última seção fica ativa, mesmo sem o topo chegar à linha", () => {
+    // A última categoria curta nunca sobe até a barra: sem isso, tocar nela acenderia a anterior.
+    expect(activeIndex(tops, 600, true)).toBe(2);
+    expect(activeIndex([], 600, true)).toBe(-1);
   });
 });
 

@@ -1,25 +1,36 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- capa, logo e círculos já vêm no tamanho certo (sizedSrc) */
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import type { StatusLabel } from "@/lib/menu/hours";
 import { t as tr, type StringKey } from "@/lib/menu/i18n";
-import { brandTokens, groupSubgroups, listCats, listPrice } from "@/lib/menu/list";
+import { activeIndex, brandTokens, groupSubgroups, listCats, listPrice, searchItems } from "@/lib/menu/list";
 import { CARD_W, mediaUrl, photoSrc, posterSrc, THUMB_W } from "@/lib/menu/media";
 import { sizedSrc } from "@/lib/images/sized";
-import type { MenuCategory, MenuMedia, PublicMenu } from "@/lib/menu/types";
+import type { MenuCategory, MenuItem, MenuMedia, PublicMenu } from "@/lib/menu/types";
 import { CartButton } from "../order/cart-button";
 
 // Foto pequena de uma mídia: a própria foto ou o pôster do vídeo.
 const still = (m: MenuMedia | null | undefined, w: number) =>
   m ? (m.kind === "photo" ? photoSrc(m, w) : posterSrc(m, w)) : null;
 
+const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Pílula ativa no meio da faixa, rolando só a faixa (como o centerTab dos stories): nunca a página.
+function centerChip(bar: HTMLElement | null, i: number) {
+  const chip = bar?.children[i] as HTMLElement | undefined;
+  if (!bar || !chip) return;
+  const left = chip.offsetLeft - (bar.clientWidth - chip.offsetWidth) / 2;
+  bar.scrollTo({ left, behavior: reducedMotion() ? "auto" : "smooth" });
+}
+
 /**
  * Cardápio em lista (visual aprovado pelo João em 19/10, protótipo em docs/prototipos/lista,
  * âncora #ref.faixa-2): capa com a foto se desfazendo no fundo escuro, perfil, busca larga,
  * categorias em círculos, a dica e, em cada categoria, uma faixa com o nome e os pratos só com
- * nome e preço. Tocar no prato abre o story dele (onOpenItem).
+ * nome e preço. Tocar no prato abre o story dele (onOpenItem). Ao rolar, a barra fixa (nome,
+ * busca, carrinho, stories e as pílulas das categorias) assume quando os círculos saem da tela.
  */
 export function MenuList({
   menu,
@@ -27,7 +38,6 @@ export function MenuList({
   lang,
   status,
   langPicker,
-  tableTag,
   focus,
   onOpenItem,
   onStories,
@@ -38,7 +48,6 @@ export function MenuList({
   lang: string;
   status: StatusLabel | null;
   langPicker: ReactNode; // o mesmo seletor de bandeiras da capa
-  tableTag?: ReactNode;
   focus?: { catId: string } | null; // rolar até esta categoria (ao vir do botão de lista do story); um objeto novo a cada pedido
   onOpenItem: (catId: string, itemId: string) => void;
   onStories: () => void;
@@ -51,6 +60,53 @@ export function MenuList({
   const style = { "--brand": tokens.brand, "--brand-text": tokens.brandText, "--on-brand": tokens.onBrand } as CSSProperties;
   const [hintOpen, setHintOpen] = useState(true);
   const secEls = useRef(new Map<string, HTMLElement>());
+  const headRef = useRef<HTMLElement>(null);
+  const catsRef = useRef<HTMLElement>(null);
+  const chipsRef = useRef<HTMLElement>(null);
+  const [showHead, setShowHead] = useState(false);
+  const [active, setActive] = useState(-1); // categoria ativa (-1: nenhuma passou da linha ainda)
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchFrom = useRef<HTMLElement | null>(null); // o botão que abriu a busca recebe o foco de volta
+  const openSearch = (e: MouseEvent<HTMLElement>) => {
+    searchFrom.current = e.currentTarget;
+    setSearchOpen(true);
+  };
+  const closeSearch = () => {
+    setSearchOpen(false);
+    searchFrom.current?.focus({ preventScroll: true });
+  };
+
+  // Barra fixa e categoria ativa, medidas uma vez por quadro durante a rolagem. A linha fica 24 px
+  // abaixo da barra: a seção que acabou de entrar embaixo dela já conta (sem a ativa "uma atrás");
+  // no fim da página, a última.
+  useEffect(() => {
+    let raf = 0;
+    const measure = () => {
+      raf = 0;
+      const circles = catsRef.current?.getBoundingClientRect().top ?? Infinity;
+      setShowHead(circles < 20); // os círculos começaram a sair: a barra compacta assume
+      const line = (headRef.current?.offsetHeight ?? 0) + 24;
+      const tops = cats.map((c) => secEls.current.get(c.id)?.getBoundingClientRect().top ?? Infinity);
+      const atEnd = scrollY > 0 && scrollY + innerHeight >= document.documentElement.scrollHeight - 2;
+      setActive(activeIndex(tops, line, atEnd));
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(measure);
+    };
+    onScroll();
+    addEventListener("scroll", onScroll, { passive: true });
+    addEventListener("resize", onScroll);
+    return () => {
+      removeEventListener("scroll", onScroll);
+      removeEventListener("resize", onScroll);
+      cancelAnimationFrame(raf);
+    };
+  }, [cats]);
+  useEffect(() => centerChip(chipsRef.current, active), [active]);
+
+  // Pílula ou círculo: rola até a seção; o scroll-margin-top dela (list.css) desconta a barra fixa.
+  const goTo = (catId: string) =>
+    secEls.current.get(catId)?.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
   // Ao abrir: no topo, ou na categoria pedida. Depois, só rola quando chega um pedido novo (a
   // rolagem é a da página: com o story por cima, a lista fica parada onde o cliente deixou).
   const opened = useRef(false);
@@ -72,20 +128,54 @@ export function MenuList({
   // A dica fecha ao abrir um prato e sairia de cima dos pratos, puxando a lista para cima:
   // guarda onde a linha tocada estava na tela e devolve a rolagem, para "‹ Lista" voltar
   // exatamente ao mesmo ponto.
+  // Vindo da busca, a linha tocada está na camada: a âncora é a primeira categoria da lista
+  // (abaixo da dica), para a lista atrás da busca também ficar no mesmo ponto.
   const anchor = useRef<{ el: HTMLElement; top: number } | null>(null);
-  const openItem = (catId: string, itemId: string, el: HTMLElement) => {
-    if (hintOpen) anchor.current = { el, top: el.getBoundingClientRect().top };
+  const openItem = (catId: string, itemId: string, el: HTMLElement | undefined) => {
+    if (hintOpen && el) anchor.current = { el, top: el.getBoundingClientRect().top };
     setHintOpen(false);
     onOpenItem(catId, itemId);
   };
   useLayoutEffect(() => {
     const a = anchor.current;
     anchor.current = null;
-    if (a) scrollBy(0, a.el.getBoundingClientRect().top - a.top);
+    if (a?.el.isConnected) scrollBy(0, a.el.getBoundingClientRect().top - a.top);
   }, [hintOpen]);
+  const openFromSearch = (catId: string, itemId: string) => openItem(catId, itemId, secEls.current.get(cats[0]?.id));
 
   return (
     <div className="cm-list" style={style} aria-hidden={hidden || undefined} inert={hidden}>
+      {/* Barra fixa: fica montada (para medir a altura) e desce quando os círculos saem da tela. */}
+      <header ref={headRef} className={`head${showHead ? " show" : ""}`} inert={!showHead} aria-hidden={!showHead || undefined}>
+        <div className="wrap bar">
+          <span className="title fd">{restaurant.name}</span>
+          <button className="round" onClick={openSearch} aria-label={t("listSearch")}>
+            <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.6-3.6" />
+            </svg>
+          </button>
+          <CartButton inViewer={false} island={false} className="round" />
+          <button className="round" onClick={onStories} aria-label={t("viewStories")}>
+            <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+              <rect x="6" y="3" width="12" height="18" rx="3" />
+              <path d="M10.5 9.5v5l4-2.5z" />
+            </svg>
+          </button>
+        </div>
+        <nav ref={chipsRef} className="chips" aria-label={t("listCats")}>
+          {cats.map((c, i) => {
+            const img = still(c.cover, THUMB_W);
+            return (
+              <button key={c.id} className={`chip${i === active ? " on" : ""}`} onClick={() => goTo(c.id)}>
+                {img ? <img src={img} alt="" loading="lazy" /> : <i className="fd">{[...c.name][0]}</i>}
+                {c.name}
+              </button>
+            );
+          })}
+        </nav>
+      </header>
+
       <div className={`cover-wrap${coverImage ? "" : " bare"}`}>
         {coverImage && (
           <div className="cover">
@@ -101,7 +191,6 @@ export function MenuList({
             </svg>
             {t("viewStories")}
           </button>
-          {tableTag}
           <span className="cover-r">
             <CartButton inViewer={false} className="round glass" />
             {langPicker}
@@ -135,8 +224,7 @@ export function MenuList({
             )}
           </div>
           <div className="actions">
-            {/* A camada da busca chega na Tarefa 8. */}
-            <button className="search-pill">
+            <button className="search-pill" onClick={openSearch}>
               <svg className="icon" viewBox="0 0 24 24" aria-hidden>
                 <circle cx="11" cy="11" r="7" />
                 <path d="m20 20-3.6-3.6" />
@@ -151,15 +239,11 @@ export function MenuList({
             <div className="sec-title cats-title">
               <h2 className="fd">{t("listCats")}</h2>
             </div>
-            <nav className="cats" aria-label={t("listCats")}>
-              {cats.map((c) => {
+            <nav ref={catsRef} className="cats" aria-label={t("listCats")}>
+              {cats.map((c, i) => {
                 const img = still(c.cover, THUMB_W);
                 return (
-                  <button
-                    key={c.id}
-                    className="cat"
-                    onClick={() => secEls.current.get(c.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                  >
+                  <button key={c.id} className={`cat${i === active ? " on" : ""}`} onClick={() => goTo(c.id)}>
                     <span className="ring">
                       {img ? <img src={img} alt="" loading="lazy" /> : <span className="mono fd">{[...c.name][0]}</span>}
                     </span>
@@ -221,18 +305,10 @@ export function MenuList({
                     </div>
                   ),
                   ...g.items.map((it) => {
-                    const p = listPrice(it, lang);
                     return (
                       <button key={it.id} className="trow" onClick={(e) => openItem(c.id, it.id, e.currentTarget)}>
                         <span className="nm fd">{it.name}</span>
-                        {/* Preço escondido: nada à direita, mas o toque ainda abre o story. */}
-                        {p && (
-                          <span className="price">
-                            {p.from && <span className="ate">{t("from")}</span>}
-                            {p.old && <s>{p.old}</s>}
-                            {p.now}
-                          </span>
-                        )}
+                        <RowPrice item={it} lang={lang} />
                       </button>
                     );
                   }),
@@ -243,6 +319,125 @@ export function MenuList({
         })}
         <div className="end" />
       </main>
+
+      {searchOpen && <SearchLayer cats={cats} lang={lang} onOpenItem={openFromSearch} onClose={closeSearch} />}
+    </div>
+  );
+}
+
+// À direita da linha do prato. Preço escondido: nada, mas o toque ainda abre o story.
+function RowPrice({ item, lang }: { item: MenuItem; lang: string }) {
+  const p = listPrice(item, lang);
+  if (!p) return null;
+  return (
+    <span className="price">
+      {p.from && <span className="ate">{tr("from", lang)}</span>}
+      {p.old && <s>{p.old}</s>}
+      {p.now}
+    </span>
+  );
+}
+
+/**
+ * Busca: camada por cima da lista com o campo, "voltar" e os pratos achados (a mesma linha da
+ * lista, com o nome da categoria pequeno acima). A lista fica parada atrás (list.css trava a
+ * rolagem da página), então "voltar" devolve ao mesmo ponto. Tocar num prato abre o story; a
+ * busca fica por baixo e "‹ Lista" volta aos resultados.
+ */
+function SearchLayer({
+  cats,
+  lang,
+  onOpenItem,
+  onClose,
+}: {
+  cats: MenuCategory[];
+  lang: string;
+  onOpenItem: (catId: string, itemId: string) => void;
+  onClose: () => void;
+}) {
+  const t = (k: StringKey) => tr(k, lang);
+  const [q, setQ] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  const shown = q.trim().replace(/\s+/g, " ");
+  const found = useMemo(() => searchItems(cats, q, lang), [cats, q, lang]);
+  return (
+    <div className="search" role="dialog" aria-modal="true" aria-label={t("listSearch")} onKeyDown={(e) => e.key === "Escape" && onClose()}>
+      <div className="wrap search-wrap">
+        <div className="search-head">
+          <div className="row">
+            <button className="round" onClick={onClose} aria-label={t("back")}>
+              <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+                <path d="M15 5l-7 7 7 7" />
+              </svg>
+            </button>
+            <h2 className="fd">{t("listSearch")}</h2>
+            <span />
+          </div>
+          {/* Enter (ou "Buscar" no teclado do celular) só fecha o teclado: a busca já anda a cada letra. */}
+          <form
+            className="field"
+            role="search"
+            onSubmit={(e) => {
+              e.preventDefault();
+              input.current?.blur();
+            }}
+          >
+            <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.6-3.6" />
+            </svg>
+            <input
+              ref={input}
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t("searchPlaceholder")}
+              aria-label={t("listSearch")}
+              enterKeyHint="search"
+              autoComplete="off"
+              autoFocus
+            />
+            {q && (
+              <button
+                type="button"
+                className="clear"
+                onClick={() => {
+                  setQ("");
+                  input.current?.focus();
+                }}
+                aria-label={t("searchClear")}
+              >
+                <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+                  <path d="M6 6l12 12M18 6 6 18" />
+                </svg>
+              </button>
+            )}
+          </form>
+        </div>
+
+        <div aria-live="polite">
+          {!shown ? (
+            <p className="note">{t("searchHint")}</p>
+          ) : found.length ? (
+            <p className="note">{t("searchCount").replace("{q}", shown).replace("{n}", String(found.length))}</p>
+          ) : (
+            <p className="empty">{t("searchEmpty").replace("{q}", shown)}</p>
+          )}
+        </div>
+        {found.length > 0 && (
+          <div className="grid">
+            {found.map(({ cat, item }) => (
+              <button key={`${cat.id}:${item.id}`} className="trow found" onClick={() => onOpenItem(cat.id, item.id)}>
+                <span className="txt">
+                  <small>{cat.name}</small>
+                  <span className="nm fd">{item.name}</span>
+                </span>
+                <RowPrice item={item} lang={lang} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

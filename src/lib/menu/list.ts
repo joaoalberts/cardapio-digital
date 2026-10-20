@@ -45,15 +45,17 @@ export function normalizeText(s: string): string {
 }
 
 // Pratos cujo nome, descrição ou nome de selo (no idioma da tela) contém o que foi digitado.
-// Devolve na ordem das categorias e dos pratos; busca vazia não acha nada.
+// Devolve na ordem das categorias e dos pratos; busca vazia não acha nada. Espaços repetidos
+// (no que foi digitado e no texto do prato) contam como um só.
 export function searchItems(cats: MenuCategory[], q: string, lang: string): { cat: MenuCategory; item: MenuItem }[] {
-  const needle = normalizeText(q).trim();
+  const squash = (s: string) => normalizeText(s).replace(/\s+/g, " ");
+  const needle = squash(q).trim();
   if (!needle) return [];
   const found: { cat: MenuCategory; item: MenuItem }[] = [];
   for (const cat of cats) {
     for (const item of cat.items) {
       const fields = [item.name, item.description, ...(item.tags ?? []).map((t) => tagLabel(t, lang))];
-      if (fields.some((f) => normalizeText(f).includes(needle))) found.push({ cat, item });
+      if (fields.some((f) => squash(f).includes(needle))) found.push({ cat, item });
     }
   }
   return found;
@@ -116,7 +118,9 @@ export function brandTokens(hex: string | null): { brand: string; brandText: str
 }
 
 // Seção ativa ao rolar: a última cujo topo já está na linha ou acima dela; -1 se nenhuma passou.
-export function activeIndex(tops: number[], line: number): number {
+// No fim da página (atEnd) vale a última: uma categoria curta no fim nunca sobe até a linha.
+export function activeIndex(tops: number[], line: number, atEnd = false): number {
+  if (atEnd && tops.length) return tops.length - 1;
   let active = -1;
   tops.forEach((top, i) => {
     if (top <= line) active = i;
