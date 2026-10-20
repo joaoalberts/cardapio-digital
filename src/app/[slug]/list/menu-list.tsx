@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- capa, logo e círculos já vêm no tamanho certo (sizedSrc) */
 
-import { useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { StatusLabel } from "@/lib/menu/hours";
 import { t as tr, type StringKey } from "@/lib/menu/i18n";
@@ -28,6 +28,7 @@ export function MenuList({
   status,
   langPicker,
   tableTag,
+  focus,
   onOpenItem,
   onStories,
   hidden,
@@ -38,6 +39,7 @@ export function MenuList({
   status: StatusLabel | null;
   langPicker: ReactNode; // o mesmo seletor de bandeiras da capa
   tableTag?: ReactNode;
+  focus?: { catId: string } | null; // rolar até esta categoria (ao vir do botão de lista do story); um objeto novo a cada pedido
   onOpenItem: (catId: string, itemId: string) => void;
   onStories: () => void;
   hidden: boolean; // story aberto por cima: a lista fica montada (guarda a rolagem) e sai da leitura de tela
@@ -49,6 +51,16 @@ export function MenuList({
   const style = { "--brand": tokens.brand, "--brand-text": tokens.brandText, "--on-brand": tokens.onBrand } as CSSProperties;
   const [hintOpen, setHintOpen] = useState(true);
   const secEls = useRef(new Map<string, HTMLElement>());
+  // Ao abrir: no topo, ou na categoria pedida. Depois, só rola quando chega um pedido novo (a
+  // rolagem é a da página: com o story por cima, a lista fica parada onde o cliente deixou).
+  const opened = useRef(false);
+  useLayoutEffect(() => {
+    const first = !opened.current;
+    opened.current = true;
+    const sec = focus ? secEls.current.get(focus.catId) : undefined;
+    if (sec) sec.scrollIntoView({ block: "start" });
+    else if (first) scrollTo(0, 0);
+  }, [focus]);
 
   // Capa: foto ou pôster do vídeo do banner; sem banner, a capa antiga. Sem nenhuma, só o fundo.
   const banner = restaurant.cover;
@@ -57,10 +69,20 @@ export function MenuList({
   const [hintA, hintRest = ""] = t("listHint").split("{b}");
   const [hintB, hintC = ""] = hintRest.split("{/b}");
 
-  const openItem = (catId: string, itemId: string) => {
+  // A dica fecha ao abrir um prato e sairia de cima dos pratos, puxando a lista para cima:
+  // guarda onde a linha tocada estava na tela e devolve a rolagem, para "‹ Lista" voltar
+  // exatamente ao mesmo ponto.
+  const anchor = useRef<{ el: HTMLElement; top: number } | null>(null);
+  const openItem = (catId: string, itemId: string, el: HTMLElement) => {
+    if (hintOpen) anchor.current = { el, top: el.getBoundingClientRect().top };
     setHintOpen(false);
     onOpenItem(catId, itemId);
   };
+  useLayoutEffect(() => {
+    const a = anchor.current;
+    anchor.current = null;
+    if (a) scrollBy(0, a.el.getBoundingClientRect().top - a.top);
+  }, [hintOpen]);
 
   return (
     <div className="cm-list" style={style} aria-hidden={hidden || undefined} inert={hidden}>
@@ -201,7 +223,7 @@ export function MenuList({
                   ...g.items.map((it) => {
                     const p = listPrice(it, lang);
                     return (
-                      <button key={it.id} className="trow" onClick={() => openItem(c.id, it.id)}>
+                      <button key={it.id} className="trow" onClick={(e) => openItem(c.id, it.id, e.currentTarget)}>
                         <span className="nm fd">{it.name}</span>
                         {/* Preço escondido: nada à direita, mas o toque ainda abre o story. */}
                         {p && (

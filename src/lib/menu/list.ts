@@ -123,3 +123,9 @@ export function activeIndex(tops: number[], line: number): number {
   });
   return active;
 }
+
+// Formato pela âncora do link: só "#lista" abre a lista; o resto (ou nada) abre a capa dos stories.
+// O celular não lembra o último formato (decidido pelo João em 19/10).
+export function formatFromHash(hash: string): "stories" | "lista" {
+  return hash === "#lista" ? "lista" : "stories";
+}

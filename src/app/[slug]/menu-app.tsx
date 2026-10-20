@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- fotos do cardápio ocupam a tela toda e já vêm em tamanho certo do Storage */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { preconnect } from "react-dom";
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from "react";
 import { fetchPublicMenu } from "@/lib/menu/client";
@@ -20,6 +20,7 @@ import { OrderProvider, useOrder } from "./order/order-context";
 import { OrderLayer } from "./order/order-layer";
 import { VideoDebug } from "./video-debug";
 import { MenuList } from "./list/menu-list";
+import { formatFromHash } from "@/lib/menu/list";
 import { StoryBuy } from "./order/story-actions";
 import { SpecialStory } from "./order/special-story";
 import {
@@ -43,8 +44,7 @@ type View = {
   idx: number[]; // item atual de cada categoria
   userPaused: boolean;
   held: boolean; // dedo segurando a tela
-  listOpen: boolean;
-  listCat: number;
+  from: "capa" | "lista"; // de onde o story foi aberto: da lista, o voltar mostra "‹ Lista"
   langOpen: boolean;
 };
 
@@ -66,6 +66,7 @@ type Gesture = {
 const isVideo = (item: MenuItem | undefined) => item?.media[0]?.kind === "video";
 
 const FEATURED_ID = "destaques";
+const noSubscribe = () => () => {};
 
 // Categorias que o cliente vê agora: só as com pratos e dentro do horário (ex.: almoço),
 // com "Destaques" na frente quando o restaurante marcou pratos em destaque.
@@ -172,12 +173,19 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
     idx: cats.map(() => 0),
     userPaused: false,
     held: false,
-    listOpen: false,
-    listCat: 0,
+    from: "capa",
     langOpen: false,
   });
   useEffect(() => setViewerOpen(view.open), [view.open, setViewerOpen]);
-  useEffect(() => setHomeCovered(view.open), [view.open]);
+  // Formato do cardápio: capa dos stories ou lista. Começa sempre nos stories (o servidor não vê a
+  // âncora); "#lista" no link abre direto na lista. O celular não lembra o último formato.
+  const [format, setFormat] = useState<"stories" | "lista">("stories");
+  const formatRef = useRef(format);
+  // Já rodando no celular (falso só no HTML do servidor): daqui em diante quem esconde a capa
+  // é o React, não o CSS da âncora (ver list.css).
+  const ready = useSyncExternalStore(noSubscribe, () => true, () => false);
+  // Story aberto ou lista na tela cobrem a capa: banner e cards soltam o vídeo (não baixam nem tocam).
+  useEffect(() => setHomeCovered(view.open || format === "lista"), [view.open, format]);
   // Prato do story na tela: a barrinha da outra metade da pizza usa para oferecer "½ Sabor".
   const storyItem = view.open ? (cats[view.cur]?.items[view.idx[view.cur]] ?? null) : null;
   useEffect(() => setCurrent(storyItem), [storyItem, setCurrent]);
@@ -196,21 +204,15 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   const [homeTab, setHomeTab] = useState(0);
   const [infoOpen, setInfoOpen] = useState(false);
   const [status, setStatus] = useState<StatusLabel | null>(null);
-  // provisório (Tarefa 7 substitui): #lista na URL mostra a lista nova no lugar da capa.
-  const [provList, setProvList] = useState(false);
-  useEffect(() => {
-    const read = () => setProvList(location.hash === "#lista");
-    read();
-    addEventListener("hashchange", read);
-    return () => removeEventListener("hashchange", read);
-  }, []);
+  // Categoria até onde a lista rola ao abrir (vinda do botão de lista dentro do story).
+  const [listFocus, setListFocus] = useState<{ catId: string } | null>(null);
+  const listPushed = useRef(false); // a lista ganhou um passo no histórico: "Stories" volta com history.back()
+  const coverY = useRef(0); // rolagem da capa, para voltar a ela no mesmo ponto
 
   const viewerRef = useRef<HTMLDivElement>(null);
   const panelEls = useRef<(HTMLDivElement | null)[]>([]);
   const vTabsRef = useRef<HTMLDivElement>(null);
-  const lTabsRef = useRef<HTMLDivElement>(null);
   const hTabsRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
   const heroVidRef = useRef<HTMLVideoElement>(null);
   const cardsHeld = useRef(false);
   const closing = useRef(false);
@@ -235,7 +237,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
     if (viewRef.current.idx.length !== cats.length) {
       const v = viewRef.current;
       const cur = Math.min(v.cur, Math.max(0, cats.length - 1));
-      const next = { ...v, idx: cats.map(() => 0), cur, target: cur, listCat: Math.min(v.listCat, cur) };
+      const next = { ...v, idx: cats.map(() => 0), cur, target: cur };
       viewRef.current = next;
       setView(next);
     }
@@ -265,7 +267,6 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
       v.open &&
       !v.userPaused &&
       !v.held &&
-      !v.listOpen &&
       !v.langOpen &&
       !sheetOpen.current &&
       !sheetNow.current &&
@@ -315,7 +316,8 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
     // Story aberto cobre a capa. Ao fechar, a capa já volta a tocar no próprio toque de
     // fechar (`closing`): o navegador do WhatsApp/Instagram só aceita dar play em vídeo
     // dentro de um toque, e depois da animação de saída o toque já tinha "expirado".
-    const covered = (v.open && !closing.current) || comunidadeNow.current || document.visibilityState !== "visible";
+    const covered =
+      (v.open && !closing.current) || formatRef.current === "lista" || comunidadeNow.current || document.visibilityState !== "visible";
     const hero = heroVidRef.current;
     if (hero) {
       // Com o story aberto o banner fica parado ("hold"), e o toque não o religa.
@@ -575,16 +577,16 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   }, [next, playing]);
 
   const openViewer = useCallback(
-    (c: number, withList = false) => {
+    (c: number, from: View["from"] = "capa") => {
       pos.current = c;
       settled.current = true;
       justOpened.current = true;
       closing.current = false;
-      update({ open: true, cur: c, target: c, userPaused: false, held: false, listOpen: withList, listCat: c });
+      update({ open: true, cur: c, target: c, userPaused: false, held: false, from });
       resetTimer();
       cancelAnimationFrame(raf.current);
       raf.current = requestAnimationFrame(tick);
-      if (!hintShown.current && !withList) {
+      if (!hintShown.current) {
         hintShown.current = true;
         setHint(true);
         setTimeout(() => setHint(false), 2200);
@@ -605,7 +607,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
         el.style.opacity = "";
         el.style.borderRadius = "";
       }
-      update({ open: false, listOpen: false, held: false });
+      update({ open: false, held: false });
     };
     if (!el || reduce.current) return done();
     el.classList.add("animating");
@@ -613,6 +615,86 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
     el.style.opacity = "0";
     setTimeout(done, 300);
   }, [syncPlayback, update]);
+
+  // ---------- Formato: capa dos stories ou lista ----------
+  // A lista mora na âncora #lista (a ?mesa= do QR continua no endereço): o voltar do Android e
+  // do navegador sai da lista para a capa. Na prévia do painel (iframe) a âncora troca sem
+  // criar passo no histórico, senão o voltar do navegador mexeria na prévia e não no painel.
+  const showFormat = useCallback((f: "stories" | "lista") => {
+    if (f === formatRef.current) return;
+    if (f === "lista") coverY.current = scrollY;
+    formatRef.current = f;
+    setFormat(f);
+  }, []);
+  const toList = useCallback(
+    (catId?: string) => {
+      if (formatRef.current !== "lista") {
+        if (window.parent === window) {
+          history.pushState(null, "", "#lista");
+          listPushed.current = true;
+        } else history.replaceState(null, "", "#lista");
+      }
+      setListFocus(catId ? { catId } : null);
+      showFormat("lista");
+    },
+    [showFormat],
+  );
+  const toStories = useCallback(() => {
+    if (listPushed.current) {
+      history.back(); // o popstate abaixo troca para a capa
+      return;
+    }
+    history.replaceState(null, "", location.pathname + location.search);
+    showFormat("stories");
+  }, [showFormat]);
+  useLayoutEffect(() => {
+    const read = () => {
+      const f = formatFromHash(location.hash);
+      // Voltou para uma entrada com #lista (o "avançar"): a anterior é a capa.
+      listPushed.current = f === "lista";
+      setListFocus(null);
+      showFormat(f);
+      // Story aberto por cima da lista e o cliente voltou para a capa: o story fecha para a capa.
+      if (f === "stories" && viewRef.current.from === "lista") update({ from: "capa" });
+    };
+    // Link aberto com #lista: troca antes da primeira pintura do React (sem a capa piscar).
+    const first = formatFromHash(location.hash);
+    if (first === "lista") showFormat("lista");
+    addEventListener("popstate", read);
+    return () => removeEventListener("popstate", read);
+  }, [showFormat, update]);
+  // Volta para a capa no ponto em que o cliente estava; a lista cuida da própria rolagem.
+  const prevFormat = useRef(format);
+  useLayoutEffect(() => {
+    if (prevFormat.current === format) return;
+    prevFormat.current = format;
+    if (format === "stories") scrollTo(0, coverY.current);
+    syncPlayback();
+  }, [format, syncPlayback]);
+  // Prato tocado na lista: abre o story dele (os mesmos `cats` dos stories, com Destaques na
+  // frente). A lista fica montada por baixo, então "‹ Lista" volta exatamente onde estava.
+  const openFromList = useCallback(
+    (catId: string, itemId: string) => {
+      const list = catsOf();
+      const c = list.findIndex((x) => x.id === catId);
+      if (c < 0) return;
+      const idx = [...viewRef.current.idx];
+      idx[c] = Math.max(0, list[c].items.findIndex((x) => x.id === itemId));
+      update({ idx });
+      openViewer(c, "lista");
+    },
+    [openViewer, update],
+  );
+  // Categoria do story na tela, para a lista abrir nela. "Destaques" não está na lista: vale a
+  // categoria de onde o prato veio.
+  const storyListCat = () => {
+    const v = viewRef.current;
+    const list = catsOf();
+    const cat = list[v.cur];
+    if (!cat || cat.id !== FEATURED_ID) return cat?.id;
+    const item = cat.items[v.idx[v.cur]];
+    return list.find((c) => c.id !== FEATURED_ID && c.items.some((i) => i.id === item?.id))?.id;
+  };
 
   // Prévia do painel (Aparência): o cardápio roda num iframe e o painel manda a fonte
   // escolhida e a tela a mostrar (capa, story ou lista). Fora de iframe, nada muda.
@@ -624,20 +706,20 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
       const { font, view: screen } = e.data as { font?: string; view?: string };
       if (font && isFontTheme(font)) setPreviewFont(font);
       const v = viewRef.current;
-      if (screen === "capa" && v.open) closeViewer();
-      if (screen === "story") {
-        if (v.open) update({ listOpen: false });
-        else openViewer(0);
+      if (screen === "capa") {
+        if (v.open) closeViewer();
+        if (formatRef.current === "lista") toStories();
       }
+      if (screen === "story" && !v.open) openViewer(0, formatRef.current === "lista" ? "lista" : "capa");
       if (screen === "lista") {
-        if (v.open) update({ listOpen: true, listCat: v.cur });
-        else openViewer(0, true);
+        if (v.open) closeViewer();
+        toList();
       }
     };
     addEventListener("message", on);
     parent.postMessage({ type: "cm-ready" }, location.origin);
     return () => removeEventListener("message", on);
-  }, [openViewer, closeViewer, update]);
+  }, [openViewer, closeViewer, toList, toStories]);
 
   // ---------- Idioma ----------
   const setMenu = useCallback((m: PublicMenu) => {
@@ -737,10 +819,8 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
       if (!v.open) return;
       if (e.key === "ArrowRight") next();
       else if (e.key === "ArrowLeft") prev();
-      else if (e.key === "Escape") {
-        if (v.listOpen) update({ listOpen: false });
-        else closeViewer();
-      } else if (e.key === " ") {
+      else if (e.key === "Escape") closeViewer();
+      else if (e.key === " ") {
         update({ userPaused: !v.userPaused });
         e.preventDefault();
       }
@@ -922,33 +1002,6 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
     }
   };
 
-  // Lista: todas as categorias numa rolagem só; as abas acompanham a rolagem.
-  const sectionOf = (c: number) => listRef.current?.querySelector<HTMLElement>(`.lsec[data-ci="${c}"]`);
-  const openListAt = (c: number) => {
-    const box = listRef.current;
-    const sec = sectionOf(c);
-    if (box && sec) box.scrollTo({ top: sec.offsetTop - box.offsetTop, behavior: reduce.current ? "auto" : "smooth" });
-    update({ listCat: c });
-  };
-  const onListScroll = () => {
-    const box = listRef.current;
-    if (!box) return;
-    let at = 0;
-    box.querySelectorAll<HTMLElement>(".lsec").forEach((sec, i) => {
-      if (sec.offsetTop - box.offsetTop <= box.scrollTop + 80) at = i;
-    });
-    if (box.scrollTop + box.clientHeight >= box.scrollHeight - 2) at = catsOf().length - 1;
-    if (at !== viewRef.current.listCat) update({ listCat: at });
-  };
-  useLayoutEffect(() => {
-    if (!view.listOpen) return;
-    const box = listRef.current;
-    const sec = sectionOf(viewRef.current.listCat);
-    if (box && sec) box.scrollTop = sec.offsetTop - box.offsetTop;
-  }, [view.listOpen]);
-  useEffect(() => {
-    centerTab(lTabsRef.current, view.listCat, true);
-  }, [view.listCat, view.listOpen]);
   useEffect(() => {
     centerTab(hTabsRef.current, homeTab, !reduce.current);
   }, [homeTab]);
@@ -956,15 +1009,6 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   useFitTabs(hTabsRef, tabsKey);
   // Nos stories a letra não encolhe: o que não cabe fica para deslizar.
   useFitTabs(vTabsRef, `${tabsKey}#${view.open}`, 1);
-  useFitTabs(lTabsRef, `${tabsKey}#${view.listOpen}`);
-
-  const pickFromList = (c: number, i: number) => {
-    const idx = [...viewRef.current.idx];
-    idx[c] = i;
-    update({ listOpen: false, idx });
-    if (c === viewRef.current.cur) resetTimer();
-    else goCat(c);
-  };
 
   // Aberto/fechado no fuso do restaurante; calculado no celular e refeito a cada minuto.
   const { opening_hours: hours, timezone } = menu.restaurant;
@@ -1057,15 +1101,19 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   );
 
   return (
-    <div className={`cm${relang ? " relang" : ""}`} data-font={previewFont ?? (isFontTheme(restaurant.font_theme) ? restaurant.font_theme : DEFAULT_FONT_THEME)} style={style}>
-      <main className="home" aria-hidden={view.open} hidden={provList}>
+    <div className={`cm${relang ? " relang" : ""}${ready ? " ready" : ""}`} data-font={previewFont ?? (isFontTheme(restaurant.font_theme) ? restaurant.font_theme : DEFAULT_FONT_THEME)} style={style}>
+      {/* Alvo da âncora #lista: antes de o React assumir, o CSS esconde a capa por ele (list.css). */}
+      <i id="lista" hidden />
+      {/* Mesa do QR num lugar só, fora da capa e da lista: cada TableBridge limpa a mesa ao sair
+          da tela, e assim trocar de formato não desmonta a ponte. Hoje ela não desenha nada. */}
+      {tableTag}
+      <main className="home" aria-hidden={view.open} hidden={format === "lista"}>
         <div className="hero-top">
-          <button className="round" onClick={() => openViewer(0, true)} aria-label={t("viewList")} disabled={!cats.length}>
+          <button className="round" onClick={() => toList()} aria-label={t("viewList")} disabled={!cats.length}>
             <ListIcon />
           </button>
           {langPicker}
         </div>
-        {tableTag}
         {view.langOpen && <div className="langcatch" onClick={() => update({ langOpen: false })} />}
         <CartButton inViewer={false} className="round hero-cart" />
         {hasInfo(restaurant) && (
@@ -1133,8 +1181,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
         )}
       </main>
 
-      {/* provisório (Tarefa 7 substitui): a lista nova aparece com a âncora #lista, só para conferir no navegador. */}
-      {provList && (
+      {format === "lista" && (
         <>
           <MenuList
             menu={menu}
@@ -1142,18 +1189,9 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
             lang={lang}
             status={status}
             langPicker={langPicker}
-            onOpenItem={(catId, itemId) => {
-              const c = cats.findIndex((x) => x.id === catId);
-              if (c < 0) return;
-              const idx = [...viewRef.current.idx];
-              idx[c] = Math.max(0, cats[c].items.findIndex((x) => x.id === itemId));
-              update({ idx });
-              openViewer(c);
-            }}
-            onStories={() => {
-              history.replaceState(null, "", location.pathname + location.search);
-              setProvList(false);
-            }}
+            focus={listFocus}
+            onOpenItem={openFromList}
+            onStories={toStories}
             hidden={view.open}
           />
           {view.langOpen && <div className="langcatch" onClick={() => update({ langOpen: false })} />}
@@ -1162,7 +1200,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
 
       {/* No computador, fora da coluna do story: clicar fecha. */}
       <div className="viewer-bg" hidden={!view.open} onClick={closeViewer} aria-hidden />
-      <div className={`viewer${view.held ? " held" : ""}${view.listOpen ? " listing" : ""}`} ref={viewerRef} hidden={!view.open} aria-hidden={!view.open}>
+      <div className={`viewer${view.held ? " held" : ""}`} ref={viewerRef} hidden={!view.open} aria-hidden={!view.open}>
         <div
           className="stage"
           onPointerDown={onPointerDown}
@@ -1241,11 +1279,21 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
         </div>
 
         <div className="chrome">
-          <button className="back glass" onClick={closeViewer} aria-label={t("back")}>
-            <svg className="icon" viewBox="0 0 24 24">
-              <path d="M19 12H5M11 6l-6 6 6 6" />
-            </svg>
-          </button>
+          {view.from === "lista" ? (
+            // Aberto da lista: volta para ela no mesmo ponto (a lista ficou montada por baixo).
+            <button className="back to-list glass" onClick={closeViewer}>
+              <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+                <path d="M15 5l-7 7 7 7" />
+              </svg>
+              {t("backToList")}
+            </button>
+          ) : (
+            <button className="back glass" onClick={closeViewer} aria-label={t("back")}>
+              <svg className="icon" viewBox="0 0 24 24">
+                <path d="M19 12H5M11 6l-6 6 6 6" />
+              </svg>
+            </button>
+          )}
           <div className="tabs vtabs" role="tablist" ref={vTabsRef}>
             {cats.map((c, i) => (
               <button key={c.id} role="tab" aria-selected={i === view.cur} onClick={() => goCat(i)}>
@@ -1256,83 +1304,18 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
           <CartButton inViewer className="vcart glass" />
           <button
             className="listbtn"
-            onClick={() => update({ listOpen: true, listCat: viewRef.current.cur })}
+            onClick={() => {
+              // Fecha o story e mostra a lista na categoria dele.
+              toList(storyListCat());
+              closeViewer();
+            }}
             aria-label={t("viewList")}
           >
             <ListIcon />
           </button>
         </div>
 
-
         {hint && <div className="hint">{t("hint")}</div>}
-
-        {view.listOpen && (
-          <div className="list" role="dialog" aria-labelledby="cm-list-title">
-            {/* Fundo: a foto da categoria atual, bem desfocada (uma imagem pequena, leve). */}
-            {thumbSrc(cats[view.listCat]?.items[0]) && (
-              <img key={view.listCat} className="lbg" src={thumbSrc(cats[view.listCat]?.items[0])!} alt="" aria-hidden />
-            )}
-            <header>
-              <div>
-                <span className="kicker">{restaurant.name}</span>
-                <h2 id="cm-list-title" className="fd">
-                  {t("listTitle")}
-                </h2>
-              </div>
-              <button className="close glass" onClick={() => update({ listOpen: false })} aria-label={t("close")}>
-                <svg className="icon" viewBox="0 0 24 24">
-                  <path d="M6 6l12 12M18 6L6 18" />
-                </svg>
-              </button>
-            </header>
-            <div className="tabs ltabs" role="tablist" ref={lTabsRef}>
-              {cats.map((c, i) => (
-                <button key={c.id} role="tab" aria-selected={i === view.listCat} onClick={() => openListAt(i)}>
-                  {c.name}
-                </button>
-              ))}
-            </div>
-            <div className="lscroll" ref={listRef} onScroll={onListScroll}>
-              {cats.map((c, ci) => (
-                <section key={c.id} className="lsec" data-ci={ci}>
-                  <h3 className="fd">
-                    {c.name}
-                    <small>
-                      {c.items.filter((it) => !it.special).length} {t("items")}
-                    </small>
-                  </h3>
-                  {c.description && <p className="lobs">{c.description}</p>}
-                  <div className="dgrid">
-                    {c.items.map((it, i) => {
-                      if (it.special) return null; // a oferta relâmpago só aparece como story
-                      const th = thumbSrc(it);
-                      return (
-                        <button
-                          key={it.id}
-                          className="dish"
-                          style={{ "--i": ci === view.listCat ? i : 0 } as CSSProperties}
-                          onClick={() => pickFromList(ci, i)}
-                        >
-                          <span className="dimg">
-                            {th ? <img src={th} alt="" loading={ci === view.listCat ? "eager" : "lazy"} /> : null}
-                            <Price item={it} lang={lang} as="em" className="tagp" />
-                            {isVideo(it) && (
-                              <svg className="icon play" viewBox="0 0 24 24" aria-hidden>
-                                <path d="M8 5.5v13l11-6.5z" />
-                              </svg>
-                            )}
-                          </span>
-                          <b>{it.name}</b>
-                          {it.description && <span className="ddesc">{it.description}</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {infoOpen && (

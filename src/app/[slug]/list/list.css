@@ -9,6 +9,15 @@ html:has(.cm .cm-list) body {
   background: #140d0a;
 }
 
+/* Link aberto com #lista: o servidor não vê a âncora e manda a capa. Até o React assumir (.ready),
+   a capa fica escondida pelo alvo #lista (menu-app.tsx), para ela não piscar antes da lista. */
+.cm:not(.ready):has(> #lista:target) {
+  background: #140d0a;
+  & > .home {
+    visibility: hidden;
+  }
+}
+
 .cm-list {
   --fg: #fff7f0;
   --muted: #bfb3a9; /* texto de apoio: 4,6:1 sobre a parte mais clara do fundo */

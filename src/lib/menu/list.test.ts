@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeIndex, brandTokens, groupSubgroups, listCats, listPrice, normalizeText, parseSubgroup, searchItems } from "./list";
+import { activeIndex, brandTokens, formatFromHash, groupSubgroups, listCats, listPrice, normalizeText, parseSubgroup, searchItems } from "./list";
 import type { MenuCategory, MenuItem } from "./types";
 
 const item = (id: string, extra: Record<string, unknown> = {}) =>
@@ -216,5 +216,16 @@ describe("activeIndex", () => {
   it("antes da primeira seção ou sem seções, devolve -1", () => {
     expect(activeIndex(tops, 50)).toBe(-1);
     expect(activeIndex([], 50)).toBe(-1);
+  });
+});
+
+describe("formatFromHash", () => {
+  it("só a âncora #lista abre a lista", () => {
+    expect(formatFromHash("#lista")).toBe("lista");
+  });
+  it("qualquer outra âncora (ou nenhuma) abre os stories", () => {
+    expect(formatFromHash("#lista?x")).toBe("stories");
+    expect(formatFromHash("")).toBe("stories");
+    expect(formatFromHash("#outra")).toBe("stories");
   });
 });

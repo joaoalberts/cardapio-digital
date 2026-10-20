@@ -5,6 +5,7 @@ import type { KeyboardEvent } from "react";
 import { FONT_THEMES, fontThemeLabel, type FontThemeId } from "@/lib/menu/font-themes";
 import { publishFontTheme } from "./actions";
 
+// "Lista" mostra o cardápio em lista (o formato novo, #lista), não mais a grade de fotos dos stories.
 type Tab = "capa" | "story" | "lista";
 const TABS: { id: Tab; label: string }[] = [
   { id: "capa", label: "Capa" },
