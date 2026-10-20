@@ -31,9 +31,9 @@ describe("recusa NocoDB que não é local", () => {
 });
 
 describe("buildSeed", () => {
-  it("liga Comunidade e Apareça e cria as zonas Salão e Bar com a mesa no Bar", () => {
+  it("liga o Apareça e cria as zonas Salão e Bar com a mesa no Bar", () => {
     const s = seed();
-    expect(s.restaurant).toMatchObject({ community_enabled: true, apareca_allowed: true, apareca_enabled: true });
+    expect(s.restaurant).toMatchObject({ apareca_allowed: true, apareca_enabled: true });
     const cfg = s.restaurant.apareca_config;
     expect(cfg.zones).toEqual([
       { id: SEED_IDS.zoneSalao, name: "Salão" },
@@ -81,7 +81,7 @@ describe("buildSeed", () => {
 describe("undoPlan", () => {
   it("devolve os interruptores e a config de antes e apaga só as linhas novas", () => {
     const before = {
-      restaurant: { community_enabled: true, apareca_allowed: false, apareca_enabled: false, apareca_config: null },
+      restaurant: { apareca_allowed: false, apareca_enabled: false, apareca_config: null },
       ids: { apareca_videos: [], community_tvs: [1, 2, 3] },
     };
     const current = {
@@ -90,7 +90,7 @@ describe("undoPlan", () => {
       apareca_house_videos: [{ Id: 5 }],
     };
     const plan = undoPlan({ before, current });
-    expect(plan.restaurant).toEqual({ community_enabled: true, apareca_allowed: false, apareca_enabled: false, apareca_config: null });
+    expect(plan.restaurant).toEqual({ apareca_allowed: false, apareca_enabled: false, apareca_config: null });
     expect(Object.keys(plan.restaurant)).toEqual(RESTAURANT_FIELDS);
     expect(plan.remove).toEqual({ apareca_videos: [10, 11], community_tvs: [40, 41], apareca_house_videos: [5] });
     expect(TRACKED).toContain("apareca_tally");

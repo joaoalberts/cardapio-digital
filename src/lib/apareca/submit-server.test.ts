@@ -7,7 +7,7 @@ import type { AparecaHead, VideoRow } from "./types";
 vi.mock("server-only", () => ({}));
 vi.mock("next/server", () => ({ after: vi.fn() }));
 vi.mock("next/cache", () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
-vi.mock("@/lib/comunidade/server", () => ({ getCommunityContent: vi.fn() }));
+vi.mock("@/lib/tv/server", () => ({ getTvRows: vi.fn() }));
 vi.mock("@/lib/db/nocodb", () => ({ list: vi.fn(), first: vi.fn(async () => null), insert: vi.fn(), removeIds: vi.fn(), updateRows: vi.fn() }));
 
 import * as nocodb from "@/lib/db/nocodb";
@@ -15,7 +15,7 @@ import { routeDeps } from "./submit-server";
 
 const head = (ai_allowed: boolean): AparecaHead => ({
   id: "00000000-0000-4000-8000-000000000001", slug: "casa", name: "Casa", timezone: "America/Sao_Paulo", opening_hours: null,
-  allowed: true, ai_allowed, enabled: true, community_enabled: true, config: { ...DEFAULT_CONFIG, mode: "automatico" },
+  allowed: true, ai_allowed, enabled: true, config: { ...DEFAULT_CONFIG, mode: "automatico" },
   logo_path: null, brand_color: null, instagram: null,
 });
 const req = () => new Request("https://cardapio.test/api/apareca/casa/enviar", { method: "POST" });

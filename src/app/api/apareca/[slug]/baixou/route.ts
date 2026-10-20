@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { readBodyCapped, parseJson } from "@/lib/comunidade/http";
+import { readBodyCapped, parseJson } from "@/lib/http";
 import { countDownload } from "@/lib/apareca/submit";
 import { routeDeps } from "@/lib/apareca/submit-server";
 import { isValidSlug } from "@/lib/slug";

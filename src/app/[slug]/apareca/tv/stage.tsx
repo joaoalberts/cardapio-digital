@@ -10,10 +10,9 @@ import { cacheHouse, clearHouseCache, houseSrc } from "./house-cache";
 import { EMPTY_VIEW, StageEngine, StageSlot, type StageView } from "./player";
 
 // Palco do Apareça no telão (T14): os vídeos dos clientes aprovados e os institucionais da casa,
-// numa camada por cima do pôster da Comunidade. Sem programa (Apareça desligado, fora do horário,
+// numa camada por cima do pôster do telão. Sem programa (Apareça desligado, fora do horário,
 // nada aprovado, erro sem programa anterior) a camada fica transparente e aparece o pôster de
-// sempre, que segue por baixo: nunca fica preto. Pausa com enquete aberta e no "Deu X" (quem
-// decide é o telão, pela prop paused).
+// sempre, que segue por baixo: nunca fica preto. Quem pausa é o telão, pela prop paused.
 // - Programação: POST tv/programa a cada 5 s com o segredo da TV (localStorage tl-secret:<slug>,
 //   lido a cada chamada: o telão troca o segredo depois de um 401). Erro: 10, 20, 30 s e continua
 //   com o último programa; volta sozinho. Aba escondida: para; volta no visibilitychange e no online.
@@ -130,7 +129,7 @@ function useViewport() {
 
 /**
  * Tela cheia no primeiro toque, clique ou tecla do controle (o navegador exige um gesto). Só com o
- * Apareça no ar (active): sem ele, o telão da Comunidade fica como era (o toque só liga o som).
+ * Apareça no ar (active): sem ele, o telão fica como era.
  */
 export function useFullscreenOnFirstTouch(active = true) {
   useEffect(() => {

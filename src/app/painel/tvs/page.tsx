@@ -3,21 +3,20 @@ import { headers } from "next/headers";
 import { Suspense } from "react";
 import * as db from "@/lib/db/nocodb";
 import { parseConfig } from "@/lib/apareca/config";
-import { communityOff } from "@/lib/comunidade/off";
 import { mediaUrl } from "@/lib/menu/media";
 import { tvStatus } from "@/lib/painel/tv-status";
 import { currentRestaurant } from "../current";
 import { PanelShell } from "../shell";
 import { TvsEditor, type TvsData } from "./tvs-editor";
 import "../panel.css";
-import "../comunidade/comunidade.css";
+import "../campos.css";
 import "../apareca/apareca.css";
 import "./tvs.css";
 
 export const metadata: Metadata = { title: "TVs" };
 
-// Tela TVs: junta o que ficava em Comunidade › Telão (conectar, desconectar, modo simples) com a zona de
-// cada TV e o editor de zonas do Apareça. Lê só o que as duas telas já liam: community_tvs, dining_tables
+// Tela TVs: conectar, desconectar e o modo simples de cada TV, com a zona de cada TV e o editor de
+// zonas do Apareça. Lê só o que as duas telas já liam: community_tvs, dining_tables
 // e a linha do restaurante (apareca_config e community_tv_simple).
 
 export default function TvsPage() {
@@ -71,7 +70,6 @@ async function Tvs() {
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const data: TvsData = {
     restaurantId: r.id,
-    off: communityOff(),
     tvUrl: host ? `${proto}://${host}/${r.slug}/telao` : `/${r.slug}/telao`,
     tvSimple: r.community_tv_simple === true,
     tvs,

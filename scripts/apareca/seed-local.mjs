@@ -1,5 +1,5 @@
 // Dados de teste do Apareça na TV na cópia local do Depot (depotmedieval-copia), só no NocoDB
-// do Docker. Liga a Comunidade e o Apareça (apareca_allowed e apareca_enabled), cria as zonas
+// do Docker. Liga o Apareça (apareca_allowed e apareca_enabled), cria as zonas
 // Salão e Bar, põe a mesa E74B9X no Bar, cria 2 institucionais "ready" que apontam para o Mux
 // falso (fake-mux.mjs) e 2 TVs já pareadas (uma em cada zona), com segredos novos a cada rodada.
 //
@@ -21,10 +21,23 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertLocalNocodb } from "../comunidade/seed-local.mjs";
 import { HOUSE_MP4, mediaDuration } from "./fake-mux.mjs";
 
-export { assertLocalNocodb };
+/** Endereço do NocoDB de teste: só http://localhost[:porta]. Qualquer outro lança erro. */
+export function assertLocalNocodb(raw) {
+  if (typeof raw !== "string" || !raw) throw new Error("Falta NOCODB_URL (http://localhost:8080).");
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    throw new Error(`NOCODB_URL inválida: ${raw}`);
+  }
+  const plain = u.protocol === "http:" && u.hostname === "localhost" && !u.username && !u.password && !u.search && !u.hash;
+  if (!plain || (u.pathname !== "/" && u.pathname !== "")) {
+    throw new Error(`Recusado: o seed só roda no NocoDB local (http://localhost), não em ${raw}.`);
+  }
+  return `http://localhost${u.port ? `:${u.port}` : ""}`;
+}
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "../..");
@@ -44,9 +57,9 @@ export const HOUSE_MUX = [
   { asset: "seedcasa2asset", playback: "seedcasa2play" },
 ];
 // Tabelas que o e2e pode encher: no --desfazer, tudo com Id novo deste restaurante some.
-export const TRACKED = ["apareca_videos", "apareca_house_videos", "apareca_tally", "community_tvs", "community_tally"];
+export const TRACKED = ["apareca_videos", "apareca_house_videos", "apareca_tally", "community_tvs"];
 // Campos do restaurante que o seed muda e o --desfazer devolve.
-export const RESTAURANT_FIELDS = ["community_enabled", "apareca_allowed", "apareca_enabled", "apareca_config"];
+export const RESTAURANT_FIELDS = ["apareca_allowed", "apareca_enabled", "apareca_config"];
 
 const iso = (ms) => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
 const sha256 = (s) => createHash("sha256").update(s, "utf8").digest("hex");
@@ -102,7 +115,7 @@ export function buildSeed({ rid, tableId, now, plays = 1, houseMs, secrets, conf
   });
   const tvs = [tv(SEED_IDS.tvBar, "TV do Bar (teste)", secrets.bar), tv(SEED_IDS.tvSalao, "TV do Salão (teste)", secrets.salao)];
   return {
-    restaurant: { community_enabled: true, apareca_allowed: true, apareca_enabled: true, apareca_config },
+    restaurant: { apareca_allowed: true, apareca_enabled: true, apareca_config },
     house,
     tvs,
   };
@@ -236,7 +249,7 @@ export async function run(env = process.env, argv = process.argv.slice(2), fetch
   await writeFile(STATE_FILE, JSON.stringify(state, null, 2), { mode: 0o600 });
 
   await db.patch("restaurants", [{ Id: r.Id, ...seed.restaurant }]);
-  log(`Comunidade e Apareça ligados em ${opt.slug}; zonas Salão e Bar; mesa ${opt.mesa} no Bar; ${opt.plays} exibição(ões) por vídeo`);
+  log(`Apareça ligado em ${opt.slug}; zonas Salão e Bar; mesa ${opt.mesa} no Bar; ${opt.plays} exibição(ões) por vídeo`);
   const upsert = async (t, rows) => {
     for (const row of rows) {
       const [have] = await db.list(t, { uid: row.uid });

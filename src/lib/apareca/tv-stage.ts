@@ -20,14 +20,6 @@ export function streamBase(x: unknown): string {
   return BASE.test(b) ? b : MUX_STREAM;
 }
 
-/**
- * O palco só toca na tela sem enquete ("feat"). Com enquete aberta ("poll") a enquete toma a tela;
- * no "Deu X" ("win", 45 s) também pausa: é o momento de print da Comunidade (decisão do controlador).
- */
-export function stageRuns(screen: "feat" | "poll" | "win" | "off"): boolean {
-  return screen === "feat";
-}
-
 export type ProgramReply = { enabled: boolean; program: Program | null; logo: string | null; stream: string };
 
 const obj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);

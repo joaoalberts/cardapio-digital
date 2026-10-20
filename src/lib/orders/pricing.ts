@@ -1,6 +1,5 @@
 // Preço e validação de cada linha do pedido. Puro (sem rede): o servidor usa para
 // recalcular o pedido e o celular usa para mostrar os mesmos valores.
-import type { Origin } from "@/lib/comunidade/types";
 import { inWindow } from "@/lib/menu/hours";
 import type { MenuCategory, MenuItem, PublicMenu } from "@/lib/menu/types";
 
@@ -9,7 +8,6 @@ export const MAX_QTY = 20;
 export const MAX_LINES = 30;
 
 // claim = registro da oferta relâmpago pega (special_claims); só nas linhas de produto especial.
-// origin* = a linha nasceu na Comunidade; o serviço confere a janela e o restaurante depois do preço.
 export type CartLineInput = {
   item: string;
   option?: string | null;
@@ -17,9 +15,6 @@ export type CartLineInput = {
   qty: number;
   note?: string | null;
   claim?: string | null;
-  origin?: Origin["origin"] | null;
-  origin_ref?: string | null;
-  origin_at?: number | null;
 };
 // Registro já conferido pelo serviço (mesa, celular, não usado, não vencido).
 export type ClaimRef = { item_id: string; item_name: string; unit_cents: number; qty_max: number };
@@ -34,8 +29,6 @@ export type PricedLine = {
   note: string;
   special?: boolean;
   claim?: string; // registro da oferta usado nesta linha (confere quem usou primeiro)
-  origin?: Origin["origin"]; // a linha saiu da Comunidade (é o que o placar soma)
-  origin_ref?: string; // id da enquete ou do post
 };
 export type LineErrorReason = "unavailable" | "no_price" | "option" | "half" | "qty" | "note" | "closed_category" | "special";
 export type LineError = { index: number; item: string; reason: LineErrorReason };
@@ -101,9 +94,6 @@ export function resolveLine(index: MenuIndex, line: Pick<CartLineInput, "item" |
   return { ok: true, unit: halfPrice(pa, pb), item: a.item, half: b.item, option };
 }
 
-// Só origem inteira vai para a linha; o momento do toque (origin_at) fica com o serviço.
-const originOf = (l: CartLineInput) => (l.origin && l.origin_ref ? { origin: l.origin, origin_ref: l.origin_ref } : {});
-
 // claims: registros da oferta relâmpago, já validados. A linha com registro sai pelo preço e nome gravados nele.
 export function priceCart(menu: PublicMenu, lines: CartLineInput[], now = new Date(), claims: Map<string, ClaimRef> = new Map()): PriceResult {
   if (!lines.length || lines.length > MAX_LINES) return { ok: false, errors: [{ index: -1, item: "", reason: "qty" }] };
@@ -121,7 +111,7 @@ export function priceCart(menu: PublicMenu, lines: CartLineInput[], now = new Da
       usedByClaim.set(l.claim, used + l.qty);
       const note = cleanNote(l.note);
       if (note === null) return fail("note");
-      out.push({ item_id: l.item, name: c.item_name, half_item_id: null, half_name: null, option: null, qty: l.qty, unit_cents: c.unit_cents, note, special: true, claim: l.claim, ...originOf(l) });
+      out.push({ item_id: l.item, name: c.item_name, half_item_id: null, half_name: null, option: null, qty: l.qty, unit_cents: c.unit_cents, note, special: true, claim: l.claim });
       return;
     }
     if (menu.specials?.items.some((it) => it.id === l.item)) return fail("special");
@@ -139,7 +129,6 @@ export function priceCart(menu: PublicMenu, lines: CartLineInput[], now = new Da
       qty: l.qty,
       unit_cents: r.unit,
       note,
-      ...originOf(l),
     });
   });
   if (errors.length) return { ok: false, errors };

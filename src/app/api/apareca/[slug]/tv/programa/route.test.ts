@@ -1,7 +1,7 @@
 // Rota da programação da TV: com o Apareça fora do ar, nada é gravado (nem o sinal de vida da TV
 // nem o tally dos institucionais). "Com o recurso desligado, nada muda para ninguém" (spec).
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { sha256Hex } from "@/lib/comunidade/tv";
+import { sha256Hex } from "@/lib/tv/pair";
 import { DEFAULT_CONFIG } from "@/lib/apareca/config";
 import type { AparecaHead } from "@/lib/apareca/types";
 
@@ -36,7 +36,7 @@ const TV = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
 const SECRET = "a".repeat(64);
 const head = (over: Partial<AparecaHead> = {}): AparecaHead => ({
   id: RID, slug: "forno", name: "Forno", timezone: "America/Sao_Paulo", opening_hours: null, allowed: true,
-  ai_allowed: false, enabled: true, community_enabled: true, config: { ...DEFAULT_CONFIG, hours: { from: "00:00", to: "23:59" } },
+  ai_allowed: false, enabled: true, config: { ...DEFAULT_CONFIG, hours: { from: "00:00", to: "23:59" } },
   logo_path: null, brand_color: null, instagram: null, ...over,
 });
 const req = () =>
@@ -67,7 +67,6 @@ describe("POST /api/apareca/<slug>/tv/programa", () => {
   it.each([
     ["Apareça desligado pela casa", { enabled: false }],
     ["casa não liberada pelo João", { allowed: false }],
-    ["Comunidade desligada", { community_enabled: false }],
   ])("%s: enabled false e nada gravado (nem last_seen_at nem tally)", async (_n, over) => {
     m.head = head(over);
     const res = await POST(req(), ctx);

@@ -6,9 +6,8 @@ import type { Zone } from "@/lib/apareca/types";
 import type { TvStatus } from "@/lib/painel/tv-status";
 import { setTvZone } from "../apareca/actions";
 import { Zonas } from "../apareca/zonas";
-import { pairTv, revokeTv, setTvSimple } from "../comunidade/actions";
-import { Confirm } from "../comunidade/confirm";
-import { ICONS, Icon } from "../comunidade/shared";
+import { pairTv, revokeTv, setTvSimple } from "./actions";
+import { Confirm } from "./confirm";
 
 // Tela TVs, de cima para baixo: conectar uma TV nova, um cartão por TV (estado, zona e Desconectar),
 // o modo simples e, dobradas, as zonas. As ações são as de sempre (pairTv, revokeTv, setTvSimple e
@@ -19,7 +18,6 @@ type Run = (fn: () => Promise<Res>, ok: string) => Promise<boolean>;
 type Tv = { id: string; label: string; status: TvStatus; zone: string | null };
 export type TvsData = {
   restaurantId: string;
-  off: boolean;
   tvUrl: string;
   tvSimple: boolean;
   tvs: Tv[];
@@ -29,7 +27,8 @@ export type TvsData = {
   tables: { id: string; label: string }[];
 };
 
-const NAME_MAX = 40; // o mesmo corte do servidor (cleanLabel em comunidade/tv.ts)
+const NAME_MAX = 40; // o mesmo corte do servidor (cleanLabel em lib/tv/pair.ts)
+const TV_ICON = "M5 5h14a2.5 2.5 0 012.5 2.5v7A2.5 2.5 0 0119 17H5a2.5 2.5 0 01-2.5-2.5v-7A2.5 2.5 0 015 5zM8 21h8M12 17v4";
 
 export function TvsEditor({ data }: { data: TvsData }) {
   const router = useRouter();
@@ -42,8 +41,8 @@ export function TvsEditor({ data }: { data: TvsData }) {
     return () => clearTimeout(id);
   }, [toast]);
 
-  // Mesmo molde da Comunidade: o aviso e o refresh saem na mesma transição de quem pediu, para o
-  // controle ficar no valor novo até os dados novos chegarem.
+  // O aviso e o refresh saem na mesma transição de quem pediu, para o controle ficar no valor
+  // novo até os dados novos chegarem.
   const run: Run = async (fn, ok) => {
     const res = await fn().catch(() => ({ error: "Não foi possível salvar. Tente de novo." }));
     if (res.error) {
@@ -59,12 +58,7 @@ export function TvsEditor({ data }: { data: TvsData }) {
 
   return (
     <div className="cp tvs">
-      {data.off && (
-        <p className="cp-off" role="status">
-          A Comunidade está desligada no sistema todo agora. Dá para ver as TVs, mas não dá para conectar uma nova até ela voltar.
-        </p>
-      )}
-      {!data.off && <Connect data={data} run={run} />}
+      <Connect data={data} run={run} />
       <TvList data={data} run={run} />
       <Simple data={data} run={run} />
       {data.aparecaOn && (
@@ -122,7 +116,9 @@ function Connect({ data, run }: { data: TvsData; run: Run }) {
     <section className="ap-card" aria-labelledby="tvs-h-new">
       <div className="ap-card-head">
         <h2 id="tvs-h-new">Ligar uma TV nova</h2>
-        <Icon d={ICONS.tv} />
+        <svg className="icon" viewBox="0 0 24 24" aria-hidden>
+          <path d={TV_ICON} />
+        </svg>
       </div>
       <p className="cp-lead">Abra este endereço na TV. Ela mostra um código de 6 letras e números: digite aqui.</p>
       <div className="tvs-url">
@@ -232,7 +228,7 @@ function TvItem({ tv, data, run, zonesOn }: { tv: Tv; data: TvsData; run: Run; z
 // ---------- Modo simples ----------
 
 function Simple({ data, run }: { data: TvsData; run: Run }) {
-  // Mesmo molde do interruptor da Comunidade: valor novo até o refresh; falhou, volta sozinho.
+  // Valor novo até o refresh; falhou, volta sozinho.
   const [simple, setSimple] = useOptimistic(data.tvSimple);
   const [busy, start] = useTransition();
   const toggle = () =>

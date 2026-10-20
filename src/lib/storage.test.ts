@@ -55,15 +55,15 @@ describe("driver de arquivos", () => {
 
 describe("driver local", () => {
   it("putFile grava em <raiz>/<pathname> e devolve a URL da rota local", async () => {
-    const url = await putFile("r1/comunidade/x.webp", buf("foto"), "image/webp");
-    expect(url).toBe("/api/arquivos-locais/r1/comunidade/x.webp");
-    const file = path.join(root, "r1/comunidade/x.webp");
+    const url = await putFile("r1/items/x.webp", buf("foto"), "image/webp");
+    expect(url).toBe("/api/arquivos-locais/r1/items/x.webp");
+    const file = path.join(root, "r1/items/x.webp");
     expect(existsSync(file)).toBe(true);
     expect(await readFile(file, "utf8")).toBe("foto");
   });
 
   it("ownsFile aceita só a pasta do próprio restaurante", async () => {
-    const url = await putFile("r1/comunidade/x.webp", buf("foto"), "image/webp");
+    const url = await putFile("r1/items/x.webp", buf("foto"), "image/webp");
     expect(ownsFile("r1", url)).toBe(true);
     expect(ownsFile("r2", url)).toBe(false);
     expect(ownsFile("r", url)).toBe(false);
@@ -79,7 +79,7 @@ describe("driver local", () => {
 
   it("fora do driver local, URL local não é arquivo de ninguém", () => {
     delete process.env.STORAGE_DRIVER;
-    expect(ownsFile("r1", "/api/arquivos-locais/r1/comunidade/x.webp")).toBe(false);
+    expect(ownsFile("r1", "/api/arquivos-locais/r1/items/x.webp")).toBe(false);
   });
 
   it("o caminho do Blob continua igual", () => {
@@ -90,8 +90,8 @@ describe("driver local", () => {
   });
 
   it("removeFiles apaga o arquivo local", async () => {
-    const url = await putFile("r1/comunidade/apagar.webp", buf("foto"), "image/webp");
-    const file = path.join(root, "r1/comunidade/apagar.webp");
+    const url = await putFile("r1/items/apagar.webp", buf("foto"), "image/webp");
+    const file = path.join(root, "r1/items/apagar.webp");
     expect(existsSync(file)).toBe(true);
     await removeFiles([url]);
     expect(existsSync(file)).toBe(false);
@@ -100,14 +100,14 @@ describe("driver local", () => {
   });
 
   it("removeFiles com '..' não apaga nada fora da pasta", async () => {
-    await putFile("r2/comunidade/fica.webp", buf("foto"), "image/webp");
-    await removeFiles(["/api/arquivos-locais/r1/../r2/comunidade/fica.webp"]);
-    expect(existsSync(path.join(root, "r2/comunidade/fica.webp"))).toBe(true);
+    await putFile("r2/items/fica.webp", buf("foto"), "image/webp");
+    await removeFiles(["/api/arquivos-locais/r1/../r2/items/fica.webp"]);
+    expect(existsSync(path.join(root, "r2/items/fica.webp"))).toBe(true);
   });
 
   it("nunca fala com o Blob: nem para gravar nem para apagar", async () => {
     process.env.BLOB_READ_WRITE_TOKEN = "teste";
-    await putFile("r1/comunidade/y.webp", buf("foto"), "image/webp");
+    await putFile("r1/items/y.webp", buf("foto"), "image/webp");
     await removeFiles([`https://abc123.public.blob.vercel-storage.com/${R1}/items/a.webp`]);
     expect(fetchStub).not.toHaveBeenCalled();
   });
@@ -125,50 +125,50 @@ describe("driver local", () => {
 
 describe("leitura para a rota /api/arquivos-locais", () => {
   it("devolve o arquivo com o content-type pela extensão", async () => {
-    await putFile("r1/comunidade/a.webp", buf("w"), "image/webp");
-    await putFile("r1/comunidade/b.jpg", buf("j"), "image/jpeg");
-    await putFile("r1/comunidade/c.png", buf("p"), "image/png");
-    const a = await readLocalFile(["r1", "comunidade", "a.webp"]);
+    await putFile("r1/items/a.webp", buf("w"), "image/webp");
+    await putFile("r1/items/b.jpg", buf("j"), "image/jpeg");
+    await putFile("r1/items/c.png", buf("p"), "image/png");
+    const a = await readLocalFile(["r1", "items", "a.webp"]);
     expect(a?.type).toBe("image/webp");
     expect(new TextDecoder().decode(a!.body)).toBe("w");
-    expect((await readLocalFile(["r1", "comunidade", "b.jpg"]))?.type).toBe("image/jpeg");
-    expect((await readLocalFile(["r1", "comunidade", "c.png"]))?.type).toBe("image/png");
+    expect((await readLocalFile(["r1", "items", "b.jpg"]))?.type).toBe("image/jpeg");
+    expect((await readLocalFile(["r1", "items", "c.png"]))?.type).toBe("image/png");
   });
 
   it("recusa '..', extensão desconhecida e arquivo que não existe", async () => {
-    await putFile("r1/comunidade/d.webp", buf("w"), "image/webp");
-    await putFile("r1/comunidade/e.html", buf("<script>"), "text/html");
-    expect(await readLocalFile(["r1", "..", "r1", "comunidade", "d.webp"])).toBeNull();
+    await putFile("r1/items/d.webp", buf("w"), "image/webp");
+    await putFile("r1/items/e.html", buf("<script>"), "text/html");
+    expect(await readLocalFile(["r1", "..", "r1", "items", "d.webp"])).toBeNull();
     expect(await readLocalFile(["..", "segredo.webp"])).toBeNull();
-    expect(await readLocalFile(["r1", "comunidade/../comunidade", "d.webp"])).toBeNull();
-    expect(await readLocalFile(["r1", "comunidade", "e.html"])).toBeNull();
-    expect(await readLocalFile(["r1", "comunidade", "nao-existe.webp"])).toBeNull();
+    expect(await readLocalFile(["r1", "items/../items", "d.webp"])).toBeNull();
+    expect(await readLocalFile(["r1", "items", "e.html"])).toBeNull();
+    expect(await readLocalFile(["r1", "items", "nao-existe.webp"])).toBeNull();
     expect(await readLocalFile([])).toBeNull();
   });
 });
 
 describe("removeFilesStrict (retenção: a linha só sai quando o arquivo saiu)", () => {
-  const blob = `https://abc123.public.blob.vercel-storage.com/${R1}/comunidade/a.webp`;
+  const blob = `https://abc123.public.blob.vercel-storage.com/${R1}/items/a.webp`;
 
   it("driver local: apaga; arquivo que já não existe não é erro", async () => {
-    const url = await putFile("r1/comunidade/estrito.webp", buf("foto"), "image/webp");
+    const url = await putFile("r1/items/estrito.webp", buf("foto"), "image/webp");
     await removeFilesStrict([url]);
-    expect(existsSync(path.join(root, "r1/comunidade/estrito.webp"))).toBe(false);
+    expect(existsSync(path.join(root, "r1/items/estrito.webp"))).toBe(false);
     await expect(removeFilesStrict([url, null, undefined])).resolves.toBeUndefined();
     expect(fetchStub).not.toHaveBeenCalled();
   });
 
   it("driver local: unlink que falha por outro motivo lança", async () => {
     // Uma pasta no lugar do arquivo: unlink falha com EPERM/EISDIR, não ENOENT.
-    await mkdir(path.join(root, "r1/comunidade/pasta.webp"), { recursive: true });
-    await expect(removeFilesStrict(["/api/arquivos-locais/r1/comunidade/pasta.webp"])).rejects.toThrow();
+    await mkdir(path.join(root, "r1/items/pasta.webp"), { recursive: true });
+    await expect(removeFilesStrict(["/api/arquivos-locais/r1/items/pasta.webp"])).rejects.toThrow();
   });
 
   it("driver local: nunca fala com o Blob e ignora '..'", async () => {
     process.env.BLOB_READ_WRITE_TOKEN = "teste";
-    await putFile("r2/comunidade/fica2.webp", buf("foto"), "image/webp");
-    await removeFilesStrict([blob, "/api/arquivos-locais/r1/../r2/comunidade/fica2.webp"]);
-    expect(existsSync(path.join(root, "r2/comunidade/fica2.webp"))).toBe(true);
+    await putFile("r2/items/fica2.webp", buf("foto"), "image/webp");
+    await removeFilesStrict([blob, "/api/arquivos-locais/r1/../r2/items/fica2.webp"]);
+    expect(existsSync(path.join(root, "r2/items/fica2.webp"))).toBe(true);
     expect(fetchStub).not.toHaveBeenCalled();
   });
 

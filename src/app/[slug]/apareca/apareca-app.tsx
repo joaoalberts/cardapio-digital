@@ -101,7 +101,7 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
   const pending = useRef<{ id: string; upload_url: string; expires_at: string } | null>(null);
   const clipRef = useRef<Clip | null>(null);
 
-  // Device anônimo do cardápio (o mesmo do carrinho e da Comunidade) e o vídeo guardado.
+  // Device anônimo do cardápio (o mesmo do carrinho) e o vídeo guardado.
   useEffect(() => {
     let d = ls.get(DEVICE_KEY);
     if (!d || !UUID.test(d)) {
@@ -159,9 +159,13 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ mesa, device, name: nameVal, consent: true, consent_at: consentAt ?? new Date().toISOString() }),
         });
-        const j = (await r.json().catch(() => null)) as { ok?: boolean; code?: string; id?: string; upload_url?: string; expires_at?: string } | null;
+        const j = (await r.json().catch(() => null)) as
+          | { ok?: boolean; code?: string; detail?: string; id?: string; upload_url?: string; expires_at?: string }
+          | null;
         if (!r.ok || !j?.ok || !j.id || !j.upload_url || !j.expires_at) {
-          setSendMsg((j?.code && SEND_TEXT[j.code]) || SEND_FAIL);
+          // O motivo curto (código do servidor ou status HTTP) vai junto: é o que o suporte precisa para achar a causa.
+          const why = typeof j?.detail === "string" ? j.detail : (j?.code ?? `http ${r.status}`);
+          setSendMsg((j?.code && SEND_TEXT[j.code]) || `${SEND_FAIL} (${why.slice(0, 40)})`);
           dispatch({ type: "send_failed" });
           return;
         }
@@ -175,8 +179,9 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
       setThumb(c.thumb);
       setMine(m);
       dispatch({ type: "sent" });
-    } catch {
-      setSendMsg(SEND_FAIL);
+    } catch (e) {
+      // "put 4xx", "put rede" ou "put prazo": o vídeo não chegou ao Mux.
+      setSendMsg(`${SEND_FAIL} (${(e instanceof Error ? e.message : "erro").slice(0, 40)})`);
       dispatch({ type: "send_failed" });
     }
   }, [device, nameOk, nameVal, slug, mesa, consentAt]);
@@ -184,6 +189,17 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
   const forget = useCallback(() => {
     ls.del(mineKey(slug));
   }, [slug]);
+  // Mandar outro vídeo: solta o anterior desta tela (ele segue na fila do servidor) e volta ao
+  // início com o nome já preenchido. O aceite é pedido de novo, um por vídeo.
+  const again = useCallback(() => {
+    ls.del(mineKey(slug));
+    onClip(null);
+    setThumb(null);
+    setConsentAt(null);
+    setSendMsg(null);
+    setMine(null);
+    dispatch({ type: "again" });
+  }, [slug, onClip]);
   // A vibração do "Olhe para a TV agora!" acontece uma vez só, mesmo depois de recarregar.
   const buzz = useCallback(() => {
     if (mine) ls.set(mineKey(slug), JSON.stringify({ ...mine, buzzed: true }));
@@ -210,7 +226,7 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
     return (
       <main className="apa-page">
         {head}
-        <Queue slug={slug} mine={mine} thumb={thumb} clip={clip} onGone={forget} onBuzz={buzz} back={back} />
+        <Queue slug={slug} mine={mine} thumb={thumb} clip={clip} onGone={forget} onBuzz={buzz} onAgain={again} back={back} />
       </main>
     );
   }
@@ -263,10 +279,10 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
           <TvIcon />
         </div>
         <h1 className="fd">Apareça na TV!</h1>
-        <p className="apa-lead">Grave um vídeo de 6 segundos. Depois que a equipe aprovar, ele passa na TV da casa.</p>
+        <p className="apa-lead">Grave um vídeo de até 6 segundos. Depois que a equipe aprovar, ele passa na TV da casa.</p>
         <ol className="apa-steps">
           <li>
-            <b>1</b>Grave 6 s
+            <b>1</b>Grave até 6 s
           </li>
           <li>
             <b>2</b>A casa aprova
@@ -341,8 +357,11 @@ export function AparecaApp({ slug, mesa, mesaLabel, name, logo, back }: Props) {
 // ---------- Fila ----------
 
 function Queue({
-  slug, mine, thumb, clip, onGone, onBuzz, back,
-}: { slug: string; mine: Mine; thumb: string | null; clip: Clip | null; onGone: () => void; onBuzz: () => void; back: string }) {
+  slug, mine, thumb, clip, onGone, onBuzz, onAgain, back,
+}: {
+  slug: string; mine: Mine; thumb: string | null; clip: Clip | null;
+  onGone: () => void; onBuzz: () => void; onAgain: () => void; back: string;
+}) {
   const [st, setSt] = useState<Status | null>(null);
   const buzzed = useRef(mine.buzzed === true);
 
@@ -468,6 +487,9 @@ function Queue({
             Baixar meu vídeo
           </a>
         ) : null}
+        <button className="apa-btn apa-btn-2" onClick={onAgain}>
+          Gravar outro vídeo
+        </button>
         <a className="apa-btn apa-btn-2" href={back}>
           Voltar ao cardápio
         </a>

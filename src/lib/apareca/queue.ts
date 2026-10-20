@@ -1,6 +1,5 @@
 // Posição na fila e tempo estimado do "Seu vídeo está na fila!". Funções puras.
-import { currentPoll, pollPhase } from "@/lib/comunidade/clock";
-import type { PollRow, TvRow } from "@/lib/comunidade/types";
+import type { TvRow } from "@/lib/tv/types";
 import { CLIP_MS } from "./recording";
 import type { AparecaConfig, ScheduleRule, VideoRow } from "./types";
 
@@ -23,12 +22,11 @@ export function queuePosition(snapshot: VideoRow[], id: string, zone: string | n
 const pos = (n: number) => (Number.isFinite(n) && n > 0 ? n : 0);
 
 // Tempo até o vídeo começar, em ms (como calculamos; a spec deixou "a decidir"):
-// - a enquete aberta toma a tela: o que falta dela entra inteiro;
 // - na frente há (posição - 1) clipes de 6 s;
 // - a cada clients_max clientes entra um bloco de house_every institucionais, com a média
 //   da duração dos institucionais ativos;
 // - cada TV da zona segue o seu ritmo, então a fila anda tvs vezes mais rápido.
-export function estimateWait(i: { position: number; rule: ScheduleRule; houseS: number[]; pollLeftMs: number; tvs: number }): number {
+export function estimateWait(i: { position: number; rule: ScheduleRule; houseS: number[]; tvs: number }): number {
   const ahead = Math.max(0, Math.floor(pos(i.position)) - 1);
   const house = i.houseS.map(pos).filter((s) => s > 0);
   const avgHouseMs = house.length ? (house.reduce((a, b) => a + b, 0) / house.length) * 1000 : 0;
@@ -37,14 +35,7 @@ export function estimateWait(i: { position: number; rule: ScheduleRule; houseS: 
   const blocks = Math.floor(ahead / clientsMax);
   const queueMs = ahead * CLIP_MS + blocks * houseEvery * avgHouseMs;
   const tvs = Math.max(1, Math.floor(pos(i.tvs)));
-  return Math.round(pos(i.pollLeftMs) + queueMs / tvs);
-}
-
-// Quanto falta da enquete aberta (0 sem enquete aberta).
-export function pollLeftMs(polls: PollRow[], now: Date): number {
-  const p = currentPoll(polls, now);
-  if (!p || pollPhase(p, now) !== "open") return 0;
-  return Math.max(0, Date.parse(p.ends_at) - now.getTime());
+  return Math.round(queueMs / tvs);
 }
 
 // TVs que tocam o vídeo de uma zona: pareadas, não revogadas, da zona ou sem zona.

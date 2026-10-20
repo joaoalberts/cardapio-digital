@@ -26,10 +26,7 @@ import {
   type OfferPlacement, type SpecialClock,
 } from "@/lib/menu/special-schedule";
 import { CartButton } from "./order/cart-button";
-import { Balloon } from "./comunidade/balloon";
 import { AparecaInvite } from "./apareca/invite";
-import { ComunidadeLayer } from "./comunidade/layer";
-import { ComunidadeProvider, useComunidadeOpen } from "./comunidade/provider";
 
 const AUTO_MS = 6000; // cada foto fica 6 s; vídeo usa a própria duração
 const VIDEO_FALLBACK_MS = AUTO_MS * 2.5; // vídeo que não carrega não trava o cardápio
@@ -86,9 +83,7 @@ function visibleCats(menu: PublicMenu, now: number | null): MenuCategory[] {
 export function MenuApp(props: { initialMenu: PublicMenu; tableTag?: ReactNode }) {
   return (
     <OrderProvider slug={props.initialMenu.restaurant.slug}>
-      <ComunidadeProvider>
-        <MenuAppInner {...props} />
-      </ComunidadeProvider>
+      <MenuAppInner {...props} />
     </OrderProvider>
   );
 }
@@ -104,9 +99,6 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
   const sheetOpen = order.sheetOpenRef;
   const sheetNow = useRef(false); // espelho local: o ref do provider só atualiza depois dos efeitos deste componente
   const sheetOpenNow = order.sheet !== null;
-  // Camada da Comunidade aberta cobre a capa: o vídeo pausa, como com o story aberto.
-  const comunidadeOpen = useComunidadeOpen();
-  const comunidadeNow = useRef(false);
   useEffect(() => syncMenu(menu), [menu, syncMenu]);
   // Vídeos e capas vêm do Mux: a conexão já abre junto com a página. O player de vídeo
   // carrega quando o celular fica livre, antes do primeiro toque num story.
@@ -306,7 +298,7 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
     // Story aberto cobre a capa. Ao fechar, a capa já volta a tocar no próprio toque de
     // fechar (`closing`): o navegador do WhatsApp/Instagram só aceita dar play em vídeo
     // dentro de um toque, e depois da animação de saída o toque já tinha "expirado".
-    const covered = (v.open && !closing.current) || comunidadeNow.current || document.visibilityState !== "visible";
+    const covered = (v.open && !closing.current) || document.visibilityState !== "visible";
     const hero = heroVidRef.current;
     if (hero) {
       // Com o story aberto o banner fica parado ("hold"), e o toque não o religa.
@@ -343,10 +335,6 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
     sheetNow.current = sheetOpenNow;
     syncPlayback();
   }, [sheetOpenNow, syncPlayback]);
-  useEffect(() => {
-    comunidadeNow.current = comunidadeOpen;
-    syncPlayback();
-  }, [comunidadeOpen, syncPlayback]);
 
   const scrollTab = useCallback((c: number) => {
     centerTab(vTabsRef.current, c, !reduce.current);
@@ -1081,7 +1069,6 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
               </span>
             )}
           </div>
-          <Balloon />
           <AparecaInvite />
         </section>
 
@@ -1316,7 +1303,6 @@ function MenuAppInner({ initialMenu, tableTag }: { initialMenu: PublicMenu; tabl
         </div>
       )}
 
-      <ComunidadeLayer />
       <OrderLayer />
       <VideoDebug />
     </div>

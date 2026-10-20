@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { aparecaOff } from "@/lib/apareca/off";
 import { forgetSnapshot, getAparecaHead, getHouseVideos } from "@/lib/apareca/store";
 import { playFromTv, type AparecaTvDeps } from "@/lib/apareca/tv";
-import { parseJson, readBodyCapped } from "@/lib/comunidade/http";
+import { parseJson, readBodyCapped } from "@/lib/http";
 import * as db from "@/lib/db/nocodb";
 import { isValidSlug } from "@/lib/slug";
 

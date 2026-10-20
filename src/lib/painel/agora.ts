@@ -1,19 +1,12 @@
 import type { QueueResult } from "@/app/painel/apareca/actions";
-import { questionText } from "@/lib/comunidade/client-logic";
-import { pollPhase } from "@/lib/comunidade/clock";
-import { parseResult } from "@/lib/comunidade/public-state";
-import type { PollRow } from "@/lib/comunidade/types";
 import { tvStatus, type TvStatus } from "./tv-status";
 
-// Tela "Agora": o que o ciclo de 10 s devolve (fila, enquete no ar e TVs). Lógica pura; a leitura fica em
+// Tela "Agora": o que o ciclo de 10 s devolve (fila e TVs). Lógica pura; a leitura fica em
 // painel/agora/actions.ts (loadAgora) e a tela só desenha.
 
-export type AgoraPoll = { id: string; question: string; votes: number | null; endsAt: string };
 export type AgoraTv = { id: string; label: string; status: TvStatus };
-// queueOk false: a leitura da fila falhou; enquete e TVs continuam valendo e a tela avisa só no bloco de vídeos.
-export type AgoraResult = {
-  queue: QueueResult; queueOk: boolean; poll: AgoraPoll | null; tvs: AgoraTv[]; communityOn: boolean; aparecaAllowed: boolean;
-};
+// queueOk false: a leitura da fila falhou; as TVs continuam valendo e a tela avisa só no bloco de vídeos.
+export type AgoraResult = { queue: QueueResult; queueOk: boolean; tvs: AgoraTv[]; aparecaAllowed: boolean };
 
 export const EMPTY_QUEUE: QueueResult = { items: [], newest: null, warn: "ok" };
 
@@ -24,21 +17,9 @@ const at = (v: unknown) => {
   return Number.isFinite(t) ? t : null;
 };
 
-// O result gravado pelo cron só traz porcentagens: diz "ninguém votou" (0), mas não quantos votaram.
-// Sem número confiável fica null e a tela não mostra o total.
-function votesOf(p: PollRow): number | null {
-  const r = parseResult(p.result, p.options.map((o) => o.id));
-  return r && !r.has_votes ? 0 : null;
-}
-
 export function agoraFrom(i: {
-  queue: QueueResult | null; pollRows: PollRow[]; tvRows: Record<string, unknown>[]; now: Date; communityOn: boolean; aparecaAllowed: boolean;
-  restaurantId: string;
+  queue: QueueResult | null; tvRows: Record<string, unknown>[]; now: Date; aparecaAllowed: boolean; restaurantId: string;
 }): AgoraResult {
-  // A casa não agenda duas ao mesmo tempo (pollOverlap); se houver, vale a que abriu primeiro.
-  const open = i.pollRows
-    .filter((p) => p.restaurant_id === i.restaurantId && pollPhase(p, i.now) === "open")
-    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))[0];
   const tvs = i.tvRows
     .flatMap((t) => {
       const id = str(t.id);
@@ -51,9 +32,7 @@ export function agoraFrom(i: {
   return {
     queue: (i.aparecaAllowed && i.queue) || EMPTY_QUEUE,
     queueOk: !i.aparecaAllowed || i.queue !== null,
-    poll: open ? { id: open.id, question: questionText(open, "pt-BR"), votes: votesOf(open), endsAt: open.ends_at } : null,
     tvs,
-    communityOn: i.communityOn,
     aparecaAllowed: i.aparecaAllowed,
   };
 }

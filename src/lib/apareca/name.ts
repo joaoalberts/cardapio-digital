@@ -18,11 +18,16 @@ const RAIZES = [
   "porra", "caralh", "bucet", "piroca", "merda", "arrombad", "cuzao", "xoxota", "xereca", "punheta", "boquete",
   "siririca", "putaria", "filhodaputa", "fodase", "fodido", "vagabund", "estupr", "pedofil", "hitler",
   "nazis", "otari", "escrot", "bost", "babaquinh", "viadinh",
+  // Racismo e automutilação.
+  "crioul", "suicid",
+  // Política: nada de nome de político, partido ou militância na TV (pedido do João, 19/10).
+  "bolsonar", "bolsomin", "lulist", "petist", "lulalivre",
 ];
 const INTEIRAS = new Set([
   "cu", "puta", "puto", "putas", "putos", "foda", "fode", "foder", "fdp", "vsf", "pqp", "krl", "crl", "tnc", "pau", "pica",
   "cacete", "caceta", "viado", "vadia", "corno", "piranha", "retardado", "retardada", "bct", "cuzinho", "xota",
   "babaca", "babacas", "nazi",
+  "lula", "pt", "psol", "bozo",
 ]);
 // Palavras inteiras que contêm uma raiz e passam (sobrenomes e palavras comuns).
 const EXCECOES = new Set([

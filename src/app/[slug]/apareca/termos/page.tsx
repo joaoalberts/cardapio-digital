@@ -56,7 +56,7 @@ async function Termos({ params }: { params: PageProps<"/[slug]/apareca/termos">[
 
             <h2>O que é</h2>
             <p>
-              O &ldquo;Apareça na TV!&rdquo; deixa você gravar um vídeo de 6 segundos pelo celular para ele passar na TV do salão de {casa}.
+              O &ldquo;Apareça na TV!&rdquo; deixa você gravar um vídeo de até 6 segundos pelo celular para ele passar na TV do salão de {casa}.
               Participar é opcional e gratuito.
             </p>
 
