@@ -91,7 +91,7 @@ describe("buildSeed", () => {
     const spItem = items.find((i) => i.category_id === sp.uid)!;
     expect(spItem.promo_price_cents).toBeLessThan(spItem.price_cents);
     expect(spItem.special_every_h).toBe(2);
-    expect(aur(s.tables)).toMatchObject([{ code: "AURORA1", active: true }]);
+    expect(aur(s.tables)).toMatchObject([{ code: "AURORA", active: true }]);
     const pizzas = cats.find((c) => c.name === "Pizzas")!;
     expect(pizzas.half_half).toBe(true);
     expect(parseDoughs(pizzas.doughs)).toEqual([{ label: "Tradicional", extra_cents: 0 }, { label: "Fina", extra_cents: 500 }]);

@@ -48,7 +48,7 @@ const AURORA = {
   opening_hours: DAY(["00:00", "23:00"]),
   languages: LANGS,
   orders_enabled: true,
-  table: { label: "Mesa 1", code: "AURORA1" },
+  table: { label: "Mesa 1", code: "AURORA" },
   cats: [
     { key: "pizzas", name: "Pizzas", cover: "pz-queijos", half: true, items: [
       ["margherita", "Margherita", "Molho de tomate pelado, muçarela de búfala, manjericão fresco e azeite extravirgem.", "pz-queijos", [["Média", 5900], ["Grande", 7900]], ["vegetariano", "com_gluten", "com_lactose"], { featured: true, serves: 2, subgroup: "Tradicionais" }],
@@ -114,7 +114,7 @@ const NONNA = {
   opening_hours: DAY(["00:00", "22:30"]),
   languages: LANGS,
   orders_enabled: true,
-  table: { label: "Mesa 1", code: "NONNA1" },
+  table: { label: "Mesa 1", code: "NONNAA" },
   cats: [
     { key: "massas", name: "Massas", cover: "ms-bolonhesa", items: [
       ["bolo", "Spaghetti alla bolognese", "Ragu de carne e porco cozido devagar, tomate San Marzano e parmigiano.", "ms-bolonhesa", 6400, ["com_gluten", "com_lactose"], { serves: 1, subgroup: "Clássicas da Nonna" }],
@@ -386,7 +386,7 @@ export async function run(env = process.env, argv = process.argv.slice(2), fetch
       }
     }
   }
-  log(`Prontos: ${SLUGS.join(", ")}. Mesa de teste: ?mesa=AURORA1 em forno-aurora.`);
+  log(`Prontos: ${SLUGS.join(", ")}. Mesa de teste: ?mesa=AURORA em forno-aurora.`);
   return { seed, columns };
 }
 
