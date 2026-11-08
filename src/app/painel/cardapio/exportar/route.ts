@@ -1,4 +1,5 @@
 import * as db from "@/lib/db/nocodb";
+import { csvCell } from "@/lib/csv";
 import { tagLabel } from "@/lib/menu/tags";
 import { currentRestaurant } from "../../current";
 
@@ -13,7 +14,6 @@ export async function GET() {
     db.list<{ id: string; name: string; active: boolean }>("categories", { restaurant_id: r.id }, { sort: "position,Id" }),
     db.list<It>("items", { restaurant_id: r.id }, { sort: "position,Id" }),
   ]);
-  const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const price = (c: number | null) => (c == null ? "" : (c / 100).toFixed(2).replace(".", ","));
   const lines = [["Categoria", "Produto", "Descrição", "Preço", "Preço desconto", "Opções de preço", "Selos", "Destaque", "Visível"]];
   for (const c of cats) {
@@ -33,7 +33,7 @@ export async function GET() {
     }
   }
   // BOM para o Excel reconhecer os acentos; ";" porque é o separador do Excel em português.
-  const body = "﻿" + lines.map((l) => l.map(cell).join(";")).join("\r\n");
+  const body = "﻿" + lines.map((l) => l.map(csvCell).join(";")).join("\r\n");
   return new Response(body, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
