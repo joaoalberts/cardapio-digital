@@ -10,6 +10,19 @@ export const LOGIN_PER_IP = 10;
 export const LOGIN_PER_EMAIL = 5;
 export const SIGNUP_PER_IP_HOUR = 5;
 
+// IPv6: quem tem uma rede /64 troca de endereço à vontade; o limite vale para o /64 inteiro.
+// IPv4 e "anon" ficam como estão.
+export function ipBucket(ip: string): string {
+  if (!ip.includes(":")) return ip;
+  const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i); // IPv4 dentro de IPv6
+  if (mapped) return mapped[1];
+  const [head, tail = null] = ip.split("::");
+  const a = head ? head.split(":") : [];
+  const b = tail === null ? [] : tail ? tail.split(":") : [];
+  const groups = tail === null ? a : [...a, ...Array(Math.max(0, 8 - a.length - b.length)).fill("0"), ...b];
+  return `${groups.slice(0, 4).map((g) => g.toLowerCase().replace(/^0+(?=.)/, "")).join(":")}::/64`;
+}
+
 type Limiters = { ip: Limiter; email: Limiter };
 
 const loginLimiters = (): Limiters => ({
@@ -23,9 +36,10 @@ const signupLimiter = () => sharedLimiter("cadastro.ip", { max: SIGNUP_PER_IP_HO
 export type LoginReserve = { ok: true; release(): void } | { ok: false };
 
 export function reserveLogin(ip: string, email: string, l: Limiters = loginLimiters()): LoginReserve {
-  if (!l.ip.hit(ip)) return { ok: false };
+  const ipKey = ipBucket(ip);
+  if (!l.ip.hit(ipKey)) return { ok: false };
   if (!l.email.hit(email)) {
-    l.ip.undo(ip);
+    l.ip.undo(ipKey);
     return { ok: false };
   }
   let released = false;
@@ -34,7 +48,7 @@ export function reserveLogin(ip: string, email: string, l: Limiters = loginLimit
     release() {
       if (released) return;
       released = true;
-      l.ip.undo(ip);
+      l.ip.undo(ipKey);
       l.email.undo(email);
     },
   };
@@ -42,5 +56,5 @@ export function reserveLogin(ip: string, email: string, l: Limiters = loginLimit
 
 // Cada cadastro tentado conta (criar conta em massa é o que se quer frear).
 export function allowSignup(ip: string, limiter: Limiter = signupLimiter()): boolean {
-  return limiter.hit(ip);
+  return limiter.hit(ipBucket(ip));
 }

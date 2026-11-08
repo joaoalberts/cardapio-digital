@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createLimiter } from "@/lib/limiter";
-import { allowSignup, reserveLogin } from "./tentativas";
+import { allowSignup, ipBucket, reserveLogin } from "./tentativas";
 
 const MIN = 60_000;
 function setup() {
@@ -75,5 +75,24 @@ describe("allowSignup", () => {
     expect(allowSignup("8.8.8.8", s.signup)).toBe(true);
     s.advance(60 * MIN);
     expect(allowSignup("7.7.7.7", s.signup)).toBe(true);
+  });
+});
+
+describe("ipBucket", () => {
+  it("IPv6 vira o /64 (com ou sem ::); IPv4 e anon ficam", () => {
+    expect(ipBucket("2001:db8:1:2:aaaa:bbbb:cccc:dddd")).toBe("2001:db8:1:2::/64");
+    expect(ipBucket("2001:0DB8:0001:0002::1")).toBe("2001:db8:1:2::/64");
+    expect(ipBucket("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(ipBucket("::1")).toBe("0:0:0:0::/64");
+    expect(ipBucket("::ffff:203.0.113.9")).toBe("203.0.113.9");
+    expect(ipBucket("203.0.113.9")).toBe("203.0.113.9");
+    expect(ipBucket("anon")).toBe("anon");
+  });
+
+  it("trocar o fim do endereço IPv6 não escapa do limite por IP", () => {
+    const s = setup();
+    for (let i = 0; i < 10; i++) expect(reserveLogin(`2001:db8:1:2::${i + 1}`, `u${i}@b.com`, s.login).ok).toBe(true);
+    expect(reserveLogin("2001:db8:1:2::ffff", "novo@b.com", s.login).ok).toBe(false);
+    expect(reserveLogin("2001:db8:1:3::1", "novo@b.com", s.login).ok).toBe(true);
   });
 });
