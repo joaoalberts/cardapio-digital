@@ -8,6 +8,7 @@ import { suggestTranslation, translationEnabled, type Texts } from "@/lib/transl
 import { autoTranslate } from "@/lib/menu/auto-translate";
 import { createUpload, deleteAsset, muxEnabled, uploadBelongsTo, uploadPassthrough, videoState, type VideoState } from "@/lib/mux";
 import { sharedLimiter } from "@/lib/limiter";
+import { KNOWN_LANGS } from "@/lib/menu/i18n";
 import { mediaFilesOf, muxPending, muxRow, removeMedia, replaceMedia, validMedia, type MediaInput } from "@/lib/media-store";
 
 export type { MediaInput };
@@ -417,13 +418,20 @@ export async function suggestTranslations(
   // Só quem está logado no painel usa o serviço de tradução (ele tem custo).
   const userId = await currentUserId();
   if (!userId) return { error: "Entre de novo no painel." };
-  // 30 chamadas por hora por usuário; em memória, por instância do servidor (melhor esforço).
-  if (!sharedLimiter("traducao.usuario", { max: 30, windowMs: 60 * 60_000 }).hit(userId)) {
-    return { error: "Muitas sugestões seguidas. Tente de novo em alguns minutos." };
+  // Só idiomas conhecidos, sem repetir (a lista vem do navegador), e textos com teto.
+  const langs = [...new Set(languages)].filter((l): l is string => (KNOWN_LANGS as readonly string[]).includes(l) && l !== "pt-BR");
+  if (!langs.length) return { error: "Escolha ao menos um idioma além do português." };
+  const safe: Texts = { name: clean(texts?.name, 200), description: clean(texts?.description, 2000) };
+  // 30 chamadas por hora por usuário, contando uma batida por idioma (30 x 5 idiomas = 150);
+  // em memória, por instância do servidor (melhor esforço). Sem cota para todos, nenhum roda.
+  const limiter = sharedLimiter("traducao.usuario", { max: 150, windowMs: 60 * 60_000 });
+  for (let k = 0; k < langs.length; k++) {
+    if (!limiter.hit(userId)) {
+      for (let j = 0; j < k; j++) limiter.undo(userId);
+      return { error: "Muitas sugestões seguidas. Tente de novo em alguns minutos." };
+    }
   }
-  const pairs = await Promise.all(
-    languages.filter((l) => l !== "pt-BR").map(async (l) => [l, await suggestTranslation(texts, l).catch(() => null)] as const),
-  );
+  const pairs = await Promise.all(langs.map(async (l) => [l, await suggestTranslation(safe, l).catch(() => null)] as const));
   const suggestions = Object.fromEntries(pairs.filter(([, v]) => v)) as Record<string, Texts>;
   if (!Object.keys(suggestions).length) return { error: "Não foi possível sugerir agora. Tente de novo." };
   return { suggestions };

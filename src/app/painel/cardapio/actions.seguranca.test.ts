@@ -72,22 +72,40 @@ describe("discardVideo", () => {
   });
 });
 
-describe("suggestTranslations: 30 por hora por usuário", () => {
+describe("suggestTranslations: limite e entrada", () => {
+  const T = { name: "a", description: "b" };
   beforeEach(() => h.suggest.mockClear());
 
   it("sem login: pede para entrar, sem gastar o serviço", async () => {
     h.currentUserId.mockResolvedValue(null);
-    expect((await suggestTranslations({ name: "a" } as never, ["en"])).error).toMatch(/Entre de novo/);
+    expect((await suggestTranslations(T, ["en"])).error).toMatch(/Entre de novo/);
     expect(h.suggest).not.toHaveBeenCalled();
   });
 
-  it("a 31ª chamada do mesmo usuário é barrada; outro usuário segue", async () => {
+  it("idiomas repetidos ou desconhecidos não multiplicam as chamadas", async () => {
+    h.currentUserId.mockResolvedValue("user-dup");
+    const r = await suggestTranslations(T, ["en", "en", "en", "xx", "ja", "pt-BR", "es"]);
+    expect(Object.keys(r.suggestions ?? {}).sort()).toEqual(["en", "es"]);
+    expect(h.suggest).toHaveBeenCalledTimes(2);
+    expect((await suggestTranslations(T, ["ja", "xx"])).error).toMatch(/idioma/);
+  });
+
+  it("textos grandes são cortados antes de ir ao serviço", async () => {
+    h.currentUserId.mockResolvedValue("user-big");
+    await suggestTranslations({ name: "n".repeat(5000), description: "d".repeat(50000) }, ["en"]);
+    const sent = h.suggest.mock.calls[0] as unknown as [{ name: string; description: string }];
+    expect(sent[0].name).toHaveLength(200);
+    expect(sent[0].description).toHaveLength(2000);
+  });
+
+  it("cada idioma gasta uma batida: 150 por hora; sem cota para todos, nenhum roda", async () => {
     h.currentUserId.mockResolvedValue("user-A");
-    for (let i = 0; i < 30; i++) expect((await suggestTranslations({ name: "a" } as never, ["en"])).suggestions).toBeDefined();
+    const all = ["en", "es", "fr", "it", "de"];
+    for (let i = 0; i < 30; i++) expect((await suggestTranslations(T, all)).suggestions).toBeDefined();
     const calls = h.suggest.mock.calls.length;
-    expect((await suggestTranslations({ name: "a" } as never, ["en"])).error).toMatch(/Muitas sugestões/);
+    expect((await suggestTranslations(T, ["en"])).error).toMatch(/Muitas sugestões/);
     expect(h.suggest.mock.calls.length).toBe(calls);
     h.currentUserId.mockResolvedValue("user-B");
-    expect((await suggestTranslations({ name: "a" } as never, ["en"])).suggestions).toBeDefined();
+    expect((await suggestTranslations(T, ["en"])).suggestions).toBeDefined();
   });
 });
