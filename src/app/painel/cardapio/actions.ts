@@ -112,8 +112,12 @@ export async function updateCategory(restaurantId: string, id: string, input: Ca
     return { error: FAIL };
   }
   if (input.media !== undefined) {
-    const res = await replaceMedia(restaurantId, { categoryId: id }, input.media);
-    if (res.error) return res;
+    const res = await replaceMedia(restaurantId, { categoryId: id }, input.media).catch(() => ({ error: FAIL }));
+    // Mesmo com erro a troca pode ter gravado a linha nova: o cache do cliente precisa refazer.
+    if (res.error) {
+      await refreshMenu(restaurantId).catch(() => undefined);
+      return res;
+    }
   }
   const desc = description ?? before.description ?? "";
   if (before.name !== n || (before.description ?? "") !== desc) {
@@ -247,8 +251,11 @@ export async function saveItem(restaurantId: string, input: ItemInput): Promise<
   }
 
   if (m !== undefined) {
-    const res = await replaceMedia(restaurantId, { itemId: id }, m);
-    if (res.error) return { ...res, id };
+    const res = await replaceMedia(restaurantId, { itemId: id }, m).catch(() => ({ error: FAIL }));
+    if (res.error) {
+      await refreshMenu(restaurantId).catch(() => undefined);
+      return { ...res, id };
+    }
   }
 
   if (textsChanged) await autoTranslate(restaurantId, { itemId: id }, { name, description });

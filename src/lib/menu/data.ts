@@ -103,7 +103,8 @@ export async function getPublicMenu(slug: string, lang = "pt-BR"): Promise<Publi
       country: i.country ?? null,
       price_options: i.price_options ?? null,
       tags: i.tags ?? [],
-      media: ready.filter((m) => m.item_id === i.id).map(media),
+      // Mais nova primeiro: se uma troca deixar a linha antiga para trás, a foto nova ainda vence.
+      media: ready.filter((m) => m.item_id === i.id).sort((a, b) => b.Id - a.Id).map(media),
       category_id: c.id,
       half_half: !!c.half_half,
     };
