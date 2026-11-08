@@ -1,7 +1,10 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { EMAIL, checkCredentials, createUser, currentUser, currentUserId, findUserByEmail, normalizeEmail, setPassword, startSession } from "@/lib/auth";
+import { allowSignup, reserveLogin, TOO_MANY } from "@/lib/auth/tentativas";
+import { clientIp } from "@/lib/http";
 import { createRestaurantFor, slugTaken } from "@/lib/restaurants";
 import { isValidSlug, slugify } from "@/lib/slug";
 
@@ -26,11 +29,16 @@ export async function signIn(_prev: FormState, formData: FormData): Promise<Form
   const password = String(formData.get("password") ?? "");
   if (!email || !password) return { error: "Preencha e-mail e senha." };
 
+  // Limite por IP e por e-mail; só a senha errada fica contada. Com o limite estourado a
+  // senha ainda é conferida: certa entra, errada recebe a mensagem de muitas tentativas.
+  const guard = reserveLogin(clientIp(await headers()), normalizeEmail(email));
   try {
     const user = await checkCredentials(email, password);
-    if (!user) return { error: "E-mail ou senha incorretos." };
+    if (!user) return { error: guard.blocked ? TOO_MANY : "E-mail ou senha incorretos." };
+    guard.release();
     await startSession(user.id);
   } catch (e) {
+    guard.release();
     return dbError(e);
   }
   redirect("/painel");
@@ -48,6 +56,7 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
   }
   if (!EMAIL.test(email)) return { error: "Informe um e-mail válido." };
   if (password.length < 8) return { error: "A senha precisa ter pelo menos 8 caracteres." };
+  if (!allowSignup(clientIp(await headers()))) return { error: TOO_MANY };
   try {
     if (await findUserByEmail(email)) {
       return { error: "Já existe uma conta com esse e-mail. Use a opção Entrar." };
