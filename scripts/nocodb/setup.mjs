@@ -28,7 +28,8 @@ const id = text("uid");
 const created = date("created_at");
 
 export const TABLES = {
-  users: [id, { ...text("email"), uidt: "Email" }, text("password_hash"), created],
+  // session_version: sobe a cada troca de senha; sessões com versão antiga caem (src/lib/auth).
+  users: [id, { ...text("email"), uidt: "Email" }, text("password_hash"), created, num("session_version")],
   restaurants: [
     id, text("name"), text("slug"), text("logo_path"), text("brand_color"),
     json("languages"), num("menu_version"), text("plan"), text("subscription_status"),

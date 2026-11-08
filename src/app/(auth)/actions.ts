@@ -66,7 +66,7 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
     // Sem confirmação por e-mail: a conta já entra no painel com o restaurante criado.
     const user = await createUser(email, password);
     await createRestaurantFor(user.id, restaurantName, slug);
-    await startSession(user.id);
+    await startSession(user.id, 0);
   } catch (e) {
     return dbError(e);
   }
@@ -88,7 +88,8 @@ export async function updatePassword(_prev: FormState, formData: FormData): Prom
   try {
     const userId = await currentUserId();
     if (!userId) return { error: "Entre de novo para trocar a senha." };
-    await setPassword(userId, password);
+    // Quem redefine continua logado: cookie novo com a versão nova.
+    await startSession(userId, await setPassword(userId, password));
   } catch (e) {
     return dbError(e);
   }
@@ -108,7 +109,8 @@ export async function changePassword(_prev: FormState, formData: FormData): Prom
     const user = await currentUser();
     if (!user) return { error: "Entre de novo para trocar a senha." };
     if (!(await checkCredentials(user.email, current))) return { error: "A senha atual está errada." };
-    await setPassword(user.id, password);
+    // As outras sessões caem; esta recebe cookie novo com a versão nova.
+    await startSession(user.id, await setPassword(user.id, password));
   } catch (e) {
     return dbError(e);
   }

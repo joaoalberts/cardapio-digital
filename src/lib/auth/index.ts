@@ -1,6 +1,7 @@
 import "server-only";
 import { randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import * as db from "@/lib/db/nocodb";
 import { SESSION_COOKIE, SESSION_DAYS, createSessionValue, readSessionValue } from "./session";
@@ -12,7 +13,18 @@ const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number) =>
 
 // created_at: só currentUser preenche (o super admin confere a data da conta com SUPERADMIN_SINCE).
 export type User = { id: string; email: string; created_at?: string | null };
-type UserRow = { Id: number; id: string; email: string; password_hash: string | null; created_at?: string | null };
+type UserRow = {
+  Id: number;
+  id: string;
+  email: string;
+  password_hash: string | null;
+  created_at?: string | null;
+  session_version?: number | null;
+};
+
+// Versão da sessão do usuário. Coluna ainda não criada (campo ausente) ou vazia vale 0:
+// o código funciona antes e depois de rodar o setup do NocoDB.
+export const versionOf = (u: Pick<UserRow, "session_version">) => Number(u.session_version ?? 0) || 0;
 
 export const EMAIL = /^[^\s@,()~]+@[^\s@,()~]+\.[^\s@,()~]+$/;
 
@@ -53,12 +65,24 @@ export async function checkCredentials(email: string, password: string): Promise
   return { id: u.id, email: u.email };
 }
 
-export async function setPassword(userId: string, password: string) {
-  await db.update("users", { uid: userId }, { password_hash: await hashPassword(password) });
+// Troca a senha e sobe a versão da sessão: as outras sessões deixam de valer. Devolve a
+// versão nova (quem trocou a própria senha emite um cookie com ela e continua logado).
+// Sem a coluna no banco (campo ausente), só troca a senha e a versão fica 0.
+export async function setPassword(userId: string, password: string): Promise<number> {
+  const row = await db.first<UserRow>("users", { uid: userId });
+  const patch: Record<string, unknown> = { password_hash: await hashPassword(password) };
+  let version = 0;
+  if (row && "session_version" in row) {
+    version = versionOf(row) + 1;
+    patch.session_version = version;
+  }
+  await db.update("users", { uid: userId }, patch);
+  return version;
 }
 
-export async function startSession(userId: string) {
-  (await cookies()).set(SESSION_COOKIE, await createSessionValue(userId), {
+export async function startSession(userId: string, version?: number) {
+  const v = version ?? (await sessionVersion(userId));
+  (await cookies()).set(SESSION_COOKIE, await createSessionValue(userId, v), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
@@ -67,19 +91,34 @@ export async function startSession(userId: string) {
   });
 }
 
+async function sessionVersion(userId: string) {
+  const row = await db.first<UserRow>("users", { uid: userId });
+  return row ? versionOf(row) : 0;
+}
+
 export async function endSession() {
   (await cookies()).delete(SESSION_COOKIE);
 }
 
-// Id de quem está logado (só pelo cookie, sem ir ao banco).
+// Uma leitura de users por requisição (cache do React), qualquer que seja o número de chamadas.
+const userRow = cache(async (id: string) => db.first<UserRow>("users", { uid: id }));
+
+// Usuário do cookie, só se a versão da sessão ainda bate com a do banco (troca de senha
+// derruba as sessões antigas).
+async function sessionUser(): Promise<UserRow | null> {
+  const s = await readSessionValue((await cookies()).get(SESSION_COOKIE)?.value);
+  if (!s) return null;
+  const u = await userRow(s.userId);
+  return u && versionOf(u) === s.version ? u : null;
+}
+
+// Id de quem está logado.
 export async function currentUserId() {
-  return readSessionValue((await cookies()).get(SESSION_COOKIE)?.value);
+  return (await sessionUser())?.id ?? null;
 }
 
 export async function currentUser(): Promise<User | null> {
-  const id = await currentUserId();
-  if (!id) return null;
-  const u = await db.first<UserRow>("users", { uid: id });
+  const u = await sessionUser();
   return u ? { id: u.id, email: u.email, created_at: typeof u.created_at === "string" ? u.created_at : null } : null;
 }
 

@@ -5,7 +5,8 @@ export async function proxy(request: NextRequest) {
   const user = await readSessionValue(request.cookies.get(SESSION_COOKIE)?.value);
   const { pathname } = request.nextUrl;
 
-  // Verificação rápida; a página do painel confere de novo no servidor.
+  // Verificação rápida (só assinatura e validade); a página do painel confere de novo no servidor,
+  // inclusive a versão da sessão.
   if (!user && pathname.startsWith("/painel")) {
     const url = request.nextUrl.clone();
     url.pathname = "/entrar";
