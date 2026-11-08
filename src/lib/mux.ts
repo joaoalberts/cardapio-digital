@@ -98,6 +98,15 @@ export async function videoState(uploadId: string): Promise<VideoState> {
   return { status: "ready", assetId: up.asset_id, playbackId: pb.id, mp4 };
 }
 
+// Restaurante gravado como passthrough no envio (createUpload). "" quando o Mux não devolve.
+export async function uploadPassthrough(uploadId: string): Promise<string> {
+  const up = await muxRequest<{ new_asset_settings?: { passthrough?: string } }>(`/uploads/${uploadId}`);
+  return up.new_asset_settings?.passthrough ?? "";
+}
+
+// Sem passthrough não dá para provar o dono (envio antigo): vale só a conferência de membro.
+export const uploadBelongsTo = (passthrough: string, restaurantId: string) => !passthrough || passthrough === restaurantId;
+
 export async function deleteAsset(assetId: string) {
   await muxRequest(`/assets/${assetId}`, { method: "DELETE" }).catch(() => {});
 }

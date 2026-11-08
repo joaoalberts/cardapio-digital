@@ -159,7 +159,7 @@ export function useMediaSlot(restaurantId: string, folder: "items" | "categories
     },
     discard() {
       if (uploaded.current.length) void discardFiles(restaurantId, uploaded.current);
-      muxUploads.current.forEach((id) => void discardVideo(id));
+      muxUploads.current.forEach((id) => void discardVideo(restaurantId, id));
       uploaded.current = [];
       muxUploads.current = [];
     },

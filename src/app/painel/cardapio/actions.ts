@@ -6,7 +6,8 @@ import { refreshMenu } from "@/lib/restaurants";
 import { TAG_IDS } from "@/lib/menu/tags";
 import { suggestTranslation, translationEnabled, type Texts } from "@/lib/translate";
 import { autoTranslate } from "@/lib/menu/auto-translate";
-import { createUpload, deleteAsset, muxEnabled, videoState, type VideoState } from "@/lib/mux";
+import { createUpload, deleteAsset, muxEnabled, uploadBelongsTo, uploadPassthrough, videoState, type VideoState } from "@/lib/mux";
+import { sharedLimiter } from "@/lib/limiter";
 import { mediaFilesOf, muxPending, muxRow, removeMedia, replaceMedia, validMedia, type MediaInput } from "@/lib/media-store";
 
 export type { MediaInput };
@@ -288,9 +289,13 @@ export async function startVideoUpload(
 }
 
 // Vídeo enviado e não salvo: apaga no Mux para não ocupar a conta.
-export async function discardVideo(uploadId: string) {
+// Só membro do restaurante apaga, e só vídeo enviado para ele (passthrough do Mux).
+export async function discardVideo(restaurantId: string, uploadId: string) {
   if (!muxEnabled()) return;
-  if (!(await currentUserId())) return;
+  if (!okId(restaurantId) || typeof uploadId !== "string" || !uploadId) return;
+  if (!(await isMember(restaurantId))) return;
+  const owner = await uploadPassthrough(uploadId).catch(() => null);
+  if (owner === null || !uploadBelongsTo(owner, restaurantId)) return;
   for (let k = 0; k < 4; k++) {
     const st = await videoState(uploadId).catch((): VideoState => ({ status: "failed" }));
     if ("assetId" in st && st.assetId) return deleteAsset(st.assetId);
@@ -410,7 +415,12 @@ export async function suggestTranslations(
 ): Promise<{ error?: string; suggestions?: Record<string, Texts> }> {
   if (!translationEnabled()) return { error: "A sugestão automática ainda não está ligada neste sistema." };
   // Só quem está logado no painel usa o serviço de tradução (ele tem custo).
-  if (!(await currentUserId())) return { error: "Entre de novo no painel." };
+  const userId = await currentUserId();
+  if (!userId) return { error: "Entre de novo no painel." };
+  // 30 chamadas por hora por usuário; em memória, por instância do servidor (melhor esforço).
+  if (!sharedLimiter("traducao.usuario", { max: 30, windowMs: 60 * 60_000 }).hit(userId)) {
+    return { error: "Muitas sugestões seguidas. Tente de novo em alguns minutos." };
+  }
   const pairs = await Promise.all(
     languages.filter((l) => l !== "pt-BR").map(async (l) => [l, await suggestTranslation(texts, l).catch(() => null)] as const),
   );

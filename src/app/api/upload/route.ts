@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isMember } from "@/lib/auth";
 import { putFile, storageEnabled } from "@/lib/storage";
+import { matchesSignature } from "@/lib/upload-sniff";
 
 // Fotos, capas de vídeo e logos do painel: o navegador manda o arquivo já reduzido e
 // o servidor grava no Vercel Blob, na pasta do restaurante (com STORAGE_DRIVER=local, em .local-blob/).
@@ -23,6 +24,10 @@ export async function POST(request: NextRequest) {
   const body = await request.arrayBuffer();
   if (!body.byteLength || body.byteLength > MAX_BYTES) {
     return NextResponse.json({ error: "Arquivo grande demais. Envie até 4 MB." }, { status: 413 });
+  }
+  // O tipo declarado tem que bater com os bytes do arquivo (assinatura): recusa SVG, HTML e disfarces.
+  if (!matchesSignature(new Uint8Array(body, 0, Math.min(body.byteLength, 16)), type)) {
+    return NextResponse.json({ error: "Arquivo inválido." }, { status: 400 });
   }
   try {
     const url = await putFile(`${restaurantId}/${name}`, body, type);
