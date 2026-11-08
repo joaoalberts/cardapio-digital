@@ -14,26 +14,22 @@ function setup() {
 }
 
 describe("reserveLogin", () => {
-  it("6ª falha seguida no mesmo e-mail é barrada, mesmo vinda de outro IP", () => {
+  it("6ª falha seguida no mesmo e-mail fica `blocked`, mesmo vinda de outro IP", () => {
     const s = setup();
-    for (let i = 0; i < 5; i++) expect(reserveLogin(`1.1.1.${i}`, "a@b.com", s.login).ok).toBe(true);
-    expect(reserveLogin("9.9.9.9", "a@b.com", s.login).ok).toBe(false);
-    expect(reserveLogin("9.9.9.9", "outra@b.com", s.login).ok).toBe(true);
+    for (let i = 0; i < 5; i++) expect(reserveLogin(`1.1.1.${i}`, "a@b.com", s.login).blocked).toBe(false);
+    expect(reserveLogin("9.9.9.9", "a@b.com", s.login).blocked).toBe(true);
+    expect(reserveLogin("9.9.9.9", "outra@b.com", s.login).blocked).toBe(false);
   });
 
-  it("11ª falha do mesmo IP é barrada, com e-mails diferentes", () => {
+  it("11ª falha do mesmo IP fica `blocked`, com e-mails diferentes", () => {
     const s = setup();
-    for (let i = 0; i < 10; i++) expect(reserveLogin("2.2.2.2", `u${i}@b.com`, s.login).ok).toBe(true);
-    expect(reserveLogin("2.2.2.2", "novo@b.com", s.login).ok).toBe(false);
+    for (let i = 0; i < 10; i++) expect(reserveLogin("2.2.2.2", `u${i}@b.com`, s.login).blocked).toBe(false);
+    expect(reserveLogin("2.2.2.2", "novo@b.com", s.login).blocked).toBe(true);
   });
 
   it("release devolve a tentativa: login certo não conta", () => {
     const s = setup();
-    for (let i = 0; i < 20; i++) {
-      const r = reserveLogin("3.3.3.3", "a@b.com", s.login);
-      expect(r.ok).toBe(true);
-      if (r.ok) r.release();
-    }
+    for (let i = 0; i < 20; i++) reserveLogin("3.3.3.3", "a@b.com", s.login).release();
     expect(s.login.ip.size()).toBe(0);
     expect(s.login.email.size()).toBe(0);
   });
@@ -42,28 +38,25 @@ describe("reserveLogin", () => {
     const s = setup();
     reserveLogin("4.4.4.4", "x@b.com", s.login); // falha que fica contada
     const r = reserveLogin("4.4.4.4", "x@b.com", s.login);
-    if (r.ok) {
-      r.release();
-      r.release();
-    }
-    for (let i = 0; i < 3; i++) expect(reserveLogin("4.4.4.4", "x@b.com", s.login).ok).toBe(true);
-    expect(reserveLogin("4.4.4.4", "x@b.com", s.login).ok).toBe(true); // 5ª reserva
-    expect(reserveLogin("4.4.4.4", "x@b.com", s.login).ok).toBe(false);
+    r.release();
+    r.release();
+    for (let i = 0; i < 4; i++) expect(reserveLogin("4.4.4.4", "x@b.com", s.login).blocked).toBe(false);
+    expect(reserveLogin("4.4.4.4", "x@b.com", s.login).blocked).toBe(true);
   });
 
-  it("barrada por e-mail não gasta a cota do IP", () => {
+  it("estourado não conta mais falhas: nem do IP nem do e-mail", () => {
     const s = setup();
     for (let i = 0; i < 5; i++) reserveLogin("5.5.5.5", "a@b.com", s.login);
-    for (let i = 0; i < 20; i++) expect(reserveLogin("5.5.5.5", "a@b.com", s.login).ok).toBe(false);
-    for (let i = 0; i < 5; i++) expect(reserveLogin("5.5.5.5", `n${i}@b.com`, s.login).ok).toBe(true);
+    for (let i = 0; i < 20; i++) reserveLogin("5.5.5.5", "a@b.com", s.login).release();
+    for (let i = 0; i < 5; i++) expect(reserveLogin("5.5.5.5", `n${i}@b.com`, s.login).blocked).toBe(false);
   });
 
   it("depois de 10 minutos libera de novo", () => {
     const s = setup();
     for (let i = 0; i < 5; i++) reserveLogin("6.6.6.6", "a@b.com", s.login);
-    expect(reserveLogin("6.6.6.6", "a@b.com", s.login).ok).toBe(false);
+    expect(reserveLogin("6.6.6.6", "a@b.com", s.login).blocked).toBe(true);
     s.advance(10 * MIN);
-    expect(reserveLogin("6.6.6.6", "a@b.com", s.login).ok).toBe(true);
+    expect(reserveLogin("6.6.6.6", "a@b.com", s.login).blocked).toBe(false);
   });
 });
 
@@ -91,8 +84,8 @@ describe("ipBucket", () => {
 
   it("trocar o fim do endereço IPv6 não escapa do limite por IP", () => {
     const s = setup();
-    for (let i = 0; i < 10; i++) expect(reserveLogin(`2001:db8:1:2::${i + 1}`, `u${i}@b.com`, s.login).ok).toBe(true);
-    expect(reserveLogin("2001:db8:1:2::ffff", "novo@b.com", s.login).ok).toBe(false);
-    expect(reserveLogin("2001:db8:1:3::1", "novo@b.com", s.login).ok).toBe(true);
+    for (let i = 0; i < 10; i++) expect(reserveLogin(`2001:db8:1:2::${i + 1}`, `u${i}@b.com`, s.login).blocked).toBe(false);
+    expect(reserveLogin("2001:db8:1:2::ffff", "novo@b.com", s.login).blocked).toBe(true);
+    expect(reserveLogin("2001:db8:1:3::1", "novo@b.com", s.login).blocked).toBe(false);
   });
 });

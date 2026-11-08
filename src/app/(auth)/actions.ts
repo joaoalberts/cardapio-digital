@@ -29,12 +29,12 @@ export async function signIn(_prev: FormState, formData: FormData): Promise<Form
   const password = String(formData.get("password") ?? "");
   if (!email || !password) return { error: "Preencha e-mail e senha." };
 
-  // Limite por IP e por e-mail; só a senha errada fica contada.
+  // Limite por IP e por e-mail; só a senha errada fica contada. Com o limite estourado a
+  // senha ainda é conferida: certa entra, errada recebe a mensagem de muitas tentativas.
   const guard = reserveLogin(clientIp(await headers()), normalizeEmail(email));
-  if (!guard.ok) return { error: TOO_MANY };
   try {
     const user = await checkCredentials(email, password);
-    if (!user) return { error: "E-mail ou senha incorretos." };
+    if (!user) return { error: guard.blocked ? TOO_MANY : "E-mail ou senha incorretos." };
     guard.release();
     await startSession(user.id);
   } catch (e) {

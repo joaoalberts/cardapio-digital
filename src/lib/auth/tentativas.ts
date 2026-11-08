@@ -31,20 +31,26 @@ const loginLimiters = (): Limiters => ({
 });
 const signupLimiter = () => sharedLimiter("cadastro.ip", { max: SIGNUP_PER_IP_HOUR, windowMs: 60 * MIN });
 
-// Reserva uma tentativa de login por IP e por e-mail (já normalizado). Só falha de senha
-// fica contada: quem acertou, ou teve erro do banco, devolve a reserva com release().
-export type LoginReserve = { ok: true; release(): void } | { ok: false };
+// Reserva uma tentativa de login por IP e por e-mail (já normalizado). Só falha de senha fica
+// contada: quem acertou, ou teve erro do banco, devolve a reserva com release().
+// Limite estourado (IP ou e-mail): `blocked`, nada é contado e a senha CONTINUA sendo
+// conferida: certa entra, errada recebe "Muitas tentativas". Por isso o limite não freia
+// força bruta (decisão do João: a senha certa passa sempre); o custo por palpite é o scrypt.
+export type LoginReserve = { blocked: boolean; release(): void };
 
 export function reserveLogin(ip: string, email: string, l: Limiters = loginLimiters()): LoginReserve {
   const ipKey = ipBucket(ip);
-  if (!l.ip.hit(ipKey)) return { ok: false };
-  if (!l.email.hit(email)) {
-    l.ip.undo(ipKey);
-    return { ok: false };
+  const ipOk = l.ip.hit(ipKey);
+  const emailOk = l.email.hit(email);
+  if (!ipOk || !emailOk) {
+    // Não conta mais uma falha: devolve a que acabou de ser aceita (se alguma foi).
+    if (ipOk) l.ip.undo(ipKey);
+    if (emailOk) l.email.undo(email);
+    return { blocked: true, release() {} };
   }
   let released = false;
   return {
-    ok: true,
+    blocked: false,
     release() {
       if (released) return;
       released = true;
