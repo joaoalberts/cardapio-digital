@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   checkCredentials: vi.fn<(e: string, p: string) => Promise<{ id: string } | null>>(),
-  startSession: vi.fn(async () => {}),
+  startSession: vi.fn<(userId: string, version?: number) => Promise<void>>(async () => {}),
+  setPassword: vi.fn(async () => 5),
+  currentUser: vi.fn(async () => ({ id: "u1", email: "a@x.com" })),
+  currentUserId: vi.fn(async () => "u1"),
   ip: "20.0.0.1",
 }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-forwarded-for": h.ip }) }));
@@ -14,13 +17,13 @@ vi.mock("@/lib/auth", () => ({
   checkCredentials: h.checkCredentials,
   startSession: h.startSession,
   createUser: vi.fn(),
-  currentUser: vi.fn(),
-  currentUserId: vi.fn(),
+  currentUser: h.currentUser,
+  currentUserId: h.currentUserId,
   findUserByEmail: vi.fn(async () => null),
-  setPassword: vi.fn(),
+  setPassword: h.setPassword,
 }));
 
-const { signIn } = await import("./actions");
+const { signIn, changePassword, updatePassword } = await import("./actions");
 const form = (email: string, password = "senha-errada") => {
   const f = new FormData();
   f.set("email", email);
@@ -79,5 +82,39 @@ describe("signIn: limite de tentativas", () => {
     for (let i = 0; i < 8; i++) {
       expect((await signIn({}, form("db@x.com"))).error).toMatch(/banco não respondeu/);
     }
+  });
+});
+
+describe("troca de senha: sessão atual continua, com a versão nova", () => {
+  beforeEach(() => {
+    h.checkCredentials.mockReset();
+    h.startSession.mockClear();
+    h.setPassword.mockClear();
+  });
+  const pw = (o: Record<string, string>) => {
+    const f = new FormData();
+    for (const [k, v] of Object.entries(o)) f.set(k, v);
+    return f;
+  };
+
+  it("changePassword: sobe a versão e reemite o cookie com ela", async () => {
+    h.checkCredentials.mockResolvedValue({ id: "u1" });
+    const r = await changePassword({}, pw({ current: "senha-antiga1", password: "senha-nova-123", confirm: "senha-nova-123" }));
+    expect(r.message).toMatch(/Senha alterada/);
+    expect(h.setPassword).toHaveBeenCalledWith("u1", "senha-nova-123");
+    expect(h.startSession).toHaveBeenCalledWith("u1", 5);
+  });
+
+  it("changePassword com a senha atual errada não troca nada", async () => {
+    h.checkCredentials.mockResolvedValue(null);
+    const r = await changePassword({}, pw({ current: "errada-errada", password: "senha-nova-123", confirm: "senha-nova-123" }));
+    expect(r.error).toMatch(/atual está errada/);
+    expect(h.setPassword).not.toHaveBeenCalled();
+    expect(h.startSession).not.toHaveBeenCalled();
+  });
+
+  it("updatePassword: sobe a versão e reemite o cookie", async () => {
+    await expect(updatePassword({}, pw({ password: "senha-nova-123" }))).rejects.toThrow("redirect:/painel");
+    expect(h.startSession).toHaveBeenCalledWith("u1", 5);
   });
 });

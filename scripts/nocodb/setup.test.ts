@@ -18,6 +18,10 @@ describe("setup.mjs: esquema", () => {
     expect(cols("orders")).toMatchObject({ discarded: BOOL });
   });
 
+  it("users ganha session_version (aditivo: as colunas antigas seguem)", () => {
+    expect(cols("users")).toEqual({ uid: TEXT, email: "Email", password_hash: TEXT, created_at: DATE, session_version: "Number" });
+  });
+
   it("community_tvs guarda só o hash do segredo e o código curto", () => {
     expect(cols("community_tvs")).toEqual({
       uid: TEXT, restaurant_id: TEXT, label: TEXT, pair_code: TEXT, pair_expires_at: DATE, secret_hash: TEXT,
