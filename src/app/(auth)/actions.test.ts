@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   checkCredentials: vi.fn<(e: string, p: string) => Promise<{ id: string } | null>>(),
-  startSession: vi.fn(async (..._a: unknown[]) => {}),
+  startSession: vi.fn<(userId: string, version?: number) => Promise<void>>(async () => {}),
   setPassword: vi.fn(async () => 5),
   currentUser: vi.fn(async () => ({ id: "u1", email: "a@x.com" })),
   currentUserId: vi.fn(async () => "u1"),
